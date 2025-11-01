@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving `ai-demo`.
+Thanks for your interest in improving `Intelligent Q&A and Knowledge Retrieval Platform`.
 
 ## Development Setup
 1. Install JDK 17+

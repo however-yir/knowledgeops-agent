@@ -1,11 +1,11 @@
-# ai-demo - Spring AI 功能演示后端 | Spring AI Demo Backend
+# Intelligent Q&A and Knowledge Retrieval Platform | 智能问答与知识检索平台
 
-🔥 A Spring AI backend project based on Spring Boot, Java, and PDF RAG workflows.
-🚀 Built for chat, tool calling, multimodal input, vector retrieval, and conversation history management.
-⭐ Provides an extensible reference for AI application backends, observability, and production-minded evolution.
+🔥 Enterprise-ready Spring AI backend for intelligent Q&A, retrieval augmentation, and controlled tool execution.  
+🚀 Built with Spring Boot, Spring AI, MySQL, Redis/RabbitMQ, pgvector, and full observability components.  
+⭐ Supports secure deployment, asynchronous ingestion, auditability, and production operations.
 
-> 一个面向真实业务迭代与能力验证场景的 Spring AI 后端项目，覆盖了文本聊天、多模态输入、工具调用、PDF 知识库问答（RAG）和会话历史管理等完整链路。
-> 该项目的目标不是“最短路径实现”，而是提供一个可扩展、可观测、可演进的 AI 应用后端工程基线。
+> 一个面向企业落地的智能问答与知识检索平台后端工程，覆盖“会话问答、知识入库、检索增强、工具调用、安全治理、可观测与运维”全链路。  
+> 本仓库定位为可部署、可运维、可扩展的生产级基线，面向长期业务迭代。
 
 ## 项目主周期（Main Timeline）
 
@@ -16,53 +16,54 @@
 
 ## 目录
 
-- 项目定位与设计目标
-- 功能总览
+- 项目定位
+- 企业级能力矩阵
 - 技术栈与版本基线
-- 系统架构
-- 核心模块说明
+- 架构总览
+- 核心模块
 - 快速开始
-- 数据库初始化
-- 配置说明与环境变量
-- API 使用说明
-- 工具调用与业务约束设计
-- RAG 设计说明（PDF）
-- 会话与历史管理策略
-- 可观测性与排障手册
-- 安全建议与脱敏策略
-- 性能优化建议
-- 生产化落地建议
-- 项目设计补充
-- 常见问题（FAQ）
+- 容器化部署
+- 生产部署建议
+- 环境变量与配置项
+- API 概览
+- 安全与权限体系
+- 可观测与运维
+- 测试与质量保障
+- 性能与容量规划
+- 文档索引
 - 路线图
 
 ---
 
-## 项目定位与设计目标
+## 项目定位
 
-`ai-demo` 是一个“功能闭环型”的 AI 应用后端工程。相比只完成单轮模型调用的入门项目，它更强调以下几点：
+本项目提供企业场景下可直接对接业务系统的 AI 后端能力，重点解决以下问题：
 
-1. **业务闭环完整**：不仅能聊天，还能做客服流程、课程查询、预约写入、文档问答和会话追溯。
-2. **多模态能力接入**：同一接口支持纯文本与附件输入，便于逐步扩展图像/文档混合交互。
-3. **工具调用可控**：通过 `@Tool` 暴露业务操作，并用系统提示词约束模型在流程上的行为边界。
-4. **RAG 可落地**：将 PDF 切页入库，基于向量检索增强回答，形成“上传-检索-问答”完整通路。
-5. **可演进架构**：当前实现强调工程可落地与迭代扩展，模块边界清晰，便于后续替换为生产级存储与组件。
+1. 如何把对话能力稳定落在业务流程中，而不是仅做单轮聊天。
+2. 如何把 PDF/文档知识接入检索增强链路，并保证可追溯来源。
+3. 如何让工具调用具备权限边界、审计记录和失败可恢复机制。
+4. 如何实现线上可运维：日志、指标、链路追踪、告警、回归评测闭环。
+
+适用场景：
+
+- 智能客服与企业知识问答
+- 内部知识库检索问答（文档上传、切片、向量化、检索）
+- 需要 AI + 业务工具联合执行的流程型场景
 
 ---
 
-## 功能总览
+## 企业级能力矩阵
 
-- **通用流式聊天**：`/ai/chat` 支持分片输出，适合前端实时渲染。
-- **多模态聊天**：同一接口可附带文件，底层以 `Media` 形式传入模型。
-- **客服工作流**：`/ai/service` 绑定专用系统提示词与业务工具，模拟课程咨询与预约流程。
-- **异步 PDF ingestion**：`/ai/pdf/upload/{chatId}` 与 `/ingestion/upload/{chatId}` 提交异步任务，支持幂等键、失败重试与状态查询。
-- **多文档检索问答**：`/ai/pdf/chat` 按 `chat_id` 做 metadata 过滤，支持同一会话下的多文档检索。
-- **会话历史管理**：按业务类型维护 `chatId` 列表，可按会话读取完整消息链。
-- **安全与审计基线**：支持 API Key/JWT 鉴权、RBAC、限流与审计日志。
-- **可观测性**：内置 `request_id/chat_id/trace_id`、Prometheus 指标与 OpenTelemetry tracing。
-- **队列化 ingestion（Redis Stream / RabbitMQ）**：支持多 worker 并发消费、死信队列（DLQ）和重试回注。
-- **API Key 生命周期**：支持签发、轮换、吊销、过期策略以及 refresh token。
-- **RAG 质量增强**：语义分片、检索重排、多文档融合与引用来源输出。
+| 能力域 | 当前实现 |
+|---|---|
+| 对话与多模态 | `/ai/chat` 支持文本与附件输入、流式输出 |
+| 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，支持引用来源输出 |
+| 异步入库流水线 | 队列化 ingestion、幂等键、重试、DLQ、状态查询 |
+| 安全体系 | API Key + JWT + Refresh Token + RBAC + 细粒度权限 |
+| 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏 |
+| 数据持久化 | MySQL 会话与业务数据、pgvector 向量检索（可切 simple） |
+| 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail |
+| 工程质量 | Flyway 迁移、CI、单测/集成测试、回归评测脚本、压测脚本 |
 
 ---
 
@@ -70,73 +71,78 @@
 
 - Java 17
 - Spring Boot 3.4.3
-- Spring AI 1.0.0-M6（BOM）
-- Spring AI OpenAI / Ollama / PDF Reader / VectorStore
+- Spring AI 1.0.0-M6
 - MyBatis-Plus 3.5.12
-- MySQL（业务数据与可选会话数据）
-- Lombok 1.18.36
-- Maven 构建
-
-说明：项目同时保留了 Ollama 与 OpenAI 兼容接口配置。默认配置通过 OpenAI 兼容网关调用模型，并支持 embedding 模型用于向量化。
+- MySQL 8.x
+- Redis 7.x
+- RabbitMQ 3.x
+- pgvector / SimpleVectorStore
+- OpenTelemetry + Micrometer + Prometheus
+- Maven 3.9+
 
 ---
 
-## 系统架构
+## 架构总览
 
 ```mermaid
 flowchart TD
-    A[Client] --> B[REST Controllers]
-    B --> C[ChatClient Layer]
-    C --> D[Model Provider]
-    D --> D1[OpenAI-Compatible API]
-    D --> D2[Ollama Local Model]
+    Client[Web / App / API Client] --> Gateway[REST API Layer]
 
-    B --> E[Tool Calling]
-    E --> E1[CourseTools]
-    E1 --> E2[(MySQL: course/school/course_reservation)]
+    Gateway --> Chat[Chat Service]
+    Gateway --> RAG[Knowledge Retrieval Service]
+    Gateway --> Auth[Auth & Permission Service]
+    Gateway --> Audit[Audit & Metrics Filters]
 
-    B --> F[PDF Pipeline]
-    F --> F1[Upload & Store File]
-    F --> F2[PDF Reader Split]
-    F2 --> F3[VectorStore]
-    F3 --> C
+    Chat --> LLM[LLM Provider\nOpenAI-Compatible / Ollama]
+    Chat --> Memory[(MySQL Conversation)]
 
-    B --> G[Chat History]
-    G --> G1[(MySQL Conversation)]
-    G --> G2[Type + ChatId Scoped ConversationId]
+    RAG --> Ingestion[Ingestion Service]
+    Ingestion --> Queue[Redis Stream / RabbitMQ]
+    Queue --> Worker[Ingestion Worker]
+    Worker --> FileStore[(Local File Storage)]
+    Worker --> Vector[(pgvector / Simple Vector Store)]
+
+    Chat --> Tools[Tool Calling Layer]
+    Tools --> BizDB[(MySQL Business Tables)]
+
+    Audit --> Metrics[Prometheus Metrics]
+    Audit --> Logs[Loki Logs]
+    Audit --> Trace[Tempo Traces]
 ```
 
 ---
 
-## 核心模块说明
+## 核心模块
 
-### 1) 对话入口层（Controller）
+### 1) API 层（Controllers）
 
-- `ChatController`：通用聊天入口，支持文件附件与流式输出。
-- `CustomerServiceController`：客服场景专用入口，调用带工具能力的 `serviceChatClient`。
-- `PdfController`：负责 PDF 上传、下载、向量化写入与检索问答。
-- `ChatHistoryController`：按业务类型与 `chatId` 查询历史。
+- `ChatController`：通用问答入口（文本/附件）
+- `CustomerServiceController`：流程型客服对话入口（绑定工具）
+- `PdfController`：上传、下载、检索问答
+- `IngestionController`：异步任务提交、状态查询、人工触发处理
+- `AuthController`：API Key 生命周期 + JWT/Refresh Token
+- `AuditController`：审计日志查询
+- `ChatHistoryController`：历史会话分页与详情查询
 
-### 2) AI 客户端配置层（Configuration）
+### 2) 智能体与检索层
 
-- `CommonConfiguration` 提供三个不同用途的 `ChatClient`：
-  - `chatClient`：通用聊天。
-  - `serviceChatClient`：绑定系统提示词与工具。
-  - `pdfChatClient`：附加 `QuestionAnswerAdvisor`，执行向量检索增强。
+- 多 ChatClient 分场景配置（通用、客服、知识问答）
+- `QuestionAnswerAdvisor` + 向量检索增强
+- 会话隔离策略：`type::chatId` 组合 conversationId，避免串会话
 
-### 3) 工具调用层（Tool Calling）
+### 3) 异步入库层
 
-- `CourseTools` 使用 `@Tool` 暴露三类业务能力：
-  - 课程查询（带空参兜底与排序字段白名单）
-  - 校区查询
-  - 预约单写入并返回单号
+- 上传后创建 ingestion job
+- 支持 `X-Idempotency-Key` 去重
+- 队列消费失败重试 + DLQ
+- 任务状态可追踪（pending/running/failed/success）
 
-### 4) 存储层
+### 4) 安全层
 
-- 业务数据：MySQL（课程、校区、预约）。
-- 会话上下文与历史：`conversation` 表（按 `type::chatId` 持久化）。
-- 历史查询：`MysqlChatHistoryRepository` 按业务类型分页读取会话与消息。
-- 文件与向量：本地文件 + `SimpleVectorStore`（可持久化快照）。
+- API Key 鉴权换取 JWT
+- Refresh Token 续签
+- 权限校验（注解 + 路由粒度）
+- 限流、审计、日志脱敏
 
 ---
 
@@ -146,365 +152,240 @@ flowchart TD
 
 - JDK 17+
 - Maven 3.9+
-- MySQL 8.x
-- 可用的大模型 API Key（OpenAI 兼容）
-- 可选：本地 Ollama 服务（若需要切换本地模型）
+- Docker & Docker Compose（推荐）
+- 有效模型密钥（OpenAI 兼容）
 
-### 本地启动
+### 本地开发启动
 
 ```bash
-cd ai-demo
+cd <project-root>
 mvn -DskipTests compile
 mvn spring-boot:run
 ```
 
-使用容器化一键拉起（MySQL + Redis + RabbitMQ + Tempo）：
+默认端口：`8080`
+
+### 一键容器启动（应用 + 中间件）
 
 ```bash
-docker compose up --build
-```
-
-默认服务端口为 Spring Boot 默认端口（`8080`），如需变更请在 `application.yml` 中增加 `server.port`。
-
----
-
-## 数据库初始化
-
-可参考以下最小建表脚本（根据你自己的业务再扩展索引和约束）：
-
-```sql
-CREATE DATABASE IF NOT EXISTS `ai-demo` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `ai-demo`;
-
-CREATE TABLE IF NOT EXISTS `course` (
-  `id` INT PRIMARY KEY AUTO_INCREMENT,
-  `name` VARCHAR(128) NOT NULL,
-  `edu` INT NULL COMMENT '0-无,1-初中,2-高中,3-大专,4-本科以上',
-  `type` VARCHAR(32) NULL COMMENT '编程/设计/自媒体/其他',
-  `price` BIGINT NULL,
-  `duration` INT NULL COMMENT '单位: 天'
-);
-
-CREATE TABLE IF NOT EXISTS `school` (
-  `id` INT PRIMARY KEY AUTO_INCREMENT,
-  `name` VARCHAR(128) NOT NULL,
-  `city` VARCHAR(64) NULL
-);
-
-CREATE TABLE IF NOT EXISTS `course_reservation` (
-  `id` INT PRIMARY KEY AUTO_INCREMENT,
-  `course` VARCHAR(128) NOT NULL,
-  `student_name` VARCHAR(64) NOT NULL,
-  `contact_info` VARCHAR(128) NOT NULL,
-  `school` VARCHAR(128) NOT NULL,
-  `remark` VARCHAR(255) NULL
-);
-
-CREATE TABLE IF NOT EXISTS `conversation` (
-  `id` BIGINT PRIMARY KEY,
-  `conversation_id` VARCHAR(128) NOT NULL,
-  `message` TEXT NOT NULL,
-  `type` VARCHAR(32) NOT NULL,
-  `create_time` DATETIME NOT NULL
-);
-
-CREATE INDEX `idx_conversation_id_create_time`
-  ON `conversation` (`conversation_id`, `create_time`);
+docker compose up --build -d
 ```
 
 ---
 
-## 配置说明与环境变量
+## 容器化部署
 
-关键配置位于 `src/main/resources/application.yml`，已做脱敏处理，推荐通过环境变量注入：
+`docker-compose.yml` 默认包含：
 
-- `OPENAI_API_KEY`：模型调用密钥（必填）
-- `OPENAI_BASE_URL`：兼容接口地址（可选）
-- `DB_URL`：数据库连接串
-- `DB_USERNAME`：数据库用户名
-- `DB_PASSWORD`：数据库密码
+- `iqk-platform`（应用）
+- `iqk-platform-mysql`
+- `iqk-platform-redis`
+- `iqk-platform-rabbitmq`
+- `iqk-platform-tempo-lite`
 
-推荐配置方式：
+观察栈独立文件：
 
 ```bash
-export OPENAI_API_KEY="your_key"
-export DB_USERNAME="root"
-export DB_PASSWORD="your_password"
+docker compose -f docker-compose.observability.yml up -d
 ```
+
+包含：Prometheus / Alertmanager / Loki / Tempo / Promtail。
 
 ---
 
-## API 使用说明
+## 生产部署建议
 
-### 1) 通用聊天（支持附件）
+### 1) 最小生产拓扑
 
-`POST/GET /ai/chat`
+- 应用层：2~3 实例（无状态）
+- MySQL：主从或高可用托管版本
+- Redis：哨兵或托管高可用
+- RabbitMQ：镜像队列或托管消息服务
+- 向量存储：PostgreSQL + pgvector（建议独立实例）
 
-参数：
-- `prompt`：用户问题
-- `chatId`：会话标识
-- `files`：可选，多文件
+### 2) 发布策略
 
-调用方式（文本）：
+- 推荐滚动发布或蓝绿发布
+- 接口兼容遵循“先向后兼容，再灰度切流”
+- Flyway 脚本纳入发布流水线（先迁移后流量）
 
-```bash
-curl -N "http://localhost:8080/ai/chat?prompt=你好&chatId=c1"
-```
+### 3) 生产前检查
 
-调用方式（附件）：
+- 安全：必须启用 `APP_SECURITY_ENABLED=true`
+- 密钥：必须注入 `APP_JWT_SECRET` 和 `OPENAI_API_KEY`
+- 可观测：确认 metrics / logs / trace 已接通
+- 回归：执行 `scripts/run_regression.py`
+- 压测：执行 `performance/k6/distributed_chat_ingestion.js`
 
-```bash
-curl -N -X POST "http://localhost:8080/ai/chat" \
-  -F "prompt=请描述这张图" \
-  -F "chatId=c2" \
-  -F "files=@/path/to/image.png"
-```
+详细运行手册见 [docs/operations.md](docs/operations.md)。
 
-### 2) 客服会话
+---
 
-`GET /ai/service?prompt=...&chatId=...`
+## 环境变量与配置项
 
-```bash
-curl "http://localhost:8080/ai/service?prompt=我想学编程，帮我推荐课程&chatId=s1"
-```
+核心环境变量（节选）：
 
-### 3) PDF 上传
+- `OPENAI_API_KEY`：模型访问密钥（必填）
+- `OPENAI_BASE_URL`：OpenAI 兼容网关地址
+- `DB_URL` / `DB_USERNAME` / `DB_PASSWORD`
+- `APP_SECURITY_ENABLED`
+- `APP_JWT_SECRET`
+- `APP_VECTOR_STORE_BACKEND`：`pgvector` 或 `simple`
+- `APP_PGVECTOR_URL` / `APP_PGVECTOR_USERNAME` / `APP_PGVECTOR_PASSWORD`
+- `APP_INGESTION_QUEUE_BACKEND`：`redis_stream` 或 `rabbitmq` 或 `db_polling`
 
-`POST /ai/pdf/upload/{chatId}`
+参考样例文件：`.env.example`
 
-```bash
-curl -X POST "http://localhost:8080/ai/pdf/upload/p1" \
-  -H "X-Idempotency-Key: p1-v1" \
-  -F "file=@./doc.pdf"
-```
+---
 
-### 4) ingestion 任务状态
+## API 概览
 
+### 会话问答
+
+- `GET/POST /ai/chat`
+  - 参数：`prompt`, `chatId`, `files(可选)`
+
+### 客服流程问答
+
+- `GET /ai/service`
+  - 参数：`prompt`, `chatId`
+
+### 知识入库与检索
+
+- `POST /ai/pdf/upload/{chatId}`
+- `GET /ai/pdf/file/{chatId}`
+- `GET /ai/pdf/chat`
+- `POST /ingestion/upload/{chatId}`
 - `GET /ingestion/jobs/{jobId}`
 - `GET /ingestion/jobs?chatId=...`
+- `POST /ingestion/jobs/process`
 
-```bash
-curl "http://localhost:8080/ingestion/jobs/job-xxx"
-```
-
-### 5) PDF 问答
-
-`GET /ai/pdf/chat?prompt=...&chatId=...`
-
-```bash
-curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是什么&chatId=p1"
-```
-
-### 6) 历史会话
+### 历史与审计
 
 - `GET /ai/history/{type}`
 - `GET /ai/history/{type}/{chatId}`
+- `GET /audit/logs`
 
-`type` 取值建议：`chat` / `service` / `pdf`
+### 鉴权与密钥生命周期
 
-说明：
-- 两个接口都支持 `page`、`pageSize` 参数。
-- 历史会话已按业务类型做隔离，底层会把 `type` 与 `chatId` 组合成独立的 `conversationId`，避免不同场景复用同一个 `chatId` 时串历史。
+- `POST /auth/token`（Header: `X-API-Key`）
+- `POST /auth/refresh`（Header: `X-Refresh-Token`）
+- `POST /auth/api-keys`
+- `POST /auth/api-keys/rotate`
+- `POST /auth/api-keys/revoke`
 
-### 7) 鉴权与密钥管理
-
-- `POST /auth/token`：使用 `X-API-Key` 换取 access token + refresh token
-- `POST /auth/refresh`：使用 `X-Refresh-Token` 刷新 access token
-- `POST /auth/api-keys`：签发 API Key（需要管理权限）
-- `POST /auth/api-keys/rotate`：轮换 API Key
-- `POST /auth/api-keys/revoke`：吊销 API Key
-
-### 8) OpenAPI
+### API 文档
 
 - Swagger UI：`/swagger-ui/index.html`
 - OpenAPI JSON：`/v3/api-docs`
 
 ---
 
-## 工具调用与业务约束设计
+## 安全与权限体系
 
-本项目的客服能力不是“自由聊天”，而是“流程型对话 + 数据工具”组合：
+当前实现已覆盖：
 
-1. 通过系统提示词限定角色、语气、步骤和安全边界。
-2. 通过 `@Tool` 暴露受控业务动作，避免模型编造结构化数据。
-3. 把“可执行动作”与“自然语言表达”分离：
-   - 表达由模型负责
-   - 数据查询/写入由后端工具负责
+- API Key 与 JWT 双鉴权
+- Refresh Token 生命周期管理
+- RBAC + 权限矩阵
+- 限流（Bucket4j）
+- 审计日志与保留策略
+- 上传文件类型/大小安全检查
 
-这种设计在实际业务里非常关键，能显著降低幻觉风险，并提升可审计性。
+生产建议：
 
----
-
-## RAG 设计说明（PDF）
-
-`PdfController` 的主流程如下：
-
-1. 校验并保存上传文件
-2. 用 `PagePdfDocumentReader` 按页拆分文档
-3. 写入 `VectorStore`
-4. 问答阶段通过 `QuestionAnswerAdvisor` 注入检索结果
-5. 用 `FILTER_EXPRESSION` 限定仅检索当前会话关联文件
-
-这个策略避免了多文件混检导致的上下文污染，是单会话文档问答场景中非常实用的一步。
+- 密钥托管到 KMS / Vault
+- 高敏动作开启双人复核
+- 配置审计日志不可篡改存储
+- 定期轮换 API Key 与 JWT Secret
 
 ---
 
-## 会话与历史管理策略
+## 可观测与运维
 
-当前实现已切到数据库持久化：
+### 指标与健康检查
 
-- `MysqlChatMemory` 负责保存模型上下文
-- `MysqlChatHistoryRepository` 负责按业务类型分页读取历史列表与消息明细
-- `type::chatId` 作为统一的 `conversationId`，确保 `chat / service / pdf` 三类会话互不串线
+- `/actuator/health`
+- `/actuator/prometheus`
 
-生产实践中建议：
+### 日志
 
-- 会话上下文使用 Redis 或数据库做持久化
-- 历史索引与上下文分离存储
-- 引入 TTL 与归档策略，控制长期存储成本
+- JSON 结构化日志（含 `request_id` / `trace_id` / `chat_id`）
+- 默认文件：`logs/iqk-platform.log`
 
----
+### 链路追踪
 
-## 可观测性与排障手册
+- OTLP 导出到 Tempo
+- 支持按 `trace_id` 串联请求日志与调用链
 
-### 日志与追踪
+### 告警基线
 
-当前版本默认输出结构化日志字段：`request_id / trace_id / chat_id`，并可通过 `actuator/prometheus` 暴露指标。
-若配置 OTLP endpoint，可把 tracing 上报到 OpenTelemetry 平台。
-
-### 常见排障路径
-
-1. 接口有响应但模型为空：优先检查 `OPENAI_API_KEY` 与网络连通性。
-2. PDF 问答命中率低：检查 embedding 模型、切页粒度、阈值与 query 质量。
-3. 客服流程跑偏：先排查系统提示词与工具参数描述是否足够明确。
-4. 会话丢失：确认 `chatId` 是否稳定传递，并检查 `conversation` 表中是否已经写入对应的 `type::chatId` 记录。
+- `HighHttpP95Latency`
+- `IngestionFailureRateHigh`
 
 ---
 
-## 安全建议与脱敏策略
+## 测试与质量保障
 
-项目已完成基础脱敏（密钥与数据库账号密码改为环境变量）。进一步建议：
+### 自动化测试
 
-- 不在仓库提交任何 `.env`、`workspace.xml`、`dataSources.xml`。
-- API Key 使用密钥管理服务（Vault/KMS/Secret Manager）。
-- 对外接口增加鉴权与限流。
-- 记录工具调用审计日志（谁在何时触发了什么操作）。
-- 对上传文件做大小、类型、病毒扫描和内容安全校验。
+- Controller 层测试
+- Security 组件测试
+- Ingestion 服务测试
+- Testcontainers（MySQL）集成测试
 
----
+### 回归评测
 
-## 性能优化建议
+```bash
+python3 scripts/generate_eval_dataset.py
+python3 scripts/generate_eval_predictions.py
+python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
+```
 
-- 将 `SimpleVectorStore` 替换为专用向量数据库（pgvector/Milvus/Weaviate）。
-- 增加 embedding 缓存，减少重复向量化。
-- 对聊天输出采用反压与超时控制，提升高并发稳定性。
-- 为 `conversation` 表补分区/归档策略，控制长会话的查询成本。
-- 对工具查询建立合适索引，避免预约和查询链路被数据库拖慢。
+### CI
 
----
-
-## 生产化落地建议
-
-如果把该项目推进到生产，可按以下路线分阶段实施：
-
-1. **阶段一：稳定性**
-   - 增加统一异常处理、链路追踪、超时控制、熔断重试。
-2. **阶段二：安全性**
-   - 接入鉴权、审计、脱敏、最小权限数据库账户。
-3. **阶段三：可运营性**
-   - 增加提示词版本管理、A/B 测试、效果回放和评测基线。
-4. **阶段四：可扩展性**
-   - 抽象模型提供方，支持多模型路由与成本控制策略。
+GitHub Actions 工作流：`intelligent-qa-platform CI`
 
 ---
 
-## 项目设计补充
+## 性能与容量规划
 
-### 实现路径
+建议按以下维度持续压测与容量校准：
 
-`ai-demo` 按“先闭环、再增强”的顺序推进：
+1. 问答接口 p95/p99 延迟
+2. ingestion 队列堆积长度与重试率
+3. 向量检索耗时与命中率
+4. 单实例并发上限与 CPU/内存占用
 
-1. 先完成通用聊天接口，验证模型接入和流式输出；
-2. 再增加客服场景与 `@Tool` 工具调用，把 AI 回答和业务动作串起来；
-3. 然后补 PDF 上传、切片、向量化和检索问答，让系统具备 RAG 能力；
-4. 最后增加会话历史、多模态文件输入和可观测性说明，让项目具备更完整的后端服务结构。
+压测脚本：
 
-### 关键难点
-
-项目的难点主要集中在让 RAG 真正产生价值：
-
-- PDF 文档不能直接交给模型回答，必须先切片、向量化和检索；
-- 召回内容过多会挤占上下文，过少则容易答不全；
-- 如果不做文件范围隔离和工具边界控制，就容易出现跨文档污染和幻觉回答。
-
-### 当前处理方式
-
-当前实现主要采用了以下做法：
-
-- 用 `QuestionAnswerAdvisor + VectorStore` 把检索结果接入问答链路，而不是手工拼接上下文；
-- 把 PDF 走“上传 -> 解析 -> 切片 -> 向量化 -> 检索问答”完整闭环，保证知识库能力可以独立验证；
-- 在客服场景中给工具调用增加系统提示和流程约束，减少模型随意输出和越权操作；
-- 用 `type::chatId` 维护会话与文档范围，并给历史接口加分页，降低不同会话之间相互污染和长对话拖慢接口的风险；
-- 同时保留会话历史与多模态输入能力，为后续扩展留出空间。
-
-### 后续优化方向
-
-如果继续迭代，优先级较高的方向包括：
-
-- 引入更细的切片策略和重排机制，提升 RAG 召回质量；
-- 给检索问答增加来源展示和置信度提示，降低幻觉风险；
-- 把会话上下文进一步拆到 `Redis + MySQL` 组合，兼顾响应速度与可恢复性；
-- 增加自动化评测、回归测试和效果基线；
-- 把工具调用失败、模型超时和异常响应做成统一降级策略。
+- `performance/k6/chat_ingestion_load.js`
+- `performance/k6/distributed_chat_ingestion.js`
+- `scripts/drills/run_distributed_drill.sh`
 
 ---
 
-## 常见问题（FAQ）
+## 文档索引
 
-### Q1：必须使用 OpenAI 兼容接口吗？
-不是。项目已有 Ollama 相关配置，可按需要切换本地模型。
-
-### Q2：为什么客服回答要限制流程？
-因为流程限制能减少幻觉与越权操作，尤其在预约、订单、支付等业务里非常关键。
-
-### Q3：RAG 为什么要加文件过滤表达式？
-避免跨会话或跨文档污染结果，确保答案来源清晰。
-
-### Q4：能否把会话历史全放数据库？
-可以，当前默认实现已经把会话上下文和历史索引都落到了 MySQL；如果后续量级增大，建议再把热点上下文前移到 Redis。
-
-### Q5：这份代码适合直接商用吗？
-更适合作为高质量工程基线与 PoC 起点，商用前建议补齐鉴权、运维、监控和安全链路。
+- 运维手册：[docs/operations.md](docs/operations.md)
+- 企业部署指南：[docs/deployment-enterprise.md](docs/deployment-enterprise.md)
+- 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
+- 分布式演练：[docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
+- 简历升级清单：[docs/resume-upgrade-checklist.md](docs/resume-upgrade-checklist.md)
 
 ---
 
 ## 路线图
 
-- [ ] 增加统一 API 响应规范与错误码体系
-- [ ] 增加 OpenAPI/Swagger 文档
-- [ ] 支持向量库可插拔实现
-- [ ] 增加 Redis 会话持久化
-- [ ] 增加提示词模板中心与版本管理
-- [ ] 增加自动化评测与回归测试
+- [ ] 增加多租户隔离能力（租户级密钥、限流与审计）
+- [ ] 增加检索重排策略可插拔实现
+- [ ] 增加模型路由与成本控制策略
+- [ ] 增加告警自动化处置脚本
+- [ ] 增加企业 SSO（OIDC/SAML）接入
 
 ---
 
-如果你正在搭建一个“既能展示能力、又能承载真实业务迭代”的 Spring AI 项目，这个仓库可以作为一个非常好的起点。欢迎基于它继续扩展并提交改进建议。
+## 开源说明
 
----
-
-## 开源
-
-本项目以开源方式提供，欢迎学习、Fork 和二次开发。
-建议在企业或生产场景落地前，补齐鉴权、审计、监控与安全合规能力。
-如需用于团队协作，可在此基础上补充 `LICENSE`、`CONTRIBUTING` 和 `SECURITY` 文档。
-
-## Resume Upgrade Checklist
-
-- Tracking file: [docs/resume-upgrade-checklist.md](docs/resume-upgrade-checklist.md)
-- Distributed drill runbook: [docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
-- Drill script: [scripts/drills/run_distributed_drill.sh](scripts/drills/run_distributed_drill.sh)
-- k6 scenario: [performance/k6/distributed_chat_ingestion.js](performance/k6/distributed_chat_ingestion.js)
-- CI workflow: [.github/workflows/ci.yml](.github/workflows/ci.yml)
-
-This round added a reproducible distributed drill baseline for load + observability closure.
+本项目适合作为企业级智能问答与知识检索平台的后端工程基线。  
+欢迎用于学习、二次开发与团队协作；在生产落地前请按组织规范补齐安全、合规与发布治理流程。

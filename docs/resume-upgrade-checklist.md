@@ -1,4 +1,4 @@
-# ai-demo Resume Upgrade Checklist
+# Intelligent Q&A Knowledge Retrieval Platform Resume Upgrade Checklist
 
 ## 1. 功能
 - [x] 聊天 / 工具调用 / PDF RAG / 会话历史
@@ -16,6 +16,8 @@
 ## 3. README
 - [x] 工程化定位
 - [x] 增加改造清单入口
+- [x] 重构为企业级平台口径（去除临时项目定位）
+- [x] 增加企业部署与架构文档入口
 - [ ] 增加压测结果章节（p95/吞吐/错误率）
 - [ ] 增加告警闭环截图章节
 
