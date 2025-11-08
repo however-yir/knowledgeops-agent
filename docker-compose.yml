@@ -3,13 +3,13 @@ version: "3.9"
 services:
   app:
     build: .
-    image: ai-demo:latest
-    container_name: ai-demo
+    image: iqk-platform:latest
+    container_name: iqk-platform
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:mysql://mysql:3306/ai-demo?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
+      DB_URL: jdbc:mysql://mysql:3306/iqk_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
       DB_USERNAME: root
       DB_PASSWORD: root
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -39,10 +39,10 @@ services:
 
   mysql:
     image: mysql:8.4
-    container_name: ai-demo-mysql
+    container_name: iqk-platform-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: ai-demo
+      MYSQL_DATABASE: iqk_platform
     ports:
       - "3306:3306"
     command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
@@ -54,7 +54,7 @@ services:
 
   redis:
     image: redis:7.4
-    container_name: ai-demo-redis
+    container_name: iqk-platform-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -65,7 +65,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
-    container_name: ai-demo-rabbitmq
+    container_name: iqk-platform-rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -77,7 +77,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.6.1
-    container_name: ai-demo-tempo-lite
+    container_name: iqk-platform-tempo-lite
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro

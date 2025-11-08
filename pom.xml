@@ -9,8 +9,8 @@
         <version>3.4.3</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>com.demo</groupId>
-    <artifactId>ai-demo</artifactId>
+    <groupId>com.enterprise</groupId>
+    <artifactId>iqk-platform</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>

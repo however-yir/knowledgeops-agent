@@ -3,7 +3,7 @@ version: "3.9"
 services:
   prometheus:
     image: prom/prometheus:v2.54.1
-    container_name: ai-demo-prometheus
+    container_name: iqk-platform-prometheus
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -12,7 +12,7 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
-    container_name: ai-demo-alertmanager
+    container_name: iqk-platform-alertmanager
     volumes:
       - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
@@ -20,7 +20,7 @@ services:
 
   loki:
     image: grafana/loki:3.1.1
-    container_name: ai-demo-loki
+    container_name: iqk-platform-loki
     command: -config.file=/etc/loki/loki-config.yml
     volumes:
       - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
@@ -29,7 +29,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.6.1
-    container_name: ai-demo-tempo
+    container_name: iqk-platform-tempo
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
@@ -39,8 +39,8 @@ services:
 
   promtail:
     image: grafana/promtail:3.1.1
-    container_name: ai-demo-promtail
+    container_name: iqk-platform-promtail
     command: -config.file=/etc/promtail/promtail.yml
     volumes:
       - ./observability/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
-      - ./logs:/var/log/ai-demo:ro
+      - ./logs:/var/log/iqk-platform:ro

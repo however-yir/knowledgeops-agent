@@ -1,5 +1,5 @@
 groups:
-  - name: ai-demo-alerts
+  - name: iqk-platform-alerts
     rules:
       - alert: HighHttpP95Latency
         expr: histogram_quantile(0.95, sum(rate(http_requests_latency_seconds_bucket[5m])) by (le)) > 1.5

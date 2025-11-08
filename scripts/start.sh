@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "[ai-demo] building..."
+echo "[iqk-platform] building..."
 mvn -B -ntp -DskipTests clean package
 
-echo "[ai-demo] starting..."
-java -jar target/ai-demo-1.0-SNAPSHOT.jar
+echo "[iqk-platform] starting..."
+java -jar target/iqk-platform-1.0-SNAPSHOT.jar

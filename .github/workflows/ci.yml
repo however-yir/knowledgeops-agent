@@ -1,4 +1,4 @@
-name: ai-demo CI
+name: intelligent-qa-platform CI
 
 on:
   push:
