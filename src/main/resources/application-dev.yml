@@ -10,4 +10,4 @@ app:
 
 logging:
   level:
-    com.demo.ai: DEBUG
+    com.enterprise.iqk: DEBUG

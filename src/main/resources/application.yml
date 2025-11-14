@@ -1,6 +1,11 @@
+server:
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
-    name: ai-demo
+    name: iqk-platform
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   ai:
@@ -22,7 +27,7 @@ spring:
           dimensions: 1024
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${DB_URL:jdbc:mysql://localhost:3306/ai-demo?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/iqk_platform?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
     username: ${DB_USERNAME:}
     password: ${DB_PASSWORD:}
   servlet:
@@ -45,6 +50,9 @@ spring:
     password: ${RABBITMQ_PASSWORD:guest}
 
 management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
   tracing:
     enabled: true
     sampling:
@@ -58,6 +66,7 @@ management:
         include: health,info,prometheus,metrics
   endpoint:
     health:
+      show-details: when_authorized
       probes:
         enabled: true
 
@@ -121,6 +130,6 @@ rag:
 logging:
   level:
     org.springframework.ai: INFO
-    com.demo.ai: INFO
+    com.enterprise.iqk: INFO
   pattern:
     console: '{"timestamp":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","thread":"%t","logger":"%c{1}","message":"%m","request_id":"%X{request_id:-}","trace_id":"%X{trace_id:-}","chat_id":"%X{chat_id:-}"}%n'

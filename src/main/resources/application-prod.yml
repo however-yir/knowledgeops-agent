@@ -10,4 +10,4 @@ app:
 
 logging:
   level:
-    com.demo.ai: INFO
+    com.enterprise.iqk: INFO
