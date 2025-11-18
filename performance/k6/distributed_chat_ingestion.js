@@ -13,27 +13,28 @@ export const options = {
 const BASE = __ENV.BASE_URL || 'http://localhost:8080';
 const TOKEN = __ENV.BEARER_TOKEN || '';
 
-function authHeaders() {
+function authHeaders(extra = {}) {
   return TOKEN
-    ? { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }
-    : { 'Content-Type': 'application/json' };
+    ? { Authorization: `Bearer ${TOKEN}`, ...extra }
+    : { ...extra };
 }
 
 export default function () {
-  const chatBody = JSON.stringify({
-    message: '请基于课程知识库回答：Java课程适合哪些基础阶段？',
-    conversationId: `k6-${__VU}-${__ITER}`,
-  });
-  const chatRes = http.post(`${BASE}/chat`, chatBody, { headers: authHeaders() });
+  const chatId = `k6-${__VU}-${__ITER}`;
+  const chatRes = http.get(
+    `${BASE}/ai/chat?prompt=${encodeURIComponent('请基于课程知识库回答：Java课程适合哪些基础阶段？')}&chatId=${chatId}`,
+    { headers: authHeaders() },
+  );
   check(chatRes, {
-    'chat status 2xx': (r) => r.status >= 200 && r.status < 300,
+    'chat status 200': (r) => r.status === 200,
   });
 
-  const ingestionBody = JSON.stringify({
-    text: `k6 sample knowledge chunk ${__VU}-${__ITER}`,
-    source: 'k6-load-test',
+  const uploadBody = {
+    file: http.file('%PDF-1.4\n%k6 synthetic pdf bytes\n', `${chatId}.pdf`, 'application/pdf'),
+  };
+  const ingestionRes = http.post(`${BASE}/ingestion/upload/${chatId}`, uploadBody, {
+    headers: authHeaders({ 'X-Idempotency-Key': `idem-${chatId}` }),
   });
-  const ingestionRes = http.post(`${BASE}/ingestion/text`, ingestionBody, { headers: authHeaders() });
   check(ingestionRes, {
     'ingestion accepted': (r) => r.status === 200 || r.status === 202,
   });
