@@ -49,15 +49,17 @@ public class JwtService {
                 .roles(roles)
                 .permissions(permissions)
                 .source("jwt")
+                .tenantId(TenantContext.normalize(claims.get("tenant_id", String.class)))
                 .build();
     }
 
-    public String issueToken(String subject, List<String> roles, List<String> permissions) {
+    public String issueToken(String subject, List<String> roles, List<String> permissions, String tenantId) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(subject)
                 .claim("roles", roles == null ? Collections.emptyList() : roles)
                 .claim("permissions", permissions == null ? Collections.emptyList() : permissions)
+                .claim("tenant_id", TenantContext.normalize(tenantId))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(securityProperties.getJwtExpireMinutes() * 60L)))
                 .signWith(secretKey())

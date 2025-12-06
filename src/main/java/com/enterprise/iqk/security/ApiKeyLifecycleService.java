@@ -16,8 +16,9 @@ public class ApiKeyLifecycleService {
     private final ApiKeyMapper apiKeyMapper;
     private final SecurityProperties securityProperties;
 
-    public ApiKeyIssueResult issue(String keyName, String roleName) {
-        ApiKeyRecord active = apiKeyMapper.findActiveByKeyName(keyName);
+    public ApiKeyIssueResult issue(String keyName, String roleName, String tenantId) {
+        String normalizedTenant = normalizeTenant(tenantId);
+        ApiKeyRecord active = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (active != null) {
             throw new IllegalArgumentException("active api key already exists for keyName");
         }
@@ -27,6 +28,7 @@ public class ApiKeyLifecycleService {
         ApiKeyRecord record = ApiKeyRecord.builder()
                 .keyHash(HashUtils.sha256Hex(raw))
                 .keyName(keyName)
+                .tenantId(normalizedTenant)
                 .roleName(roleName)
                 .enabled(1)
                 .expiresAt(expiresAt)
@@ -34,17 +36,18 @@ public class ApiKeyLifecycleService {
                 .updatedAt(now)
                 .build();
         apiKeyMapper.insert(record);
-        return new ApiKeyIssueResult(raw, record.getKeyName(), expiresAt);
+        return new ApiKeyIssueResult(raw, record.getKeyName(), normalizedTenant, expiresAt);
     }
 
-    public ApiKeyIssueResult rotate(String keyName, String reason) {
-        ApiKeyRecord old = apiKeyMapper.findActiveByKeyName(keyName);
+    public ApiKeyIssueResult rotate(String keyName, String reason, String tenantId) {
+        String normalizedTenant = normalizeTenant(tenantId);
+        ApiKeyRecord old = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (old == null) {
             throw new IllegalArgumentException("active api key not found");
         }
         apiKeyMapper.revoke(old.getId(), LocalDateTime.now(), reason, LocalDateTime.now());
-        ApiKeyIssueResult issued = issue(keyName, old.getRoleName());
-        ApiKeyRecord newer = apiKeyMapper.findActiveByKeyName(keyName);
+        ApiKeyIssueResult issued = issue(keyName, old.getRoleName(), normalizedTenant);
+        ApiKeyRecord newer = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (newer != null) {
             newer.setRotatedFromId(old.getId());
             newer.setUpdatedAt(LocalDateTime.now());
@@ -53,13 +56,18 @@ public class ApiKeyLifecycleService {
         return issued;
     }
 
-    public void revoke(String keyName, String reason) {
-        ApiKeyRecord record = apiKeyMapper.findActiveByKeyName(keyName);
+    public void revoke(String keyName, String reason, String tenantId) {
+        String normalizedTenant = normalizeTenant(tenantId);
+        ApiKeyRecord record = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
         if (record == null) {
             throw new IllegalArgumentException("active api key not found");
         }
         apiKeyMapper.revoke(record.getId(), LocalDateTime.now(), reason, LocalDateTime.now());
     }
 
-    public record ApiKeyIssueResult(String rawApiKey, String keyName, LocalDateTime expiresAt) {}
+    private String normalizeTenant(String tenantId) {
+        return TenantContext.normalize(tenantId);
+    }
+
+    public record ApiKeyIssueResult(String rawApiKey, String keyName, String tenantId, LocalDateTime expiresAt) {}
 }

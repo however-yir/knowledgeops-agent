@@ -20,6 +20,7 @@ public class RefreshTokenRecord {
     private Long id;
     private String tokenHash;
     private String principal;
+    private String tenantId;
     private String roles;
     private LocalDateTime expiresAt;
     private LocalDateTime revokedAt;

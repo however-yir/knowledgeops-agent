@@ -20,6 +20,7 @@ public class AuditLog {
     private Long id;
     private String requestId;
     private String traceId;
+    private String tenantId;
     private String userIdentity;
     private String method;
     private String path;

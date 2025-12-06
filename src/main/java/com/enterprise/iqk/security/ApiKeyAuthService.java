@@ -33,6 +33,7 @@ public class ApiKeyAuthService {
                 .roles(List.of(record.getRoleName()))
                 .permissions(permissionMapper.findByRoleName(record.getRoleName()))
                 .source("api_key")
+                .tenantId(TenantContext.normalize(record.getTenantId()))
                 .build();
     }
 }

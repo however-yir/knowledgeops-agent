@@ -28,21 +28,23 @@ public interface ApiKeyMapper extends BaseMapper<ApiKeyRecord> {
     @Select("""
             SELECT * FROM api_keys
             WHERE key_name = #{keyName}
+              AND tenant_id = #{tenantId}
               AND enabled = 1
               AND revoked_at IS NULL
               AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY id DESC
             LIMIT 1
             """)
-    ApiKeyRecord findActiveByKeyName(@Param("keyName") String keyName);
+    ApiKeyRecord findActiveByKeyName(@Param("keyName") String keyName, @Param("tenantId") String tenantId);
 
     @Select("""
             SELECT * FROM api_keys
             WHERE key_name = #{keyName}
+              AND tenant_id = #{tenantId}
             ORDER BY id DESC
             LIMIT 1
             """)
-    ApiKeyRecord findLatestByKeyName(@Param("keyName") String keyName);
+    ApiKeyRecord findLatestByKeyName(@Param("keyName") String keyName, @Param("tenantId") String tenantId);
 
     @Update("""
             UPDATE api_keys

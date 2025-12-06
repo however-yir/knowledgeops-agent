@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -19,17 +20,22 @@ public class RefreshTokenService {
     private final SecurityProperties securityProperties;
     private final RefreshTokenMapper refreshTokenMapper;
 
-    public String issue(String principal, List<String> roles) {
+    public RefreshTokenIssueResult issue(String principal, List<String> roles, String tenantId) {
         String raw = UUID.randomUUID() + "." + UUID.randomUUID();
+        LocalDateTime expiresAt = LocalDateTime.now().plusDays(Math.max(1, securityProperties.getRefreshExpireDays()));
+        String roleCsv = roles == null ? "" : roles.stream()
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.joining(","));
         RefreshTokenRecord record = RefreshTokenRecord.builder()
                 .tokenHash(HashUtils.sha256Hex(raw))
                 .principal(principal)
-                .roles(String.join(",", roles))
-                .expiresAt(LocalDateTime.now().plusDays(Math.max(1, securityProperties.getRefreshExpireDays())))
+                .tenantId(TenantContext.normalize(tenantId))
+                .roles(roleCsv)
+                .expiresAt(expiresAt)
                 .createdAt(LocalDateTime.now())
                 .build();
         refreshTokenMapper.insert(record);
-        return raw;
+        return new RefreshTokenIssueResult(raw, record.getTenantId(), expiresAt);
     }
 
     public AuthIdentity consume(String rawToken) {
@@ -42,7 +48,8 @@ public class RefreshTokenService {
             return null;
         }
         refreshTokenMapper.revoke(record.getId(), LocalDateTime.now());
-        List<String> roles = Arrays.stream(record.getRoles().split(","))
+        String roleCsv = Objects.toString(record.getRoles(), "");
+        List<String> roles = Arrays.stream(roleCsv.split(","))
                 .filter(StringUtils::hasText)
                 .toList();
         return AuthIdentity.builder()
@@ -50,6 +57,9 @@ public class RefreshTokenService {
                 .roles(roles)
                 .permissions(List.of())
                 .source("refresh_token")
+                .tenantId(TenantContext.normalize(record.getTenantId()))
                 .build();
     }
+
+    public record RefreshTokenIssueResult(String rawToken, String tenantId, LocalDateTime expiresAt) {}
 }

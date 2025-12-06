@@ -12,4 +12,5 @@ public class AuthIdentity {
     private List<String> roles;
     private List<String> permissions;
     private String source;
+    private String tenantId;
 }

@@ -20,6 +20,7 @@ public class ApiKeyRecord {
     private Long id;
     private String keyHash;
     private String keyName;
+    private String tenantId;
     private String roleName;
     private Integer enabled;
     private LocalDateTime lastUsedAt;

@@ -11,6 +11,7 @@ public class ApiKeyIssueVO {
     private Integer ok;
     private String msg;
     private String keyName;
+    private String tenantId;
     private String rawApiKey;
     private LocalDateTime expiresAt;
 }
