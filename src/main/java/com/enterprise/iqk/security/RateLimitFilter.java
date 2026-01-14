@@ -46,11 +46,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String resolveKey(HttpServletRequest request) {
+        String tenantId = resolveTenant(request);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && StringUtils.hasText(authentication.getName())) {
-            return "principal:" + authentication.getName();
+            return "tenant:" + tenantId + ":principal:" + authentication.getName();
         }
-        return "ip:" + request.getRemoteAddr();
+        String remoteIp = StringUtils.hasText(request.getRemoteAddr()) ? request.getRemoteAddr() : "unknown";
+        return "tenant:" + tenantId + ":ip:" + remoteIp;
+    }
+
+    private String resolveTenant(HttpServletRequest request) {
+        Object tenantFromAttr = request.getAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE);
+        if (tenantFromAttr != null && StringUtils.hasText(String.valueOf(tenantFromAttr))) {
+            return TenantContext.normalize(String.valueOf(tenantFromAttr));
+        }
+        return TenantContext.normalize(request.getHeader(TenantContext.TENANT_HEADER));
     }
 
     private Bucket newBucket() {

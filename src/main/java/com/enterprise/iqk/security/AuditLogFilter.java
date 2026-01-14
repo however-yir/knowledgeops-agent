@@ -40,9 +40,11 @@ public class AuditLogFilter extends OncePerRequestFilter {
                 }
                 Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
                 String principal = authentication == null ? "anonymous" : authentication.getName();
+                String tenantId = resolveTenant(request);
                 AuditLog logRecord = AuditLog.builder()
                         .requestId(MDC.get("request_id"))
                         .traceId(MDC.get("trace_id"))
+                        .tenantId(tenantId)
                         .userIdentity(principal)
                         .method(request.getMethod())
                         .path(uri)
@@ -58,6 +60,14 @@ public class AuditLogFilter extends OncePerRequestFilter {
                 log.warn("Failed to persist audit log", e);
             }
         }
+    }
+
+    private String resolveTenant(HttpServletRequest request) {
+        Object tenantFromAttr = request.getAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE);
+        if (tenantFromAttr != null && StringUtils.hasText(String.valueOf(tenantFromAttr))) {
+            return TenantContext.normalize(String.valueOf(tenantFromAttr));
+        }
+        return TenantContext.normalize(request.getHeader(TenantContext.TENANT_HEADER));
     }
 
     private String extractChatId(HttpServletRequest request) {

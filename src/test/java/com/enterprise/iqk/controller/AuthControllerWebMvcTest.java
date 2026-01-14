@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -53,29 +54,34 @@ class AuthControllerWebMvcTest {
                 .roles(List.of("ADMIN"))
                 .permissions(List.of("chat:write"))
                 .source("api_key")
+                .tenantId("tenant-a")
                 .build());
         when(permissionService.permissionsForRoles(any())).thenReturn(List.of("chat:write"));
-        when(jwtService.issueToken(any(), any(), any())).thenReturn("jwt-token");
-        when(refreshTokenService.issue(any(), any())).thenReturn("refresh-token");
+        when(jwtService.issueToken(any(), any(), any(), eq("tenant-a"))).thenReturn("jwt-token");
+        when(refreshTokenService.issue(any(), any(), eq("tenant-a")))
+                .thenReturn(new RefreshTokenService.RefreshTokenIssueResult("refresh-token", "tenant-a", LocalDateTime.now().plusDays(7)));
         when(securityProperties.getJwtExpireMinutes()).thenReturn(120);
 
         mockMvc.perform(post("/auth/token").header("X-API-Key", "abc").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(1))
                 .andExpect(jsonPath("$.token").value("jwt-token"))
-                .andExpect(jsonPath("$.refreshToken").value("refresh-token"));
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
+                .andExpect(jsonPath("$.tenantId").value("tenant-a"));
     }
 
     @Test
     void shouldRotateApiKey() throws Exception {
-        when(apiKeyLifecycleService.rotate("legacy", "manual"))
-                .thenReturn(new ApiKeyLifecycleService.ApiKeyIssueResult("new-raw", "legacy-v2", LocalDateTime.now().plusDays(30)));
+        when(apiKeyLifecycleService.rotate("legacy", "manual", "public"))
+                .thenReturn(new ApiKeyLifecycleService.ApiKeyIssueResult("new-raw", "legacy-v2", "public", LocalDateTime.now().plusDays(30)));
 
         mockMvc.perform(post("/auth/api-keys/rotate")
                         .param("keyName", "legacy")
-                        .param("reason", "manual"))
+                        .param("reason", "manual")
+                        .param("tenantId", "public"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(1))
-                .andExpect(jsonPath("$.rawApiKey").value("new-raw"));
+                .andExpect(jsonPath("$.rawApiKey").value("new-raw"))
+                .andExpect(jsonPath("$.tenantId").value("public"));
     }
 }

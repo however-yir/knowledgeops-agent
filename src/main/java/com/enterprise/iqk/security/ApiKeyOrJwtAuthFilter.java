@@ -6,6 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -44,6 +45,8 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
             unauthorized(response, "missing or invalid credentials");
             return;
         }
+        String tenantId = TenantContext.normalize(identity.getTenantId());
+        identity.setTenantId(tenantId);
         List<SimpleGrantedAuthority> roleAuthorities = (identity.getRoles() == null ? List.<String>of() : identity.getRoles()).stream()
                 .filter(StringUtils::hasText)
                 .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
@@ -60,8 +63,16 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
                 .toList();
         UsernamePasswordAuthenticationToken authenticationToken =
                 new UsernamePasswordAuthenticationToken(identity.getPrincipal(), identity.getSource(), authorities);
-        SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-        filterChain.doFilter(request, response);
+        request.setAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE, tenantId);
+        response.setHeader(TenantContext.TENANT_HEADER, tenantId);
+        MDC.put(TenantContext.TENANT_REQUEST_ATTRIBUTE, tenantId);
+        try {
+            SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+            filterChain.doFilter(request, response);
+        } finally {
+            MDC.remove(TenantContext.TENANT_REQUEST_ATTRIBUTE);
+            SecurityContextHolder.clearContext();
+        }
     }
 
     private AuthIdentity resolveIdentity(HttpServletRequest request) {

@@ -2,7 +2,7 @@
 <configuration>
     <property name="LOG_FILE_PATH" value="${LOG_FILE_PATH:-logs/iqk-platform.log}"/>
     <property name="JSON_PATTERN"
-              value="{&quot;timestamp&quot;:&quot;%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}&quot;,&quot;level&quot;:&quot;%p&quot;,&quot;thread&quot;:&quot;%t&quot;,&quot;logger&quot;:&quot;%c{1}&quot;,&quot;message&quot;:&quot;%replace(%msg){'&quot;','\\&quot;'}&quot;,&quot;request_id&quot;:&quot;%X{request_id:-}&quot;,&quot;trace_id&quot;:&quot;%X{trace_id:-}&quot;,&quot;chat_id&quot;:&quot;%X{chat_id:-}&quot;}%n"/>
+              value="{&quot;timestamp&quot;:&quot;%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}&quot;,&quot;level&quot;:&quot;%p&quot;,&quot;thread&quot;:&quot;%t&quot;,&quot;logger&quot;:&quot;%c{1}&quot;,&quot;message&quot;:&quot;%replace(%msg){'&quot;','\\&quot;'}&quot;,&quot;request_id&quot;:&quot;%X{request_id:-}&quot;,&quot;trace_id&quot;:&quot;%X{trace_id:-}&quot;,&quot;tenant_id&quot;:&quot;%X{tenant_id:-}&quot;,&quot;chat_id&quot;:&quot;%X{chat_id:-}&quot;}%n"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

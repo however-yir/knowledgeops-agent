@@ -17,7 +17,7 @@ class JwtServiceTest {
         properties.setJwtExpireMinutes(30);
 
         JwtService jwtService = new JwtService(properties);
-        String token = jwtService.issueToken("alice", List.of("ADMIN"), List.of("chat:write"));
+        String token = jwtService.issueToken("alice", List.of("ADMIN"), List.of("chat:write"), "tenant-a");
         assertNotNull(token);
 
         AuthIdentity identity = jwtService.parse(token);
@@ -25,5 +25,6 @@ class JwtServiceTest {
         assertEquals("alice", identity.getPrincipal());
         assertEquals("ADMIN", identity.getRoles().get(0));
         assertEquals("chat:write", identity.getPermissions().get(0));
+        assertEquals("tenant-a", identity.getTenantId());
     }
 }
