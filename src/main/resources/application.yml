@@ -106,6 +106,28 @@ app:
       dlq-queue: ${APP_INGESTION_RABBIT_DLQ_QUEUE:ingestion.jobs.dlq.queue}
   audit:
     retention-days: ${APP_AUDIT_RETENTION_DAYS:90}
+  model-router:
+    enabled: ${APP_MODEL_ROUTER_ENABLED:true}
+    default-profile: ${APP_MODEL_ROUTER_DEFAULT_PROFILE:balanced}
+    endpoint-profiles:
+      chat: ${APP_MODEL_ROUTER_CHAT_PROFILE:balanced}
+      service: ${APP_MODEL_ROUTER_SERVICE_PROFILE:quality}
+      rag: ${APP_MODEL_ROUTER_RAG_PROFILE:balanced}
+    profiles:
+      economy:
+        model: ${APP_MODEL_ROUTER_MODEL_ECONOMY:qwen-turbo}
+        cost-tier: low
+        enabled: ${APP_MODEL_ROUTER_ECONOMY_ENABLED:true}
+      balanced:
+        model: ${APP_MODEL_ROUTER_MODEL_BALANCED:qwen-plus}
+        cost-tier: medium
+        enabled: ${APP_MODEL_ROUTER_BALANCED_ENABLED:true}
+        fallback-profile: economy
+      quality:
+        model: ${APP_MODEL_ROUTER_MODEL_QUALITY:qwen-max}
+        cost-tier: high
+        enabled: ${APP_MODEL_ROUTER_QUALITY_ENABLED:true}
+        fallback-profile: balanced
   vector-store:
     backend: ${APP_VECTOR_STORE_BACKEND:pgvector}
     require-pgvector: ${APP_REQUIRE_PGVECTOR:true}
@@ -132,4 +154,4 @@ logging:
     org.springframework.ai: INFO
     com.enterprise.iqk: INFO
   pattern:
-    console: '{"timestamp":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","thread":"%t","logger":"%c{1}","message":"%m","request_id":"%X{request_id:-}","trace_id":"%X{trace_id:-}","chat_id":"%X{chat_id:-}"}%n'
+    console: '{"timestamp":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","thread":"%t","logger":"%c{1}","message":"%m","request_id":"%X{request_id:-}","trace_id":"%X{trace_id:-}","tenant_id":"%X{tenant_id:-}","chat_id":"%X{chat_id:-}"}%n'

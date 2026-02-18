@@ -1,12 +1,12 @@
 package com.enterprise.iqk.controller;
 
+import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.Media;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.MimeType;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -14,12 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
 
@@ -29,6 +25,7 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
 public class ChatController {
 
     private final ChatClient chatClient;
+    private final ModelRouter modelRouter;
 
     private final ChatHistoryRepository chatHistoryRepository;
 
@@ -51,6 +48,7 @@ public class ChatController {
     public Flux<String> chat(
             @RequestParam("prompt") String prompt,
             @RequestParam("chatId") String chatId,
+            @RequestParam(value = "modelProfile", required = false) String modelProfile,
             @RequestParam(value = "files", required = false) List<MultipartFile> files) {
         // 1.保存会话id
         chatHistoryRepository.save("chat", chatId);
@@ -58,32 +56,40 @@ public class ChatController {
         // 2.请求模型
         if (files == null || files.isEmpty()) {
             // 没有附件，纯文本聊天
-            return textChat(prompt, conversationId);
+            return textChat(prompt, conversationId, modelProfile);
         } else {
             // 有附件，多模态聊天
-            return multiModalChat(prompt, conversationId, files);
+            return multiModalChat(prompt, conversationId, files, modelProfile);
         }
 
     }
 
-    private Flux<String> multiModalChat(String prompt, String conversationId, List<MultipartFile> files) {
+    private Flux<String> multiModalChat(String prompt,
+                                        String conversationId,
+                                        List<MultipartFile> files,
+                                        String modelProfile) {
         List<Media> mediaList = files.stream().map(f -> {
             return new Media(MimeType.valueOf(Objects.requireNonNull(f.getContentType())), f.getResource());
         }).toList();
 
-        return chatClient
-                .prompt()
+        return routedPrompt(modelProfile, "chat")
                 .user(t->t.text(prompt).media(mediaList.toArray(Media[]::new)))
                 .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                 .stream()
                 .content();
     }
 
-    private Flux<String> textChat(String prompt, String conversationId) {
-        return chatClient
-                .prompt(prompt)
+    private Flux<String> textChat(String prompt, String conversationId, String modelProfile) {
+        return routedPrompt(modelProfile, "chat")
+                .user(prompt)
                 .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                 .stream()
                 .content();
+    }
+
+    private ChatClient.ChatClientRequestSpec routedPrompt(String requestedProfile, String endpoint) {
+        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(requestedProfile, endpoint);
+        return chatClient.prompt()
+                .options(ChatOptions.builder().model(decision.model()).build());
     }
 }

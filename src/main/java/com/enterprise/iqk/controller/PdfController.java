@@ -88,10 +88,12 @@ public class PdfController {
     }
 
     @RequestMapping(value = "/chat", produces = "text/html;charset=UTF-8")
-    public Flux<String> chat(@RequestParam("prompt") String prompt, @RequestParam("chatId") String chatId) {
+    public Flux<String> chat(@RequestParam("prompt") String prompt,
+                             @RequestParam("chatId") String chatId,
+                             @RequestParam(value = "modelProfile", required = false) String modelProfile) {
         chatHistoryRepository.save("pdf", chatId);
         String conversationId = ConversationIdHelper.build("pdf", chatId);
-        RagAnswerService.RagResult result = ragAnswerService.answer(prompt, sanitize(chatId), conversationId);
+        RagAnswerService.RagResult result = ragAnswerService.answer(prompt, sanitize(chatId), conversationId, modelProfile);
         StringBuilder output = new StringBuilder(result.getAnswer());
         if (result.getCitations() != null && !result.getCitations().isEmpty()) {
             output.append("\n\n引用来源:\n");

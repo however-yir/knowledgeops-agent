@@ -1,10 +1,12 @@
 package com.enterprise.iqk.rag;
 
 import com.enterprise.iqk.config.properties.RagProperties;
+import com.enterprise.iqk.llm.ModelRouter;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -22,9 +24,10 @@ public class RagAnswerService {
 
     private final VectorStore vectorStore;
     private final ChatClient chatClient;
+    private final ModelRouter modelRouter;
     private final RagProperties ragProperties;
 
-    public RagResult answer(String prompt, String chatId, String conversationId) {
+    public RagResult answer(String prompt, String chatId, String conversationId, String modelProfile) {
         String filterExpression = "chat_id == '" + chatId.replace("'", "") + "'";
         SearchRequest request = SearchRequest.builder()
                 .query(prompt)
@@ -44,7 +47,9 @@ public class RagAnswerService {
                 .limit(Math.max(1, ragProperties.getRerankTopK()))
                 .toList();
         String context = buildContext(selected);
+        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag");
         String answer = chatClient.prompt()
+                .options(ChatOptions.builder().model(decision.model()).build())
                 .system("你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
                 .user("""
                         用户问题:
