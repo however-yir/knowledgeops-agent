@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: ai-demo
+  ai:
+    ollama:
+      base-url: http://localhost:11434 # ollama服务地址， 这就是默认值
+      chat:
+        model: qwen3:1.7b # 模型名称
+        options:
+          temperature: 0.8 # 模型温度，影响模型生成结果的随机性，越小越稳定
+    openai: #openai配置
+      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode} #api地址
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: qwen-plus  #模型名称
+      embedding:
+        options:
+          model: text-embedding-v4
+          dimensions: 1024
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ai-demo?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
+    password: ${DB_PASSWORD:}
+    username: ${DB_USERNAME:}
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+logging:
+  level:
+    org.springframework.ai: debug # AI对话的日志级别
+    com.demo.ai: debug # 本项目的日志级别
