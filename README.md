@@ -1,5 +1,9 @@
 # ai-demo
 
+🔥 A Spring AI backend demo based on Spring Boot, Java, and PDF RAG workflows.  
+🚀 Built for chat, tool calling, multimodal input, vector retrieval, and conversation history management.  
+⭐ Provides an extensible reference for AI application backends, observability, and production-minded evolution.
+
 > 一个面向教学与业务验证场景的 Spring AI 示例项目，覆盖了文本聊天、多模态输入、工具调用、PDF 知识库问答（RAG）和会话历史管理等完整链路。  
 > 该项目的目标不是“最短 Demo”，而是提供一个可扩展、可观测、可演进的 AI 应用后端参考实现。
 
