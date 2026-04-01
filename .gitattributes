@@ -1,0 +1,13 @@
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+
+# Build outputs / generated files
+target/** linguist-generated=true
+*.map linguist-generated=true
