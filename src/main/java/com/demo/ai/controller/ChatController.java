@@ -1,6 +1,7 @@
 package com.demo.ai.controller;
 
 import com.demo.ai.repository.ChatHistoryRepository;
+import com.demo.ai.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.springframework.ai.chat.client.ChatClient;
@@ -53,18 +54,19 @@ public class ChatController {
             @RequestParam(value = "files", required = false) List<MultipartFile> files) {
         // 1.保存会话id
         chatHistoryRepository.save("chat", chatId);
+        String conversationId = ConversationIdHelper.build("chat", chatId);
         // 2.请求模型
         if (files == null || files.isEmpty()) {
             // 没有附件，纯文本聊天
-            return textChat(prompt, chatId);
+            return textChat(prompt, conversationId);
         } else {
             // 有附件，多模态聊天
-            return multiModalChat(prompt, chatId, files);
+            return multiModalChat(prompt, conversationId, files);
         }
 
     }
 
-    private Flux<String> multiModalChat(String prompt, String chatId, List<MultipartFile> files) {
+    private Flux<String> multiModalChat(String prompt, String conversationId, List<MultipartFile> files) {
         List<Media> mediaList = files.stream().map(f -> {
             return new Media(MimeType.valueOf(Objects.requireNonNull(f.getContentType())), f.getResource());
         }).toList();
@@ -72,15 +74,15 @@ public class ChatController {
         return chatClient
                 .prompt()
                 .user(t->t.text(prompt).media(mediaList.toArray(Media[]::new)))
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId))
+                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                 .stream()
                 .content();
     }
 
-    private Flux<String> textChat(String prompt, String chatId) {
+    private Flux<String> textChat(String prompt, String conversationId) {
         return chatClient
                 .prompt(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId))
+                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                 .stream()
                 .content();
     }

@@ -3,6 +3,7 @@ package com.demo.ai.controller;
 import com.demo.ai.domain.vo.Result;
 import com.demo.ai.repository.ChatHistoryRepository;
 import com.demo.ai.repository.FileRepository;
+import com.demo.ai.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -102,10 +103,11 @@ public class PdfController {
     @RequestMapping(value = "/chat", produces = "text/html;charset=UTF-8")
     public Flux<String> chat(String prompt, String chatId) {
         chatHistoryRepository.save("pdf", chatId);
+        String conversationId = ConversationIdHelper.build("pdf", chatId);
         Resource file = fileRepository.getFile(chatId);
         return pdfChatClient
                 .prompt(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId))
+                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                 .advisors(a -> a.param(QuestionAnswerAdvisor.FILTER_EXPRESSION, "file_name == '"+file.getFilename()+"'"))
                 .stream()
                 .content();

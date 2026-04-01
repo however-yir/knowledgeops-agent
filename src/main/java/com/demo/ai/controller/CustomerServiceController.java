@@ -2,6 +2,7 @@ package com.demo.ai.controller;
 
 
 import com.demo.ai.repository.ChatHistoryRepository;
+import com.demo.ai.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,10 +23,11 @@ public class CustomerServiceController {
     public String service(String prompt, String chatId) {
         // 1.保存会话id
         chatHistoryRepository.save("service", chatId);
+        String conversationId = ConversationIdHelper.build("service", chatId);
         // 2.请求模型
         return serviceChatClient.prompt()
                 .user(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId))
+                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                 .call()
                 .content();
     }

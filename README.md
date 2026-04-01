@@ -1,10 +1,10 @@
 # ai-demo
 
-🔥 A Spring AI backend demo based on Spring Boot, Java, and PDF RAG workflows.  
-🚀 Built for chat, tool calling, multimodal input, vector retrieval, and conversation history management.  
+🔥 A Spring AI backend demo based on Spring Boot, Java, and PDF RAG workflows.
+🚀 Built for chat, tool calling, multimodal input, vector retrieval, and conversation history management.
 ⭐ Provides an extensible reference for AI application backends, observability, and production-minded evolution.
 
-> 一个面向教学与业务验证场景的 Spring AI 示例项目，覆盖了文本聊天、多模态输入、工具调用、PDF 知识库问答（RAG）和会话历史管理等完整链路。  
+> 一个面向教学与业务验证场景的 Spring AI 示例项目，覆盖了文本聊天、多模态输入、工具调用、PDF 知识库问答（RAG）和会话历史管理等完整链路。
 > 该项目的目标不是“最短 Demo”，而是提供一个可扩展、可观测、可演进的 AI 应用后端参考实现。
 
 ---
@@ -37,34 +37,34 @@
 
 `ai-demo` 是一个“功能闭环型”的 AI 应用后端样例。相比只演示一次模型调用的入门项目，它更强调以下几点：
 
-1. **业务闭环完整**：不仅能聊天，还能做客服流程、课程查询、预约写入、文档问答和会话追溯。  
-2. **多模态能力接入**：同一接口支持纯文本与附件输入，便于逐步扩展图像/文档混合交互。  
-3. **工具调用可控**：通过 `@Tool` 暴露业务操作，并用系统提示词约束模型在流程上的行为边界。  
-4. **RAG 可落地**：将 PDF 切页入库，基于向量检索增强回答，形成“上传-检索-问答”完整通路。  
+1. **业务闭环完整**：不仅能聊天，还能做客服流程、课程查询、预约写入、文档问答和会话追溯。
+2. **多模态能力接入**：同一接口支持纯文本与附件输入，便于逐步扩展图像/文档混合交互。
+3. **工具调用可控**：通过 `@Tool` 暴露业务操作，并用系统提示词约束模型在流程上的行为边界。
+4. **RAG 可落地**：将 PDF 切页入库，基于向量检索增强回答，形成“上传-检索-问答”完整通路。
 5. **可演进架构**：当前实现偏教学与验证，但模块边界清晰，便于后续替换为生产级存储与组件。
 
 ---
 
 ## 功能总览
 
-- **通用流式聊天**：`/ai/chat` 支持分片输出，适合前端实时渲染。  
-- **多模态聊天**：同一接口可附带文件，底层以 `Media` 形式传入模型。  
-- **客服工作流**：`/ai/service` 绑定专用系统提示词与业务工具，模拟课程咨询与预约流程。  
-- **PDF 上传与问答**：`/ai/pdf/upload/{chatId}` 写入向量库；`/ai/pdf/chat` 执行检索增强回答。  
-- **会话历史管理**：按业务类型维护 `chatId` 列表，可按会话读取完整消息链。  
+- **通用流式聊天**：`/ai/chat` 支持分片输出，适合前端实时渲染。
+- **多模态聊天**：同一接口可附带文件，底层以 `Media` 形式传入模型。
+- **客服工作流**：`/ai/service` 绑定专用系统提示词与业务工具，模拟课程咨询与预约流程。
+- **PDF 上传与问答**：`/ai/pdf/upload/{chatId}` 写入向量库；`/ai/pdf/chat` 执行检索增强回答。
+- **会话历史管理**：按业务类型维护 `chatId` 列表，可按会话读取完整消息链。
 - **向量能力验证**：测试代码包含向量距离、PDF 检索示例，便于二次实验。
 
 ---
 
 ## 技术栈与版本基线
 
-- Java 17  
-- Spring Boot 3.4.3  
-- Spring AI 1.0.0-M6（BOM）  
-- Spring AI OpenAI / Ollama / PDF Reader / VectorStore  
-- MyBatis-Plus 3.5.12  
-- MySQL（业务数据与可选会话数据）  
-- Lombok 1.18.36  
+- Java 17
+- Spring Boot 3.4.3
+- Spring AI 1.0.0-M6（BOM）
+- Spring AI OpenAI / Ollama / PDF Reader / VectorStore
+- MyBatis-Plus 3.5.12
+- MySQL（业务数据与可选会话数据）
+- Lombok 1.18.36
 - Maven 构建
 
 说明：项目同时保留了 Ollama 与 OpenAI 兼容接口配置。默认示例通过 OpenAI 兼容网关调用模型，并支持 embedding 模型用于向量化。
@@ -92,8 +92,8 @@ flowchart TD
     F3 --> C
 
     B --> G[Chat History]
-    G --> G1[InMemory ChatMemory]
-    G --> G2[(Optional MySQL Conversation)]
+    G --> G1[(MySQL Conversation)]
+    G --> G2[Type + ChatId Scoped ConversationId]
 ```
 
 ---
@@ -102,30 +102,30 @@ flowchart TD
 
 ### 1) 对话入口层（Controller）
 
-- `ChatController`：通用聊天入口，支持文件附件与流式输出。  
-- `CustomerServiceController`：客服场景专用入口，调用带工具能力的 `serviceChatClient`。  
-- `PdfController`：负责 PDF 上传、下载、向量化写入与检索问答。  
+- `ChatController`：通用聊天入口，支持文件附件与流式输出。
+- `CustomerServiceController`：客服场景专用入口，调用带工具能力的 `serviceChatClient`。
+- `PdfController`：负责 PDF 上传、下载、向量化写入与检索问答。
 - `ChatHistoryController`：按业务类型与 `chatId` 查询历史。
 
 ### 2) AI 客户端配置层（Configuration）
 
-- `CommonConfiguration` 提供三个不同用途的 `ChatClient`：  
-  - `chatClient`：通用聊天。  
-  - `serviceChatClient`：绑定系统提示词与工具。  
-  - `pdfChatClient`：附加 `QuestionAnswerAdvisor`，执行向量检索增强。  
+- `CommonConfiguration` 提供三个不同用途的 `ChatClient`：
+  - `chatClient`：通用聊天。
+  - `serviceChatClient`：绑定系统提示词与工具。
+  - `pdfChatClient`：附加 `QuestionAnswerAdvisor`，执行向量检索增强。
 
 ### 3) 工具调用层（Tool Calling）
 
-- `CourseTools` 使用 `@Tool` 暴露三类业务能力：  
-  - 课程查询（带动态条件与排序）  
-  - 校区查询  
-  - 预约单写入并返回单号  
+- `CourseTools` 使用 `@Tool` 暴露三类业务能力：
+  - 课程查询（带空参兜底与排序字段白名单）
+  - 校区查询
+  - 预约单写入并返回单号
 
 ### 4) 存储层
 
-- 业务数据：MySQL（课程、校区、预约）。  
-- 会话元信息：`InMemoryChatHistoryRepository`（内存）。  
-- 对话上下文：`InMemoryChatMemory`（可切换到 `MysqlChatMemory`）。  
+- 业务数据：MySQL（课程、校区、预约）。
+- 会话上下文与历史：`conversation` 表（按 `type::chatId` 持久化）。
+- 历史查询：`MysqlChatHistoryRepository` 按业务类型分页读取会话与消息。
 - 文件与向量：本地文件 + `SimpleVectorStore`（可持久化快照）。
 
 ---
@@ -137,7 +137,7 @@ flowchart TD
 - JDK 17+
 - Maven 3.9+
 - MySQL 8.x
-- 可用的大模型 API Key（OpenAI 兼容）  
+- 可用的大模型 API Key（OpenAI 兼容）
 - 可选：本地 Ollama 服务（若需要切换本地模型）
 
 ### 本地启动
@@ -191,6 +191,9 @@ CREATE TABLE IF NOT EXISTS `conversation` (
   `type` VARCHAR(32) NOT NULL,
   `create_time` DATETIME NOT NULL
 );
+
+CREATE INDEX `idx_conversation_id_create_time`
+  ON `conversation` (`conversation_id`, `create_time`);
 ```
 
 ---
@@ -273,17 +276,21 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 `type` 取值建议：`chat` / `service` / `pdf`
 
+说明：
+- 两个接口都支持 `page`、`pageSize` 参数。
+- 历史会话已按业务类型做隔离，底层会把 `type` 与 `chatId` 组合成独立的 `conversationId`，避免不同场景复用同一个 `chatId` 时串历史。
+
 ---
 
 ## 工具调用与业务约束设计
 
 本项目的客服能力不是“自由聊天”，而是“流程型对话 + 数据工具”组合：
 
-1. 通过系统提示词限定角色、语气、步骤和安全边界。  
-2. 通过 `@Tool` 暴露受控业务动作，避免模型编造结构化数据。  
-3. 把“可执行动作”与“自然语言表达”分离：  
-   - 表达由模型负责  
-   - 数据查询/写入由后端工具负责  
+1. 通过系统提示词限定角色、语气、步骤和安全边界。
+2. 通过 `@Tool` 暴露受控业务动作，避免模型编造结构化数据。
+3. 把“可执行动作”与“自然语言表达”分离：
+   - 表达由模型负责
+   - 数据查询/写入由后端工具负责
 
 这种设计在实际业务里非常关键，能显著降低幻觉风险，并提升可审计性。
 
@@ -293,10 +300,10 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 `PdfController` 的主流程如下：
 
-1. 校验并保存上传文件  
-2. 用 `PagePdfDocumentReader` 按页拆分文档  
-3. 写入 `VectorStore`  
-4. 问答阶段通过 `QuestionAnswerAdvisor` 注入检索结果  
+1. 校验并保存上传文件
+2. 用 `PagePdfDocumentReader` 按页拆分文档
+3. 写入 `VectorStore`
+4. 问答阶段通过 `QuestionAnswerAdvisor` 注入检索结果
 5. 用 `FILTER_EXPRESSION` 限定仅检索当前会话关联文件
 
 这个策略避免了多文件混检导致的上下文污染，是单会话文档问答场景中非常实用的一步。
@@ -305,15 +312,16 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 ## 会话与历史管理策略
 
-当前实现采用“双轨制”：
+当前实现已切到数据库持久化：
 
-- `ChatMemory` 保存模型上下文（默认内存实现）  
-- `ChatHistoryRepository` 保存业务层会话 ID 列表（默认内存实现）
+- `MysqlChatMemory` 负责保存模型上下文
+- `MysqlChatHistoryRepository` 负责按业务类型分页读取历史列表与消息明细
+- `type::chatId` 作为统一的 `conversationId`，确保 `chat / service / pdf` 三类会话互不串线
 
-项目中已提供 `MysqlChatMemory` 作为可选实现，便于切换到数据库持久化。生产实践中建议：
+生产实践中建议：
 
-- 会话上下文使用 Redis 或数据库做持久化  
-- 历史索引与上下文分离存储  
+- 会话上下文使用 Redis 或数据库做持久化
+- 历史索引与上下文分离存储
 - 引入 TTL 与归档策略，控制长期存储成本
 
 ---
@@ -322,15 +330,15 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 ### 日志
 
-当前配置将 `org.springframework.ai` 与应用包设为 `debug`，便于学习阶段观察调用细节。  
+当前配置将 `org.springframework.ai` 与应用包设为 `debug`，便于学习阶段观察调用细节。
 线上建议降级为 `info` 并做采样。
 
 ### 常见排障路径
 
-1. 接口有响应但模型为空：优先检查 `OPENAI_API_KEY` 与网络连通性。  
-2. PDF 问答命中率低：检查 embedding 模型、切页粒度、阈值与 query 质量。  
-3. 客服流程跑偏：先排查系统提示词与工具参数描述是否足够明确。  
-4. 会话丢失：确认 `chatId` 是否稳定传递。
+1. 接口有响应但模型为空：优先检查 `OPENAI_API_KEY` 与网络连通性。
+2. PDF 问答命中率低：检查 embedding 模型、切页粒度、阈值与 query 质量。
+3. 客服流程跑偏：先排查系统提示词与工具参数描述是否足够明确。
+4. 会话丢失：确认 `chatId` 是否稳定传递，并检查 `conversation` 表中是否已经写入对应的 `type::chatId` 记录。
 
 ---
 
@@ -338,20 +346,20 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 项目已完成基础脱敏（密钥与数据库账号密码改为环境变量）。进一步建议：
 
-- 不在仓库提交任何 `.env`、`workspace.xml`、`dataSources.xml`。  
-- API Key 使用密钥管理服务（Vault/KMS/Secret Manager）。  
-- 对外接口增加鉴权与限流。  
-- 记录工具调用审计日志（谁在何时触发了什么操作）。  
+- 不在仓库提交任何 `.env`、`workspace.xml`、`dataSources.xml`。
+- API Key 使用密钥管理服务（Vault/KMS/Secret Manager）。
+- 对外接口增加鉴权与限流。
+- 记录工具调用审计日志（谁在何时触发了什么操作）。
 - 对上传文件做大小、类型、病毒扫描和内容安全校验。
 
 ---
 
 ## 性能优化建议
 
-- 将 `SimpleVectorStore` 替换为专用向量数据库（pgvector/Milvus/Weaviate）。  
-- 增加 embedding 缓存，减少重复向量化。  
-- 对聊天输出采用反压与超时控制，提升高并发稳定性。  
-- 将历史会话存储从内存迁移到 Redis + MySQL 组合。  
+- 将 `SimpleVectorStore` 替换为专用向量数据库（pgvector/Milvus/Weaviate）。
+- 增加 embedding 缓存，减少重复向量化。
+- 对聊天输出采用反压与超时控制，提升高并发稳定性。
+- 为 `conversation` 表补分区/归档策略，控制长会话的查询成本。
 - 对工具查询建立合适索引，避免预约和查询链路被数据库拖慢。
 
 ---
@@ -360,13 +368,13 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 如果把该项目推进到生产，可按以下路线分阶段实施：
 
-1. **阶段一：稳定性**  
-   - 增加统一异常处理、链路追踪、超时控制、熔断重试。  
-2. **阶段二：安全性**  
-   - 接入鉴权、审计、脱敏、最小权限数据库账户。  
-3. **阶段三：可运营性**  
-   - 增加提示词版本管理、A/B 测试、效果回放和评测基线。  
-4. **阶段四：可扩展性**  
+1. **阶段一：稳定性**
+   - 增加统一异常处理、链路追踪、超时控制、熔断重试。
+2. **阶段二：安全性**
+   - 接入鉴权、审计、脱敏、最小权限数据库账户。
+3. **阶段三：可运营性**
+   - 增加提示词版本管理、A/B 测试、效果回放和评测基线。
+4. **阶段四：可扩展性**
    - 抽象模型提供方，支持多模型路由与成本控制策略。
 
 ---
@@ -397,7 +405,7 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 - 用 `QuestionAnswerAdvisor + VectorStore` 把检索结果接入问答链路，而不是手工拼接上下文；
 - 把 PDF 走“上传 -> 解析 -> 切片 -> 向量化 -> 检索问答”完整闭环，保证知识库能力可以独立验证；
 - 在客服场景中给工具调用增加系统提示和流程约束，减少模型随意输出和越权操作；
-- 用 `chatId` 维护会话与文档范围，降低不同会话之间相互污染的风险；
+- 用 `type::chatId` 维护会话与文档范围，并给历史接口加分页，降低不同会话之间相互污染和长对话拖慢接口的风险；
 - 同时保留会话历史与多模态输入能力，为后续扩展留出空间。
 
 ### 后续优化方向
@@ -406,7 +414,7 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 - 引入更细的切片策略和重排机制，提升 RAG 召回质量；
 - 给检索问答增加来源展示和置信度提示，降低幻觉风险；
-- 把会话历史从内存迁移到 `Redis + MySQL` 组合，提升可恢复性；
+- 把会话上下文进一步拆到 `Redis + MySQL` 组合，兼顾响应速度与可恢复性；
 - 增加自动化评测、回归测试和效果基线；
 - 把工具调用失败、模型超时和异常响应做成统一降级策略。
 
@@ -424,7 +432,7 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 避免跨会话或跨文档污染结果，确保答案来源清晰。
 
 ### Q4：能否把会话历史全放数据库？
-可以。项目已经给出 `MysqlChatMemory` 模板，按需启用并完善索引即可。
+可以，当前默认实现已经把会话上下文和历史索引都落到了 MySQL；如果后续量级增大，建议再把热点上下文前移到 Redis。
 
 ### Q5：这份代码适合直接商用吗？
 更适合作为高质量样例与 PoC 基线，商用前建议补齐鉴权、运维、监控和安全链路。
@@ -433,11 +441,11 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 ## 路线图
 
-- [ ] 增加统一 API 响应规范与错误码体系  
-- [ ] 增加 OpenAPI/Swagger 文档  
-- [ ] 支持向量库可插拔实现  
-- [ ] 增加 Redis 会话持久化  
-- [ ] 增加提示词模板中心与版本管理  
+- [ ] 增加统一 API 响应规范与错误码体系
+- [ ] 增加 OpenAPI/Swagger 文档
+- [ ] 支持向量库可插拔实现
+- [ ] 增加 Redis 会话持久化
+- [ ] 增加提示词模板中心与版本管理
 - [ ] 增加自动化评测与回归测试
 
 ---
@@ -448,6 +456,6 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 ## 开源
 
-本项目以开源方式提供，欢迎学习、Fork 和二次开发。  
-建议在企业或生产场景落地前，补齐鉴权、审计、监控与安全合规能力。  
+本项目以开源方式提供，欢迎学习、Fork 和二次开发。
+建议在企业或生产场景落地前，补齐鉴权、审计、监控与安全合规能力。
 如需用于团队协作，可在此基础上补充 `LICENSE`、`CONTRIBUTING` 和 `SECURITY` 文档。

@@ -16,11 +16,13 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
 import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class CourseTools {
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("price", "duration", "edu", "id");
     private final ICourseService courseService;
     private final ISchoolService schoolService;
     private final ICourseReservationService courseReservationService;
@@ -28,6 +30,9 @@ public class CourseTools {
 
     @Tool(description = "根据条件查询对应的课程，返回的是课程的列表集合")
     public List<Course> queryCourse(@ToolParam(required = false,description = "需要查询的课程的条件") CourseQuery query){
+        if (query == null) {
+            query = new CourseQuery();
+        }
 
         //sql：select * from course where edu <= ? and type = ? order by ? asc, ? desc
         QueryWrapper<Course> qw = new QueryWrapper<>();
@@ -37,7 +42,11 @@ public class CourseTools {
         //排序字段处理
         if(CollUtil.isNotEmpty(query.getSorts())){
             for (CourseQuery.Sort sort : query.getSorts()) {
-                qw.orderBy(true,sort.getIsAsc(),sort.getField());
+                if (sort == null || !ALLOWED_SORT_FIELDS.contains(sort.getField())) {
+                    continue;
+                }
+                boolean isAsc = sort.getIsAsc() == null || sort.getIsAsc();
+                qw.orderBy(true,isAsc,sort.getField());
             }
         }
         return courseService.list(qw);

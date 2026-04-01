@@ -7,7 +7,6 @@ import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -63,8 +62,8 @@ public class CommonConfiguration {
     }
 
     @Bean
-    public ChatMemory chatMemory(){
-        return new InMemoryChatMemory();//把会话上下文存在内存中
+    public ChatMemory chatMemory(MysqlChatMemory mysqlChatMemory){
+        return mysqlChatMemory;
     }
 
 
