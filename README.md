@@ -1,11 +1,11 @@
 # ai-demo
 
-🔥 A Spring AI backend demo based on Spring Boot, Java, and PDF RAG workflows.
+🔥 A Spring AI backend project based on Spring Boot, Java, and PDF RAG workflows.
 🚀 Built for chat, tool calling, multimodal input, vector retrieval, and conversation history management.
 ⭐ Provides an extensible reference for AI application backends, observability, and production-minded evolution.
 
-> 一个面向教学与业务验证场景的 Spring AI 示例项目，覆盖了文本聊天、多模态输入、工具调用、PDF 知识库问答（RAG）和会话历史管理等完整链路。
-> 该项目的目标不是“最短 Demo”，而是提供一个可扩展、可观测、可演进的 AI 应用后端参考实现。
+> 一个面向真实业务迭代与能力验证场景的 Spring AI 后端项目，覆盖了文本聊天、多模态输入、工具调用、PDF 知识库问答（RAG）和会话历史管理等完整链路。
+> 该项目的目标不是“最短路径实现”，而是提供一个可扩展、可观测、可演进的 AI 应用后端工程基线。
 
 ---
 
@@ -35,13 +35,13 @@
 
 ## 项目定位与设计目标
 
-`ai-demo` 是一个“功能闭环型”的 AI 应用后端样例。相比只演示一次模型调用的入门项目，它更强调以下几点：
+`ai-demo` 是一个“功能闭环型”的 AI 应用后端工程。相比只完成单轮模型调用的入门项目，它更强调以下几点：
 
 1. **业务闭环完整**：不仅能聊天，还能做客服流程、课程查询、预约写入、文档问答和会话追溯。
 2. **多模态能力接入**：同一接口支持纯文本与附件输入，便于逐步扩展图像/文档混合交互。
 3. **工具调用可控**：通过 `@Tool` 暴露业务操作，并用系统提示词约束模型在流程上的行为边界。
 4. **RAG 可落地**：将 PDF 切页入库，基于向量检索增强回答，形成“上传-检索-问答”完整通路。
-5. **可演进架构**：当前实现偏教学与验证，但模块边界清晰，便于后续替换为生产级存储与组件。
+5. **可演进架构**：当前实现强调工程可落地与迭代扩展，模块边界清晰，便于后续替换为生产级存储与组件。
 
 ---
 
@@ -72,7 +72,7 @@
 - Lombok 1.18.36
 - Maven 构建
 
-说明：项目同时保留了 Ollama 与 OpenAI 兼容接口配置。默认示例通过 OpenAI 兼容网关调用模型，并支持 embedding 模型用于向量化。
+说明：项目同时保留了 Ollama 与 OpenAI 兼容接口配置。默认配置通过 OpenAI 兼容网关调用模型，并支持 embedding 模型用于向量化。
 
 ---
 
@@ -219,7 +219,7 @@ CREATE INDEX `idx_conversation_id_create_time`
 - `DB_USERNAME`：数据库用户名
 - `DB_PASSWORD`：数据库密码
 
-示例：
+推荐配置方式：
 
 ```bash
 export OPENAI_API_KEY="your_key"
@@ -240,13 +240,13 @@ export DB_PASSWORD="your_password"
 - `chatId`：会话标识
 - `files`：可选，多文件
 
-示例（文本）：
+调用方式（文本）：
 
 ```bash
 curl -N "http://localhost:8080/ai/chat?prompt=你好&chatId=c1"
 ```
 
-示例（附件）：
+调用方式（附件）：
 
 ```bash
 curl -N -X POST "http://localhost:8080/ai/chat" \
@@ -469,7 +469,7 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 可以，当前默认实现已经把会话上下文和历史索引都落到了 MySQL；如果后续量级增大，建议再把热点上下文前移到 Redis。
 
 ### Q5：这份代码适合直接商用吗？
-更适合作为高质量样例与 PoC 基线，商用前建议补齐鉴权、运维、监控和安全链路。
+更适合作为高质量工程基线与 PoC 起点，商用前建议补齐鉴权、运维、监控和安全链路。
 
 ---
 
@@ -484,7 +484,7 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 ---
 
-如果你正在搭建一个“既能演示能力、又能承载真实业务迭代”的 Spring AI 项目，这个仓库可以作为一个非常好的起点。欢迎基于它继续扩展并提交改进建议。
+如果你正在搭建一个“既能展示能力、又能承载真实业务迭代”的 Spring AI 项目，这个仓库可以作为一个非常好的起点。欢迎基于它继续扩展并提交改进建议。
 
 ---
 
