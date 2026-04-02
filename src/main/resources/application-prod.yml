@@ -1,0 +1,13 @@
+app:
+  security:
+    enabled: true
+  ingestion:
+    worker-enabled: true
+    queue-backend: redis_stream
+  vector-store:
+    backend: pgvector
+    require-pgvector: true
+
+logging:
+  level:
+    com.demo.ai: INFO

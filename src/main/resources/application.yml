@@ -1,19 +1,21 @@
 spring:
   application:
     name: ai-demo
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   ai:
     ollama:
-      base-url: http://localhost:11434 # ollama服务地址， 这就是默认值
+      base-url: http://localhost:11434
       chat:
-        model: qwen3:1.7b # 模型名称
+        model: qwen3:1.7b
         options:
-          temperature: 0.8 # 模型温度，影响模型生成结果的随机性，越小越稳定
-    openai: #openai配置
-      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode} #api地址
+          temperature: 0.8
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
       api-key: ${OPENAI_API_KEY:}
       chat:
         options:
-          model: qwen-plus  #模型名称
+          model: qwen-plus
       embedding:
         options:
           model: text-embedding-v4
@@ -21,13 +23,104 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL:jdbc:mysql://localhost:3306/ai-demo?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
-    password: ${DB_PASSWORD:}
     username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
   servlet:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration,classpath:db/migration/{vendor}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+management:
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  security:
+    enabled: ${APP_SECURITY_ENABLED:false}
+    jwt-secret: ${APP_JWT_SECRET:change-me-change-me-change-me-change-me}
+    jwt-expire-minutes: ${APP_JWT_EXPIRE_MINUTES:120}
+    refresh-expire-days: ${APP_JWT_REFRESH_EXPIRE_DAYS:14}
+    api-key-expire-days: ${APP_API_KEY_EXPIRE_DAYS:30}
+  rate-limit:
+    enabled: ${APP_RATE_LIMIT_ENABLED:true}
+    capacity: ${APP_RATE_LIMIT_CAPACITY:60}
+    refill-tokens: ${APP_RATE_LIMIT_REFILL_TOKENS:60}
+    refill-seconds: ${APP_RATE_LIMIT_REFILL_SECONDS:60}
+  ingestion:
+    worker-enabled: ${APP_INGESTION_WORKER_ENABLED:true}
+    queue-backend: ${APP_INGESTION_QUEUE_BACKEND:redis_stream}
+    poll-interval-ms: ${APP_INGESTION_POLL_INTERVAL_MS:2000}
+    max-retries: ${APP_INGESTION_MAX_RETRIES:3}
+    base-delay-seconds: ${APP_INGESTION_BASE_DELAY_SECONDS:10}
+    storage-dir: ${APP_INGESTION_STORAGE_DIR:./data/uploads}
+    worker-count: ${APP_INGESTION_WORKER_COUNT:3}
+    redis:
+      stream-key: ${APP_INGESTION_STREAM_KEY:ingestion:jobs}
+      dlq-stream-key: ${APP_INGESTION_DLQ_STREAM_KEY:ingestion:dlq}
+      consumer-group: ${APP_INGESTION_CONSUMER_GROUP:ingestion_group}
+      consumer-prefix: ${APP_INGESTION_CONSUMER_PREFIX:worker}
+      read-batch-size: ${APP_INGESTION_READ_BATCH_SIZE:10}
+      claim-idle-ms: ${APP_INGESTION_CLAIM_IDLE_MS:30000}
+    rabbit:
+      exchange: ${APP_INGESTION_RABBIT_EXCHANGE:ingestion.exchange}
+      routing-key: ${APP_INGESTION_RABBIT_ROUTING_KEY:ingestion.jobs}
+      queue: ${APP_INGESTION_RABBIT_QUEUE:ingestion.jobs.queue}
+      dlq-exchange: ${APP_INGESTION_RABBIT_DLX:ingestion.dlx}
+      dlq-routing-key: ${APP_INGESTION_RABBIT_DLQ_ROUTING_KEY:ingestion.jobs.dlq}
+      dlq-queue: ${APP_INGESTION_RABBIT_DLQ_QUEUE:ingestion.jobs.dlq.queue}
+  audit:
+    retention-days: ${APP_AUDIT_RETENTION_DAYS:90}
+  vector-store:
+    backend: ${APP_VECTOR_STORE_BACKEND:pgvector}
+    require-pgvector: ${APP_REQUIRE_PGVECTOR:true}
+    simple-store-path: ${APP_SIMPLE_VECTOR_STORE_PATH:./data/vector-store/chat-pdf.json}
+    pgvector:
+      url: ${APP_PGVECTOR_URL:}
+      username: ${APP_PGVECTOR_USERNAME:}
+      password: ${APP_PGVECTOR_PASSWORD:}
+      schema: ${APP_PGVECTOR_SCHEMA:public}
+      dimensions: ${APP_PGVECTOR_DIMENSIONS:1024}
+      table: ${APP_PGVECTOR_TABLE:ai_knowledge_chunks}
+
+rag:
+  retrieve-top-k: ${RAG_RETRIEVE_TOP_K:12}
+  rerank-top-k: ${RAG_RERANK_TOP_K:6}
+  similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.45}
+  split:
+    chunk-size: ${RAG_CHUNK_SIZE:800}
+    min-chunk-size: ${RAG_MIN_CHUNK_SIZE:120}
+    max-num-chunks: ${RAG_MAX_NUM_CHUNKS:100}
+
 logging:
   level:
-    org.springframework.ai: debug # AI对话的日志级别
-    com.demo.ai: debug # 本项目的日志级别
+    org.springframework.ai: INFO
+    com.demo.ai: INFO
+  pattern:
+    console: '{"timestamp":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","thread":"%t","logger":"%c{1}","message":"%m","request_id":"%X{request_id:-}","trace_id":"%X{trace_id:-}","chat_id":"%X{chat_id:-}"}%n'

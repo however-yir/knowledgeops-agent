@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <property name="LOG_FILE_PATH" value="${LOG_FILE_PATH:-logs/ai-demo.log}"/>
+    <property name="JSON_PATTERN"
+              value="{&quot;timestamp&quot;:&quot;%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}&quot;,&quot;level&quot;:&quot;%p&quot;,&quot;thread&quot;:&quot;%t&quot;,&quot;logger&quot;:&quot;%c{1}&quot;,&quot;message&quot;:&quot;%replace(%msg){'&quot;','\\&quot;'}&quot;,&quot;request_id&quot;:&quot;%X{request_id:-}&quot;,&quot;trace_id&quot;:&quot;%X{trace_id:-}&quot;,&quot;chat_id&quot;:&quot;%X{chat_id:-}&quot;}%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${JSON_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE_PATH}</file>
+        <encoder>
+            <pattern>${JSON_PATTERN}</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/ai-demo.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="com.demo.ai" level="INFO"/>
+    <logger name="org.springframework.ai" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

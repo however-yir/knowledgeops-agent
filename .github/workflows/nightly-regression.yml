@@ -1,0 +1,28 @@
+name: Nightly Regression
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate large dataset
+        run: python3 scripts/generate_eval_dataset.py
+
+      - name: Generate baseline predictions
+        run: python3 scripts/generate_eval_predictions.py --dataset evaluation/dataset.large.json --output evaluation/predictions.generated.json
+
+      - name: Run regression gate
+        run: python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75

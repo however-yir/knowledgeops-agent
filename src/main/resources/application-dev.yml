@@ -1,0 +1,13 @@
+app:
+  security:
+    enabled: false
+  ingestion:
+    worker-enabled: false
+    queue-backend: db_polling
+  vector-store:
+    backend: simple
+    require-pgvector: false
+
+logging:
+  level:
+    com.demo.ai: DEBUG

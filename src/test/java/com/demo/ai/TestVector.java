@@ -2,6 +2,7 @@ package com.demo.ai;
 
 import com.demo.ai.utils.VectorDistanceUtils;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.reader.ExtractedTextFormatter;
@@ -17,6 +18,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @SpringBootTest
+@Disabled("Requires external model and local PDF; run manually for exploratory checks.")
 public class TestVector {
     @Autowired
     private OpenAiEmbeddingModel embeddingModel;

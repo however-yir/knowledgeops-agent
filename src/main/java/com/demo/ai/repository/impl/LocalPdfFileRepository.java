@@ -1,6 +1,7 @@
 package com.demo.ai.repository.impl;
 
 
+import com.demo.ai.config.properties.VectorStoreProperties;
 import com.demo.ai.repository.FileRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -25,6 +26,7 @@ import java.util.Properties;
 public class LocalPdfFileRepository implements FileRepository {
 
     private final VectorStore vectorStore;
+    private final VectorStoreProperties vectorStoreProperties;
 
     // 会话id 与 文件名的对应关系，方便查询会话历史时重新加载文件
     private final Properties chatFiles = new Properties();
@@ -63,9 +65,8 @@ public class LocalPdfFileRepository implements FileRepository {
                 throw new RuntimeException(e);
             }
         }
-        FileSystemResource vectorResource = new FileSystemResource("chat-pdf.json");
-        if (vectorResource.exists()) {
-            SimpleVectorStore simpleVectorStore = (SimpleVectorStore) vectorStore;
+        FileSystemResource vectorResource = new FileSystemResource(vectorStoreProperties.getSimpleStorePath());
+        if (vectorResource.exists() && vectorStore instanceof SimpleVectorStore simpleVectorStore) {
             simpleVectorStore.load(vectorResource);
         }
     }
@@ -74,8 +75,14 @@ public class LocalPdfFileRepository implements FileRepository {
     private void persistent() {
         try {
             chatFiles.store(new FileWriter("chat-pdf.properties"), LocalDateTime.now().toString());
-            SimpleVectorStore simpleVectorStore = (SimpleVectorStore) vectorStore;
-            simpleVectorStore.save(new File("chat-pdf.json"));
+            if (vectorStore instanceof SimpleVectorStore simpleVectorStore) {
+                File target = new File(vectorStoreProperties.getSimpleStorePath());
+                File parent = target.getParentFile();
+                if (parent != null && !parent.exists()) {
+                    parent.mkdirs();
+                }
+                simpleVectorStore.save(target);
+            }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

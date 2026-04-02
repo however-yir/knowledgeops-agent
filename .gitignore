@@ -33,3 +33,10 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Runtime artifacts ###
+data/
+reports/regression/latest.json
+reports/regression/latest.md
+evaluation/predictions.generated.json
+logs/*.log

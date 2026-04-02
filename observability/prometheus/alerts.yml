@@ -1,0 +1,20 @@
+groups:
+  - name: ai-demo-alerts
+    rules:
+      - alert: HighHttpP95Latency
+        expr: histogram_quantile(0.95, sum(rate(http_requests_latency_seconds_bucket[5m])) by (le)) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency"
+          description: "p95 latency is above 1.5s for 5 minutes."
+
+      - alert: IngestionFailureRateHigh
+        expr: rate(ingestion_jobs_finished_total{status="failed"}[5m]) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ingestion failure rate high"
+          description: "Ingestion failed rate exceeded threshold."

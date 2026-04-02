@@ -1,0 +1,3266 @@
+[
+  {
+    "id": "tool_route_001",
+    "category": "tool_routing",
+    "chatId": "eval-tool-001",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_002",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-002",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_003",
+    "category": "cross_kb",
+    "chatId": "eval-cross-003",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_004",
+    "category": "rag_recall",
+    "chatId": "eval-recall-004",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_005",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-005",
+    "question": "请结合文档第6页和第9页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_006",
+    "category": "tool_routing",
+    "chatId": "eval-tool-006",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_007",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-007",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_008",
+    "category": "cross_kb",
+    "chatId": "eval-cross-008",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_009",
+    "category": "rag_recall",
+    "chatId": "eval-recall-009",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_010",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-010",
+    "question": "请结合文档第11页和第2页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_011",
+    "category": "tool_routing",
+    "chatId": "eval-tool-011",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_012",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-012",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_013",
+    "category": "cross_kb",
+    "chatId": "eval-cross-013",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_014",
+    "category": "rag_recall",
+    "chatId": "eval-recall-014",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_015",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-015",
+    "question": "请结合文档第4页和第7页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_016",
+    "category": "tool_routing",
+    "chatId": "eval-tool-016",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_017",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-017",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_018",
+    "category": "cross_kb",
+    "chatId": "eval-cross-018",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_019",
+    "category": "rag_recall",
+    "chatId": "eval-recall-019",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_020",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-020",
+    "question": "请结合文档第9页和第12页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_021",
+    "category": "tool_routing",
+    "chatId": "eval-tool-021",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_022",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-022",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_023",
+    "category": "cross_kb",
+    "chatId": "eval-cross-023",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_024",
+    "category": "rag_recall",
+    "chatId": "eval-recall-024",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_025",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-025",
+    "question": "请结合文档第2页和第5页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_026",
+    "category": "tool_routing",
+    "chatId": "eval-tool-026",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_027",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-027",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_028",
+    "category": "cross_kb",
+    "chatId": "eval-cross-028",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_029",
+    "category": "rag_recall",
+    "chatId": "eval-recall-029",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_030",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-030",
+    "question": "请结合文档第7页和第10页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_031",
+    "category": "tool_routing",
+    "chatId": "eval-tool-031",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_032",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-032",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_033",
+    "category": "cross_kb",
+    "chatId": "eval-cross-033",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_034",
+    "category": "rag_recall",
+    "chatId": "eval-recall-034",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_035",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-035",
+    "question": "请结合文档第12页和第3页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_036",
+    "category": "tool_routing",
+    "chatId": "eval-tool-036",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_037",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-037",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_038",
+    "category": "cross_kb",
+    "chatId": "eval-cross-038",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_039",
+    "category": "rag_recall",
+    "chatId": "eval-recall-039",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_040",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-040",
+    "question": "请结合文档第5页和第8页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_041",
+    "category": "tool_routing",
+    "chatId": "eval-tool-041",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_042",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-042",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_043",
+    "category": "cross_kb",
+    "chatId": "eval-cross-043",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_044",
+    "category": "rag_recall",
+    "chatId": "eval-recall-044",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_045",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-045",
+    "question": "请结合文档第10页和第1页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_046",
+    "category": "tool_routing",
+    "chatId": "eval-tool-046",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_047",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-047",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_048",
+    "category": "cross_kb",
+    "chatId": "eval-cross-048",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_049",
+    "category": "rag_recall",
+    "chatId": "eval-recall-049",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_050",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-050",
+    "question": "请结合文档第3页和第6页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_051",
+    "category": "tool_routing",
+    "chatId": "eval-tool-051",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_052",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-052",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_053",
+    "category": "cross_kb",
+    "chatId": "eval-cross-053",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_054",
+    "category": "rag_recall",
+    "chatId": "eval-recall-054",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_055",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-055",
+    "question": "请结合文档第8页和第11页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_056",
+    "category": "tool_routing",
+    "chatId": "eval-tool-056",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_057",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-057",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_058",
+    "category": "cross_kb",
+    "chatId": "eval-cross-058",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_059",
+    "category": "rag_recall",
+    "chatId": "eval-recall-059",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_060",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-060",
+    "question": "请结合文档第1页和第4页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_061",
+    "category": "tool_routing",
+    "chatId": "eval-tool-061",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_062",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-062",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_063",
+    "category": "cross_kb",
+    "chatId": "eval-cross-063",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_064",
+    "category": "rag_recall",
+    "chatId": "eval-recall-064",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_065",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-065",
+    "question": "请结合文档第6页和第9页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_066",
+    "category": "tool_routing",
+    "chatId": "eval-tool-066",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_067",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-067",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_068",
+    "category": "cross_kb",
+    "chatId": "eval-cross-068",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_069",
+    "category": "rag_recall",
+    "chatId": "eval-recall-069",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_070",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-070",
+    "question": "请结合文档第11页和第2页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_071",
+    "category": "tool_routing",
+    "chatId": "eval-tool-071",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_072",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-072",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_073",
+    "category": "cross_kb",
+    "chatId": "eval-cross-073",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_074",
+    "category": "rag_recall",
+    "chatId": "eval-recall-074",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_075",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-075",
+    "question": "请结合文档第4页和第7页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_076",
+    "category": "tool_routing",
+    "chatId": "eval-tool-076",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_077",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-077",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_078",
+    "category": "cross_kb",
+    "chatId": "eval-cross-078",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_079",
+    "category": "rag_recall",
+    "chatId": "eval-recall-079",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_080",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-080",
+    "question": "请结合文档第9页和第12页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_081",
+    "category": "tool_routing",
+    "chatId": "eval-tool-081",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_082",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-082",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_083",
+    "category": "cross_kb",
+    "chatId": "eval-cross-083",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_084",
+    "category": "rag_recall",
+    "chatId": "eval-recall-084",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_085",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-085",
+    "question": "请结合文档第2页和第5页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_086",
+    "category": "tool_routing",
+    "chatId": "eval-tool-086",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_087",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-087",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_088",
+    "category": "cross_kb",
+    "chatId": "eval-cross-088",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_089",
+    "category": "rag_recall",
+    "chatId": "eval-recall-089",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_090",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-090",
+    "question": "请结合文档第7页和第10页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_091",
+    "category": "tool_routing",
+    "chatId": "eval-tool-091",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_092",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-092",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_093",
+    "category": "cross_kb",
+    "chatId": "eval-cross-093",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_094",
+    "category": "rag_recall",
+    "chatId": "eval-recall-094",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_095",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-095",
+    "question": "请结合文档第12页和第3页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_096",
+    "category": "tool_routing",
+    "chatId": "eval-tool-096",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_097",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-097",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_098",
+    "category": "cross_kb",
+    "chatId": "eval-cross-098",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_099",
+    "category": "rag_recall",
+    "chatId": "eval-recall-099",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_100",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-100",
+    "question": "请结合文档第5页和第8页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_101",
+    "category": "tool_routing",
+    "chatId": "eval-tool-101",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_102",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-102",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_103",
+    "category": "cross_kb",
+    "chatId": "eval-cross-103",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_104",
+    "category": "rag_recall",
+    "chatId": "eval-recall-104",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_105",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-105",
+    "question": "请结合文档第10页和第1页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_106",
+    "category": "tool_routing",
+    "chatId": "eval-tool-106",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_107",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-107",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_108",
+    "category": "cross_kb",
+    "chatId": "eval-cross-108",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_109",
+    "category": "rag_recall",
+    "chatId": "eval-recall-109",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_110",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-110",
+    "question": "请结合文档第3页和第6页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_111",
+    "category": "tool_routing",
+    "chatId": "eval-tool-111",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_112",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-112",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_113",
+    "category": "cross_kb",
+    "chatId": "eval-cross-113",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_114",
+    "category": "rag_recall",
+    "chatId": "eval-recall-114",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_115",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-115",
+    "question": "请结合文档第8页和第11页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_116",
+    "category": "tool_routing",
+    "chatId": "eval-tool-116",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_117",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-117",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_118",
+    "category": "cross_kb",
+    "chatId": "eval-cross-118",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_119",
+    "category": "rag_recall",
+    "chatId": "eval-recall-119",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_120",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-120",
+    "question": "请结合文档第1页和第4页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_121",
+    "category": "tool_routing",
+    "chatId": "eval-tool-121",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_122",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-122",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_123",
+    "category": "cross_kb",
+    "chatId": "eval-cross-123",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_124",
+    "category": "rag_recall",
+    "chatId": "eval-recall-124",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_125",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-125",
+    "question": "请结合文档第6页和第9页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_126",
+    "category": "tool_routing",
+    "chatId": "eval-tool-126",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_127",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-127",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_128",
+    "category": "cross_kb",
+    "chatId": "eval-cross-128",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_129",
+    "category": "rag_recall",
+    "chatId": "eval-recall-129",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_130",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-130",
+    "question": "请结合文档第11页和第2页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_131",
+    "category": "tool_routing",
+    "chatId": "eval-tool-131",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_132",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-132",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_133",
+    "category": "cross_kb",
+    "chatId": "eval-cross-133",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_134",
+    "category": "rag_recall",
+    "chatId": "eval-recall-134",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_135",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-135",
+    "question": "请结合文档第4页和第7页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_136",
+    "category": "tool_routing",
+    "chatId": "eval-tool-136",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_137",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-137",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_138",
+    "category": "cross_kb",
+    "chatId": "eval-cross-138",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_139",
+    "category": "rag_recall",
+    "chatId": "eval-recall-139",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_140",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-140",
+    "question": "请结合文档第9页和第12页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_141",
+    "category": "tool_routing",
+    "chatId": "eval-tool-141",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_142",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-142",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_143",
+    "category": "cross_kb",
+    "chatId": "eval-cross-143",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_144",
+    "category": "rag_recall",
+    "chatId": "eval-recall-144",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_145",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-145",
+    "question": "请结合文档第2页和第5页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_146",
+    "category": "tool_routing",
+    "chatId": "eval-tool-146",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_147",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-147",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_148",
+    "category": "cross_kb",
+    "chatId": "eval-cross-148",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_149",
+    "category": "rag_recall",
+    "chatId": "eval-recall-149",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_150",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-150",
+    "question": "请结合文档第7页和第10页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_151",
+    "category": "tool_routing",
+    "chatId": "eval-tool-151",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_152",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-152",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_153",
+    "category": "cross_kb",
+    "chatId": "eval-cross-153",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_154",
+    "category": "rag_recall",
+    "chatId": "eval-recall-154",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_155",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-155",
+    "question": "请结合文档第12页和第3页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_156",
+    "category": "tool_routing",
+    "chatId": "eval-tool-156",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_157",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-157",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_158",
+    "category": "cross_kb",
+    "chatId": "eval-cross-158",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_159",
+    "category": "rag_recall",
+    "chatId": "eval-recall-159",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_160",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-160",
+    "question": "请结合文档第5页和第8页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_161",
+    "category": "tool_routing",
+    "chatId": "eval-tool-161",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_162",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-162",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_163",
+    "category": "cross_kb",
+    "chatId": "eval-cross-163",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_164",
+    "category": "rag_recall",
+    "chatId": "eval-recall-164",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_165",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-165",
+    "question": "请结合文档第10页和第1页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_166",
+    "category": "tool_routing",
+    "chatId": "eval-tool-166",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_167",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-167",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_168",
+    "category": "cross_kb",
+    "chatId": "eval-cross-168",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_169",
+    "category": "rag_recall",
+    "chatId": "eval-recall-169",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_170",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-170",
+    "question": "请结合文档第3页和第6页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_171",
+    "category": "tool_routing",
+    "chatId": "eval-tool-171",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_172",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-172",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_173",
+    "category": "cross_kb",
+    "chatId": "eval-cross-173",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_174",
+    "category": "rag_recall",
+    "chatId": "eval-recall-174",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_175",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-175",
+    "question": "请结合文档第8页和第11页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_176",
+    "category": "tool_routing",
+    "chatId": "eval-tool-176",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_177",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-177",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_178",
+    "category": "cross_kb",
+    "chatId": "eval-cross-178",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_179",
+    "category": "rag_recall",
+    "chatId": "eval-recall-179",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_180",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-180",
+    "question": "请结合文档第1页和第4页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_181",
+    "category": "tool_routing",
+    "chatId": "eval-tool-181",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_182",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-182",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_183",
+    "category": "cross_kb",
+    "chatId": "eval-cross-183",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_184",
+    "category": "rag_recall",
+    "chatId": "eval-recall-184",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_185",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-185",
+    "question": "请结合文档第6页和第9页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_186",
+    "category": "tool_routing",
+    "chatId": "eval-tool-186",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_187",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-187",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_188",
+    "category": "cross_kb",
+    "chatId": "eval-cross-188",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_189",
+    "category": "rag_recall",
+    "chatId": "eval-recall-189",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_190",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-190",
+    "question": "请结合文档第11页和第2页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_191",
+    "category": "tool_routing",
+    "chatId": "eval-tool-191",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_192",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-192",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_193",
+    "category": "cross_kb",
+    "chatId": "eval-cross-193",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_194",
+    "category": "rag_recall",
+    "chatId": "eval-recall-194",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_195",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-195",
+    "question": "请结合文档第4页和第7页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_196",
+    "category": "tool_routing",
+    "chatId": "eval-tool-196",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_197",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-197",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_198",
+    "category": "cross_kb",
+    "chatId": "eval-cross-198",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_199",
+    "category": "rag_recall",
+    "chatId": "eval-recall-199",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_200",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-200",
+    "question": "请结合文档第9页和第12页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_201",
+    "category": "tool_routing",
+    "chatId": "eval-tool-201",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_202",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-202",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_203",
+    "category": "cross_kb",
+    "chatId": "eval-cross-203",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_204",
+    "category": "rag_recall",
+    "chatId": "eval-recall-204",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_205",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-205",
+    "question": "请结合文档第2页和第5页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_206",
+    "category": "tool_routing",
+    "chatId": "eval-tool-206",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_207",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-207",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_208",
+    "category": "cross_kb",
+    "chatId": "eval-cross-208",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_209",
+    "category": "rag_recall",
+    "chatId": "eval-recall-209",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_210",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-210",
+    "question": "请结合文档第7页和第10页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_211",
+    "category": "tool_routing",
+    "chatId": "eval-tool-211",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_212",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-212",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_213",
+    "category": "cross_kb",
+    "chatId": "eval-cross-213",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_214",
+    "category": "rag_recall",
+    "chatId": "eval-recall-214",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_215",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-215",
+    "question": "请结合文档第12页和第3页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_216",
+    "category": "tool_routing",
+    "chatId": "eval-tool-216",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_217",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-217",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_218",
+    "category": "cross_kb",
+    "chatId": "eval-cross-218",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_219",
+    "category": "rag_recall",
+    "chatId": "eval-recall-219",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_220",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-220",
+    "question": "请结合文档第5页和第8页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_221",
+    "category": "tool_routing",
+    "chatId": "eval-tool-221",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_222",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-222",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_223",
+    "category": "cross_kb",
+    "chatId": "eval-cross-223",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_224",
+    "category": "rag_recall",
+    "chatId": "eval-recall-224",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_225",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-225",
+    "question": "请结合文档第10页和第1页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_226",
+    "category": "tool_routing",
+    "chatId": "eval-tool-226",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_227",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-227",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_228",
+    "category": "cross_kb",
+    "chatId": "eval-cross-228",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_229",
+    "category": "rag_recall",
+    "chatId": "eval-recall-229",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_230",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-230",
+    "question": "请结合文档第3页和第6页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_231",
+    "category": "tool_routing",
+    "chatId": "eval-tool-231",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_232",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-232",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_233",
+    "category": "cross_kb",
+    "chatId": "eval-cross-233",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_234",
+    "category": "rag_recall",
+    "chatId": "eval-recall-234",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_235",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-235",
+    "question": "请结合文档第8页和第11页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  },
+  {
+    "id": "tool_route_236",
+    "category": "tool_routing",
+    "chatId": "eval-tool-236",
+    "question": "请查询校区并返回结果。",
+    "expected_keywords": [
+      "校区"
+    ],
+    "forbidden_keywords": [
+      "无法调用工具"
+    ]
+  },
+  {
+    "id": "hallucination_237",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-237",
+    "question": "如果知识库中没有答案应该如何回应？",
+    "expected_keywords": [
+      "没有匹配",
+      "上下文"
+    ],
+    "forbidden_keywords": [
+      "肯定有",
+      "随便编"
+    ]
+  },
+  {
+    "id": "cross_kb_238",
+    "category": "cross_kb",
+    "chatId": "eval-cross-238",
+    "question": "请指出该答案来自哪个文件并给出引用。",
+    "expected_keywords": [
+      "source",
+      "引用"
+    ],
+    "forbidden_keywords": [
+      "不提供来源"
+    ]
+  },
+  {
+    "id": "rag_recall_239",
+    "category": "rag_recall",
+    "chatId": "eval-recall-239",
+    "question": "根据知识库说明课程预约流程。",
+    "expected_keywords": [
+      "课程",
+      "预约",
+      "联系方式"
+    ],
+    "forbidden_keywords": [
+      "不知道"
+    ]
+  },
+  {
+    "id": "rag_multi_hop_240",
+    "category": "rag_multi_hop",
+    "chatId": "eval-rag-240",
+    "question": "请结合文档第1页和第4页，总结关键结论。",
+    "expected_keywords": [
+      "总结",
+      "结论",
+      "文档"
+    ],
+    "forbidden_keywords": [
+      "我猜测",
+      "编造"
+    ]
+  }
+]

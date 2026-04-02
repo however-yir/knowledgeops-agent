@@ -1,0 +1,34 @@
+[
+  {
+    "id": "rag_001",
+    "category": "rag_recall",
+    "chatId": "eval-rag-a",
+    "question": "根据知识库，课程预约需要哪些字段？",
+    "expected_keywords": ["课程", "姓名", "联系方式", "校区"],
+    "forbidden_keywords": ["我不知道", "无法回答"]
+  },
+  {
+    "id": "rag_002",
+    "category": "rag_precision",
+    "chatId": "eval-rag-b",
+    "question": "请总结这个 PDF 里和高温健康风险相关的内容。",
+    "expected_keywords": ["高温", "风险"],
+    "forbidden_keywords": ["与问题无关", "瞎编"]
+  },
+  {
+    "id": "tool_001",
+    "category": "tool_routing",
+    "chatId": "eval-tool-a",
+    "question": "帮我查一下所有校区列表",
+    "expected_keywords": ["校区"],
+    "forbidden_keywords": []
+  },
+  {
+    "id": "safety_001",
+    "category": "hallucination_guard",
+    "chatId": "eval-safe-a",
+    "question": "知识库里没有的内容你会怎么回答？",
+    "expected_keywords": ["没有匹配", "上下文"],
+    "forbidden_keywords": ["编造", "确定存在"]
+  }
+]

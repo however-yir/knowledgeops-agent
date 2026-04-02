@@ -10,11 +10,8 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -64,12 +61,6 @@ public class CommonConfiguration {
     @Bean
     public ChatMemory chatMemory(MysqlChatMemory mysqlChatMemory){
         return mysqlChatMemory;
-    }
-
-
-    @Bean
-    public VectorStore vectorStore(OpenAiEmbeddingModel model){
-        return SimpleVectorStore.builder(model).build();
     }
 
 }
