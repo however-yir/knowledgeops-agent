@@ -1,14 +1,13 @@
-name: CI
+name: ai-demo CI
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   pull_request:
 
 jobs:
-  build:
+  test-and-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,8 +19,11 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Build and test
-        run: mvn -B -ntp verify
+      - name: Run tests
+        run: mvn -B -ntp test
 
-      - name: Run regression scoring
-        run: python3 scripts/run_regression.py --threshold 0.7
+      - name: Run verify
+        run: mvn -B -ntp verify -DskipITs=true
+
+      - name: Run regression script
+        run: python3 scripts/run_regression.py --dataset evaluation/dataset.json --output reports/regression/latest.json

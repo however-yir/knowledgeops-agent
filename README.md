@@ -493,3 +493,13 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 本项目以开源方式提供，欢迎学习、Fork 和二次开发。
 建议在企业或生产场景落地前，补齐鉴权、审计、监控与安全合规能力。
 如需用于团队协作，可在此基础上补充 `LICENSE`、`CONTRIBUTING` 和 `SECURITY` 文档。
+
+## Resume Upgrade Checklist
+
+- Tracking file: [docs/resume-upgrade-checklist.md](/Users/liuzhuoran/Documents/Playground/ai-demo/docs/resume-upgrade-checklist.md)
+- Distributed drill runbook: [docs/drills/distributed-and-observability-drill.md](/Users/liuzhuoran/Documents/Playground/ai-demo/docs/drills/distributed-and-observability-drill.md)
+- Drill script: [scripts/drills/run_distributed_drill.sh](/Users/liuzhuoran/Documents/Playground/ai-demo/scripts/drills/run_distributed_drill.sh)
+- k6 scenario: [performance/k6/distributed_chat_ingestion.js](/Users/liuzhuoran/Documents/Playground/ai-demo/performance/k6/distributed_chat_ingestion.js)
+- CI workflow: [.github/workflows/ci.yml](/Users/liuzhuoran/Documents/Playground/ai-demo/.github/workflows/ci.yml)
+
+This round added a reproducible distributed drill baseline for load + observability closure.
