@@ -31,6 +31,8 @@
 - API Key for machine access bootstrap
 - JWT for request-level authn/authz
 - Refresh token rotation
+- Tenant-scoped API key lifecycle (`X-Tenant-Id`)
+- Tenant + principal composite rate limiting
 - RBAC + route-level permission checks
 - Audit log retention scheduler
 
@@ -39,6 +41,7 @@
 - Stateless API instances can be horizontally scaled
 - Async ingestion decouples upload and vectorization cost
 - Vector backend can switch from local/simple to pgvector
+- Model router supports profile-based cost/quality routing
 - Observability stack enables saturation and error trend diagnosis
 
 ## 6. Operational Recommendations

@@ -9,8 +9,8 @@
 
 ## 项目主周期（Main Timeline）
 
-- `main 日期`：`2025.12 - 2026.01`
-- `推进次数`：约 `14` 次（十几次迭代）
+- `main 日期`：`2025.11 - 2026.04`
+- `推进次数`：约 `10` 次（按里程碑拆分提交）
 
 ---
 
@@ -63,7 +63,7 @@
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏 |
 | 数据持久化 | MySQL 会话与业务数据、pgvector 向量检索（可切 simple） |
 | 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail |
-| 工程质量 | Flyway 迁移、CI、单测/集成测试、回归评测脚本、压测脚本 |
+| 工程质量 | Flyway 迁移、CI、单测/集成测试、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
 
 ---
 
@@ -127,6 +127,7 @@ flowchart TD
 ### 2) 智能体与检索层
 
 - 多 ChatClient 分场景配置（通用、客服、知识问答）
+- 模型路由（按 `modelProfile` 与端点策略动态选型）
 - `QuestionAnswerAdvisor` + 向量检索增强
 - 会话隔离策略：`type::chatId` 组合 conversationId，避免串会话
 
@@ -243,18 +244,19 @@ docker compose -f docker-compose.observability.yml up -d
 ### 会话问答
 
 - `GET/POST /ai/chat`
-  - 参数：`prompt`, `chatId`, `files(可选)`
+  - 参数：`prompt`, `chatId`, `files(可选)`, `modelProfile(可选)`
 
 ### 客服流程问答
 
 - `GET /ai/service`
-  - 参数：`prompt`, `chatId`
+  - 参数：`prompt`, `chatId`, `modelProfile(可选)`
 
 ### 知识入库与检索
 
 - `POST /ai/pdf/upload/{chatId}`
 - `GET /ai/pdf/file/{chatId}`
 - `GET /ai/pdf/chat`
+  - 参数：`prompt`, `chatId`, `modelProfile(可选)`
 - `POST /ingestion/upload/{chatId}`
 - `GET /ingestion/jobs/{jobId}`
 - `GET /ingestion/jobs?chatId=...`
@@ -268,11 +270,11 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 鉴权与密钥生命周期
 
-- `POST /auth/token`（Header: `X-API-Key`）
+- `POST /auth/token`（Header: `X-API-Key`，可选 `X-Tenant-Id`）
 - `POST /auth/refresh`（Header: `X-Refresh-Token`）
-- `POST /auth/api-keys`
-- `POST /auth/api-keys/rotate`
-- `POST /auth/api-keys/revoke`
+- `POST /auth/api-keys`（支持 `tenantId` 参数）
+- `POST /auth/api-keys/rotate`（支持 `tenantId` 参数）
+- `POST /auth/api-keys/revoke`（支持 `tenantId` 参数）
 
 ### API 文档
 
@@ -287,8 +289,9 @@ docker compose -f docker-compose.observability.yml up -d
 
 - API Key 与 JWT 双鉴权
 - Refresh Token 生命周期管理
+- 租户隔离（`X-Tenant-Id`，tenant 级 API Key 与审计）
 - RBAC + 权限矩阵
-- 限流（Bucket4j）
+- 限流（Bucket4j，tenant + principal 复合维度）
 - 审计日志与保留策略
 - 上传文件类型/大小安全检查
 
@@ -344,7 +347,12 @@ python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --pred
 
 ### CI
 
-GitHub Actions 工作流：`intelligent-qa-platform CI`
+GitHub Actions 工作流：`Intelligent QA Platform CI`
+
+- Maven compile / test / verify（含 integration profile）
+- JaCoCo 报告生成 + Codecov 上传
+- Regression 评测脚本自动执行
+- Docker Buildx + GHCR 推送
 
 ---
 
@@ -361,7 +369,14 @@ GitHub Actions 工作流：`intelligent-qa-platform CI`
 
 - `performance/k6/chat_ingestion_load.js`
 - `performance/k6/distributed_chat_ingestion.js`
+- `performance/k6/generate_report.py`
 - `scripts/drills/run_distributed_drill.sh`
+
+生成报告示例：
+
+```bash
+python3 performance/k6/generate_report.py --summary reports/performance/distributed-k6-summary.json
+```
 
 ---
 
@@ -371,17 +386,18 @@ GitHub Actions 工作流：`intelligent-qa-platform CI`
 - 企业部署指南：[docs/deployment-enterprise.md](docs/deployment-enterprise.md)
 - 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 - 分布式演练：[docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
+- 演练模板：[docs/drills/runbook_template.md](docs/drills/runbook_template.md)
 - 简历升级清单：[docs/resume-upgrade-checklist.md](docs/resume-upgrade-checklist.md)
 
 ---
 
 ## 路线图
 
-- [ ] 增加多租户隔离能力（租户级密钥、限流与审计）
-- [ ] 增加检索重排策略可插拔实现
-- [ ] 增加模型路由与成本控制策略
-- [ ] 增加告警自动化处置脚本
-- [ ] 增加企业 SSO（OIDC/SAML）接入
+- [x] 多租户隔离（租户级密钥、限流与审计）
+- [x] 模型路由与成本控制策略（economy/balanced/quality）
+- [ ] 检索重排策略可插拔实现
+- [ ] 告警自动化处置脚本
+- [ ] 企业 SSO（OIDC/SAML）接入
 
 ---
 

@@ -20,5 +20,12 @@ k6 run performance/k6/distributed_chat_ingestion.js \
   -e BEARER_TOKEN="${BEARER_TOKEN}" \
   --summary-export "${OUT_DIR}/distributed-k6-summary.json"
 
-echo "[3/3] Drill finished"
+echo "[3/3] Generate benchmark report"
+python3 performance/k6/generate_report.py \
+  --summary "${OUT_DIR}/distributed-k6-summary.json" \
+  --output-json "${OUT_DIR}/k6-report.json" \
+  --output-md "${OUT_DIR}/k6-report.md"
+
+echo "[4/4] Drill finished"
 echo "summary: ${OUT_DIR}/distributed-k6-summary.json"
+echo "report: ${OUT_DIR}/k6-report.md"

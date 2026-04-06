@@ -10,4 +10,5 @@
 
 ```bash
 k6 run performance/k6/chat_ingestion_load.js -e BASE_URL=http://localhost:8080
+python3 performance/k6/generate_report.py --summary reports/performance/distributed-k6-summary.json
 ```

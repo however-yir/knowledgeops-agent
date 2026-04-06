@@ -25,6 +25,9 @@ Validate two production-critical links:
 3. Run distributed load:
 `k6 run performance/k6/distributed_chat_ingestion.js -e BASE_URL=http://localhost:8080 -e BEARER_TOKEN=xxx`
 
+3.1 Generate report:
+`python3 performance/k6/generate_report.py --summary reports/performance/distributed-k6-summary.json`
+
 4. Inject failure drill (optional):
 - stop one app instance
 - stop queue consumer process once
@@ -47,6 +50,7 @@ Validate two production-critical links:
 ## Deliverables
 
 - `reports/performance/distributed-k6-summary.json`
+- `reports/performance/k6-report.md`
 - screenshot of Grafana dashboards
 - screenshot of firing + resolved alerts
 - one-page postmortem note
