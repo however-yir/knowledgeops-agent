@@ -496,10 +496,10 @@ curl -N "http://localhost:8080/ai/pdf/chat?prompt=这份文档的核心观点是
 
 ## Resume Upgrade Checklist
 
-- Tracking file: [docs/resume-upgrade-checklist.md](/Users/liuzhuoran/Documents/Playground/ai-demo/docs/resume-upgrade-checklist.md)
-- Distributed drill runbook: [docs/drills/distributed-and-observability-drill.md](/Users/liuzhuoran/Documents/Playground/ai-demo/docs/drills/distributed-and-observability-drill.md)
-- Drill script: [scripts/drills/run_distributed_drill.sh](/Users/liuzhuoran/Documents/Playground/ai-demo/scripts/drills/run_distributed_drill.sh)
-- k6 scenario: [performance/k6/distributed_chat_ingestion.js](/Users/liuzhuoran/Documents/Playground/ai-demo/performance/k6/distributed_chat_ingestion.js)
-- CI workflow: [.github/workflows/ci.yml](/Users/liuzhuoran/Documents/Playground/ai-demo/.github/workflows/ci.yml)
+- Tracking file: [docs/resume-upgrade-checklist.md](docs/resume-upgrade-checklist.md)
+- Distributed drill runbook: [docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
+- Drill script: [scripts/drills/run_distributed_drill.sh](scripts/drills/run_distributed_drill.sh)
+- k6 scenario: [performance/k6/distributed_chat_ingestion.js](performance/k6/distributed_chat_ingestion.js)
+- CI workflow: [.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 This round added a reproducible distributed drill baseline for load + observability closure.
