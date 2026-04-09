@@ -1,4 +1,4 @@
-# ai-demo
+# ai-demo - Spring AI 功能演示后端 | Spring AI Demo Backend
 
 🔥 A Spring AI backend project based on Spring Boot, Java, and PDF RAG workflows.
 🚀 Built for chat, tool calling, multimodal input, vector retrieval, and conversation history management.
