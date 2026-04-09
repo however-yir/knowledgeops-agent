@@ -64,7 +64,7 @@ management:
 app:
   security:
     enabled: ${APP_SECURITY_ENABLED:false}
-    jwt-secret: ${APP_JWT_SECRET:change-me-change-me-change-me-change-me}
+    jwt-secret: ${APP_JWT_SECRET:}
     jwt-expire-minutes: ${APP_JWT_EXPIRE_MINUTES:120}
     refresh-expire-days: ${APP_JWT_REFRESH_EXPIRE_DAYS:14}
     api-key-expire-days: ${APP_API_KEY_EXPIRE_DAYS:30}

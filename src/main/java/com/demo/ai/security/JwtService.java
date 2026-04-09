@@ -66,16 +66,12 @@ public class JwtService {
 
     private SecretKey secretKey() {
         String secret = securityProperties.getJwtSecret();
-        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length == 0) {
-            bytes = "fallback-secret-fallback-secret-0001".getBytes(StandardCharsets.UTF_8);
+        if (!StringUtils.hasText(secret)) {
+            throw new IllegalStateException("APP_JWT_SECRET (app.security.jwt-secret) is required");
         }
+        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
         if (bytes.length < 32) {
-            byte[] expanded = new byte[32];
-            for (int i = 0; i < expanded.length; i++) {
-                expanded[i] = bytes[i % bytes.length];
-            }
-            return Keys.hmacShaKeyFor(expanded);
+            throw new IllegalStateException("APP_JWT_SECRET must be at least 32 bytes");
         }
         return Keys.hmacShaKeyFor(bytes);
     }
