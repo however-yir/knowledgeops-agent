@@ -40,3 +40,11 @@ reports/regression/latest.json
 reports/regression/latest.md
 evaluation/predictions.generated.json
 logs/*.log
+
+# --- Baseline Ignore Rules ---
+__pycache__/
+*.py[cod]
+.env
+.env.*
+node_modules/
+dist/
