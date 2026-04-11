@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   app:
     build: .
@@ -15,6 +13,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
       APP_SECURITY_ENABLED: "true"
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-jwt-secret-change-this-in-prod-123456}
       APP_VECTOR_STORE_BACKEND: pgvector
       APP_REQUIRE_PGVECTOR: "false"
       APP_INGESTION_QUEUE_BACKEND: redis_stream
@@ -83,3 +82,20 @@ services:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
     ports:
       - "4318:4318"
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: iqk-platform-web:latest
+    container_name: iqk-platform-web
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5

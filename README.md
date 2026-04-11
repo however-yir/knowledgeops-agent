@@ -1,10 +1,10 @@
 # Intelligent Q&A and Knowledge Retrieval Platform | 智能问答与知识检索平台
 
-🔥 Enterprise-ready Spring AI backend for intelligent Q&A, retrieval augmentation, and controlled tool execution.  
+🔥 Enterprise-ready Spring AI platform for intelligent Q&A, retrieval augmentation, controlled tool execution, and ReAct visualization.  
 🚀 Built with Spring Boot, Spring AI, MySQL, Redis/RabbitMQ, pgvector, and full observability components.  
 ⭐ Supports secure deployment, asynchronous ingestion, auditability, and production operations.
 
-> 一个面向企业落地的智能问答与知识检索平台后端工程，覆盖“会话问答、知识入库、检索增强、工具调用、安全治理、可观测与运维”全链路。  
+> 一个面向企业落地的智能问答与知识检索平台全栈工程，覆盖“会话问答、知识入库、检索增强、工具调用、安全治理、可观测与运维”全链路。  
 > 本仓库定位为可部署、可运维、可扩展的生产级基线，面向长期业务迭代。
 
 ## 项目主周期（Main Timeline）
@@ -172,6 +172,18 @@ mvn spring-boot:run
 docker compose up --build -d
 ```
 
+启动后访问：
+
+- 前端控制台：`http://localhost`
+- 后端 API：`http://localhost:8080`
+- RabbitMQ 控制台：`http://localhost:15672`
+
+本仓库内置开发演示用管理员 API Key（仅限本地演示，生产必须轮换）：
+
+- `dev-admin-key-2026`
+
+可在前端「鉴权」卡片中直接换取 JWT，或用 `X-API-Key` 直接请求接口。
+
 ---
 
 ## 容器化部署
@@ -183,6 +195,7 @@ docker compose up --build -d
 - `iqk-platform-redis`
 - `iqk-platform-rabbitmq`
 - `iqk-platform-tempo-lite`
+- `iqk-platform-web`（Vue3 + Element Plus + Nginx）
 
 观察栈独立文件：
 
@@ -245,6 +258,11 @@ docker compose -f docker-compose.observability.yml up -d
 
 - `GET/POST /ai/chat`
   - 参数：`prompt`, `chatId`, `files(可选)`, `modelProfile(可选)`
+
+### ReAct 智能体问答
+
+- `POST /ai/react/chat`（JSON 返回 Thought/Action/Observation 轨迹）
+- `POST /ai/react/chat/stream`（SSE 流式返回 `trace/token/done/error`）
 
 ### 客服流程问答
 
