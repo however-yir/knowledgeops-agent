@@ -1,13 +1,13 @@
 services:
   app:
     build: .
-    image: iqk-platform:latest
-    container_name: iqk-platform
+    image: knowledgeops-agent:latest
+    container_name: knowledgeops-agent
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:mysql://mysql:3306/iqk_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
+      DB_URL: jdbc:mysql://mysql:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
       DB_USERNAME: root
       DB_PASSWORD: root
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -38,10 +38,10 @@ services:
 
   mysql:
     image: mysql:8.4
-    container_name: iqk-platform-mysql
+    container_name: knowledgeops-agent-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: iqk_platform
+      MYSQL_DATABASE: knowledgeops_agent
     ports:
       - "3306:3306"
     command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
@@ -53,7 +53,7 @@ services:
 
   redis:
     image: redis:7.4
-    container_name: iqk-platform-redis
+    container_name: knowledgeops-agent-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -64,7 +64,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
-    container_name: iqk-platform-rabbitmq
+    container_name: knowledgeops-agent-rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -76,7 +76,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.6.1
-    container_name: iqk-platform-tempo-lite
+    container_name: knowledgeops-agent-tempo-lite
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
@@ -87,8 +87,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    image: iqk-platform-web:latest
-    container_name: iqk-platform-web
+    image: knowledgeops-agent-web:latest
+    container_name: knowledgeops-agent-web
     depends_on:
       app:
         condition: service_healthy

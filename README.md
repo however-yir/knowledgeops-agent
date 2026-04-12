@@ -1,4 +1,4 @@
-# Intelligent Q&A and Knowledge Retrieval Platform | 智能问答与知识检索平台
+# KnowledgeOps Agent | Intelligent Q&A and Knowledge Retrieval Platform | 智能问答与知识检索平台
 
 🔥 Enterprise-ready Spring AI platform for intelligent Q&A, retrieval augmentation, controlled tool execution, and ReAct visualization.  
 🚀 Built with Spring Boot, Spring AI, MySQL, Redis/RabbitMQ, pgvector, and full observability components.  
@@ -190,12 +190,12 @@ docker compose up --build -d
 
 `docker-compose.yml` 默认包含：
 
-- `iqk-platform`（应用）
-- `iqk-platform-mysql`
-- `iqk-platform-redis`
-- `iqk-platform-rabbitmq`
-- `iqk-platform-tempo-lite`
-- `iqk-platform-web`（Vue3 + Element Plus + Nginx）
+- `knowledgeops-agent`（应用）
+- `knowledgeops-agent-mysql`
+- `knowledgeops-agent-redis`
+- `knowledgeops-agent-rabbitmq`
+- `knowledgeops-agent-tempo-lite`
+- `knowledgeops-agent-web`（Vue3 + Element Plus + Nginx）
 
 观察栈独立文件：
 
@@ -332,7 +332,7 @@ docker compose -f docker-compose.observability.yml up -d
 ### 日志
 
 - JSON 结构化日志（含 `request_id` / `trace_id` / `chat_id`）
-- 默认文件：`logs/iqk-platform.log`
+- 默认文件：`logs/knowledgeops-agent.log`
 
 ### 链路追踪
 

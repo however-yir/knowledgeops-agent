@@ -10,7 +10,7 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.enterprise</groupId>
-    <artifactId>iqk-platform</artifactId>
+    <artifactId>knowledgeops-agent</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>

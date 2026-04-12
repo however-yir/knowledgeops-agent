@@ -5,7 +5,7 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
-    name: iqk-platform
+    name: knowledgeops-agent
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   ai:
@@ -27,7 +27,7 @@ spring:
           dimensions: 1024
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${DB_URL:jdbc:mysql://localhost:3306/iqk_platform?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
     username: ${DB_USERNAME:}
     password: ${DB_PASSWORD:}
   servlet:

@@ -170,7 +170,7 @@ interface ChatMessage {
   content: string;
 }
 
-const STORAGE_KEY = "iqk-react-console";
+const STORAGE_KEY = "knowledgeops-agent-react-console";
 
 marked.setOptions({
   gfm: true,

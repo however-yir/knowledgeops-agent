@@ -9,9 +9,9 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  - job_name: iqk-platform-logs
+  - job_name: knowledgeops-agent-logs
     static_configs:
       - targets: [localhost]
         labels:
-          job: iqk-platform
-          __path__: /var/log/iqk-platform/*.log
+          job: knowledgeops-agent
+          __path__: /var/log/knowledgeops-agent/*.log
