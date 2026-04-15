@@ -8,6 +8,9 @@ spring:
     name: knowledgeops-agent
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration
   ai:
     ollama:
       base-url: http://localhost:11434
@@ -37,7 +40,7 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-    locations: classpath:db/migration,classpath:db/migration/{vendor}
+    locations: classpath:db/migration,classpath:db/vendor/{vendor}
   data:
     redis:
       host: ${REDIS_HOST:localhost}

@@ -7,15 +7,15 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:mysql://mysql:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC
+      DB_URL: jdbc:mysql://mysql:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root
       DB_PASSWORD: root
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-local-dev-placeholder}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
       APP_SECURITY_ENABLED: "true"
       APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-jwt-secret-change-this-in-prod-123456}
-      APP_VECTOR_STORE_BACKEND: pgvector
-      APP_REQUIRE_PGVECTOR: "false"
+      APP_VECTOR_STORE_BACKEND: simple
+      APP_VECTOR_STORE_REQUIRE_PGVECTOR: "false"
       APP_INGESTION_QUEUE_BACKEND: redis_stream
       REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq
@@ -37,7 +37,7 @@ services:
       retries: 5
 
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0.36
     container_name: knowledgeops-agent-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
@@ -81,7 +81,7 @@ services:
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
     ports:
-      - "4318:4318"
+      - "4319:4318"
 
   web:
     build:
@@ -93,9 +93,9 @@ services:
       app:
         condition: service_healthy
     ports:
-      - "80:80"
+      - "8088:80"
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost/"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/"]
       interval: 20s
       timeout: 5s
       retries: 5

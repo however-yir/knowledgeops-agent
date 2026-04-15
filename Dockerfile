@@ -1,19 +1,21 @@
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 WORKDIR /app
 
 COPY pom.xml .
 COPY src ./src
 
-RUN apk add --no-cache maven && \
-    mvn -DskipTests package -q && \
+RUN mvn -DskipTests package -q && \
     mkdir -p deps && \
     cp target/*.jar deps/app.jar
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Security baseline: run app as non-root user.
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --system appgroup && \
+    useradd --system --gid appgroup appuser && \
     chown -R appuser:appgroup /app
 
 USER appuser

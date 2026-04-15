@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS conversation (
   create_time DATETIME NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_conversation_id_create_time
+CREATE INDEX idx_conversation_id_create_time
   ON conversation (conversation_id, create_time);
 
 CREATE TABLE IF NOT EXISTS ingestion_job (
@@ -53,10 +53,10 @@ CREATE TABLE IF NOT EXISTS ingestion_job (
   updated_at DATETIME NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_ingestion_status_next_retry
+CREATE INDEX idx_ingestion_status_next_retry
   ON ingestion_job (status, next_retry_at);
 
-CREATE INDEX IF NOT EXISTS idx_ingestion_chat_created
+CREATE INDEX idx_ingestion_chat_created
   ON ingestion_job (chat_id, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at DATETIME NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_audit_created
+CREATE INDEX idx_audit_created
   ON audit_log (created_at);
 
 INSERT IGNORE INTO roles (id, role_name, created_at) VALUES

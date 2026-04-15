@@ -1,4 +1,4 @@
-CREATE INDEX IF NOT EXISTS idx_api_keys_key_name_active
+CREATE INDEX idx_api_keys_key_name_active
   ON api_keys (key_name, enabled, revoked_at, expires_at);
 
 INSERT IGNORE INTO permissions (permission_name, created_at) VALUES
