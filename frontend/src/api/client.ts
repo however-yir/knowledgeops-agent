@@ -73,14 +73,19 @@ export async function refreshJwt(refreshToken: string): Promise<AuthTokenRespons
   return payload;
 }
 
-export async function reactChat(request: ReactChatRequest, auth?: AuthContext): Promise<ReactChatResponse> {
+export async function reactChat(
+  request: ReactChatRequest,
+  auth?: AuthContext,
+  signal?: AbortSignal
+): Promise<ReactChatResponse> {
   const response = await fetch(resolveApi("/ai/react/chat"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...buildAuthHeaders(auth)
     },
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
+    signal
   });
   const payload = await parseJsonSafely<ReactChatResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
@@ -157,7 +162,8 @@ function takeNextChunk(input: string): { chunk: string; rest: string } | null {
 export async function streamReactChat(
   request: ReactChatRequest,
   auth: AuthContext | undefined,
-  onEvent: StreamHandler
+  onEvent: StreamHandler,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(resolveApi("/ai/react/chat/stream"), {
     method: "POST",
@@ -166,7 +172,8 @@ export async function streamReactChat(
       Accept: "text/event-stream",
       ...buildAuthHeaders(auth)
     },
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
+    signal
   });
 
   if (!response.ok) {

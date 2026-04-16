@@ -1,19 +1,19 @@
 :root {
-  --ui-text: #17213a;
-  --ui-muted: #5f6b80;
+  --ui-text: #1b2434;
+  --ui-muted: #596479;
   --ui-accent: #0f766e;
-  --ui-border: rgba(15, 23, 42, 0.14);
-  --ui-card: rgba(255, 255, 255, 0.86);
-  --ui-panel: rgba(255, 255, 255, 0.74);
+  --ui-border: rgba(15, 23, 42, 0.15);
+  --ui-card: rgba(250, 252, 255, 0.82);
+  --ui-panel: rgba(241, 246, 255, 0.76);
 }
 
 html.dark {
   --ui-text: #e2e8f0;
-  --ui-muted: #94a3b8;
+  --ui-muted: #9aa9bf;
   --ui-accent: #34d399;
-  --ui-border: rgba(148, 163, 184, 0.24);
-  --ui-card: rgba(15, 23, 42, 0.78);
-  --ui-panel: rgba(30, 41, 59, 0.62);
+  --ui-border: rgba(148, 163, 184, 0.25);
+  --ui-card: rgba(8, 15, 30, 0.82);
+  --ui-panel: rgba(18, 28, 46, 0.72);
 }
 
 *,
@@ -33,14 +33,14 @@ body {
   font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
   color: var(--ui-text);
   background:
-    radial-gradient(circle at 10% -5%, rgba(14, 116, 144, 0.18), transparent 42%),
-    radial-gradient(circle at 90% 0%, rgba(15, 118, 110, 0.18), transparent 35%),
-    linear-gradient(165deg, #f8fafc 0%, #eef2ff 42%, #ecfeff 100%);
+    radial-gradient(circle at 6% -14%, rgba(14, 116, 144, 0.18), transparent 36%),
+    radial-gradient(circle at 92% -10%, rgba(15, 118, 110, 0.18), transparent 33%),
+    linear-gradient(164deg, #f6f9ff 0%, #eef4ff 45%, #f4fffd 100%);
 }
 
 html.dark body {
   background:
-    radial-gradient(circle at 20% -5%, rgba(14, 165, 233, 0.2), transparent 32%),
-    radial-gradient(circle at 90% -10%, rgba(16, 185, 129, 0.2), transparent 26%),
-    linear-gradient(150deg, #020617 0%, #0f172a 58%, #1e293b 100%);
+    radial-gradient(circle at 12% -10%, rgba(14, 165, 233, 0.24), transparent 28%),
+    radial-gradient(circle at 90% -16%, rgba(16, 185, 129, 0.2), transparent 24%),
+    linear-gradient(152deg, #020617 0%, #0c162a 58%, #12233a 100%);
 }
