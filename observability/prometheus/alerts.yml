@@ -10,6 +10,19 @@ groups:
           summary: "High p95 latency"
           description: "p95 latency is above 1.5s for 5 minutes."
 
+      - alert: Http5xxRateHigh
+        expr: |
+          sum(rate(http_requests_latency_seconds_count{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_latency_seconds_count[5m])), 0.0001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP 5xx error rate high"
+          description: "5xx ratio exceeded 5% in the last 5 minutes."
+
       - alert: IngestionFailureRateHigh
         expr: rate(ingestion_jobs_finished_total{status="failed"}[5m]) > 0.05
         for: 10m
@@ -18,3 +31,68 @@ groups:
         annotations:
           summary: "Ingestion failure rate high"
           description: "Ingestion failed rate exceeded threshold."
+
+      - alert: SlowToolQueryP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(tool_query_latency_seconds_bucket{status="success"}[5m])) by (le, tool)
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tool query p95 latency high"
+          description: "Tool {{ $labels.tool }} p95 latency is above 800ms for 10 minutes."
+
+      - alert: SlowRagRetrievalP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(rag_retrieval_latency_seconds_bucket{outcome=~"success|empty"}[5m])) by (le)
+          ) > 1.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG retrieval p95 latency high"
+          description: "RAG retrieval p95 latency is above 1.2s for 10 minutes."
+
+      - alert: RagPipelineErrorRateHigh
+        expr: |
+          sum(rate(rag_pipeline_requests_total{outcome="error"}[5m]))
+          /
+          clamp_min(sum(rate(rag_pipeline_requests_total[5m])), 0.0001)
+          > 0.10
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAG pipeline error rate high"
+          description: "RAG pipeline errors exceeded 10% in the last 10 minutes."
+
+      - alert: ReactStreamFirstTokenP95High
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(react_stream_first_token_latency_seconds_bucket{outcome="success"}[5m])) by (le)
+          ) > 4
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ReAct stream first-token p95 high"
+          description: "First-token p95 latency is above 4s for 10 minutes."
+
+      - alert: ReactStreamErrorRateHigh
+        expr: |
+          sum(rate(react_stream_requests_total{outcome="error"}[5m]))
+          /
+          clamp_min(sum(rate(react_stream_requests_total[5m])), 0.0001)
+          > 0.20
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ReAct stream error rate high"
+          description: "Stream error ratio exceeded 20% in the last 10 minutes."

@@ -11,6 +11,9 @@ import com.enterprise.iqk.util.ConversationIdHelper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
@@ -25,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +41,7 @@ public class ReactAgentService {
     private final CourseTools courseTools;
     private final RagAnswerService ragAnswerService;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
 
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
         validateRequest(request);
@@ -79,6 +84,9 @@ public class ReactAgentService {
 
     public Flux<String> stream(ReactChatRequestVO request) {
         return Flux.create(sink -> {
+            long startedNs = System.nanoTime();
+            Long firstTokenLatencyMs = null;
+            String outcome = "error";
             try {
                 ReactChatResponseVO response = chat(request);
 
@@ -86,15 +94,53 @@ public class ReactAgentService {
                     sink.next(formatSse("trace", toJson(step)));
                 }
                 for (String chunk : chunkAnswer(response.getAnswer())) {
+                    if (firstTokenLatencyMs == null) {
+                        firstTokenLatencyMs = elapsedMs(startedNs);
+                    }
                     sink.next(formatSse("token", toJson(Map.of("token", chunk))));
                 }
+                if (firstTokenLatencyMs == null) {
+                    firstTokenLatencyMs = elapsedMs(startedNs);
+                }
                 sink.next(formatSse("done", toJson(response)));
+                outcome = "success";
                 sink.complete();
             } catch (Exception ex) {
                 sink.next(formatSse("error", toJson(Map.of("message", ex.getMessage()))));
                 sink.complete();
+            } finally {
+                recordStreamMetrics(startedNs, firstTokenLatencyMs, outcome);
             }
         });
+    }
+
+    private long elapsedMs(long startedNs) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs);
+    }
+
+    private void recordStreamMetrics(long startedNs, Long firstTokenLatencyMs, String outcome) {
+        long totalLatencyMs = elapsedMs(startedNs);
+        Timer.builder("react.stream.total.latency")
+                .description("End-to-end latency for /ai/react/chat/stream")
+                .tag("outcome", outcome)
+                .publishPercentileHistogram()
+                .register(meterRegistry)
+                .record(totalLatencyMs, TimeUnit.MILLISECONDS);
+
+        if (firstTokenLatencyMs != null) {
+            Timer.builder("react.stream.first_token.latency")
+                    .description("Time-to-first-token latency for /ai/react/chat/stream")
+                    .tag("outcome", outcome)
+                    .publishPercentileHistogram()
+                    .register(meterRegistry)
+                    .record(firstTokenLatencyMs, TimeUnit.MILLISECONDS);
+        }
+
+        Counter.builder("react.stream.requests")
+                .description("Total streamed ReAct requests")
+                .tag("outcome", outcome)
+                .register(meterRegistry)
+                .increment();
     }
 
     private ReasonDecision reason(ReactChatRequestVO request,
@@ -427,4 +473,3 @@ public class ReactAgentService {
                                   String answer) {
     }
 }
-

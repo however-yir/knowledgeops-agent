@@ -26,7 +26,7 @@ jobs:
       - name: Build with Maven
         run: mvn ${{ env.MVN_OPTS }} compile -q
 
-      - name: Run Tests
+      - name: Run Unit Tests
         run: mvn test -q
 
       - name: Run Integration Tests
@@ -42,14 +42,111 @@ jobs:
           files: "**/target/site/jacoco/jacoco.xml"
         if: always()
 
-      - name: Run Regression Evaluation
+      - name: Build Regression Predictions
         run: |
-          python3 -m pip install -q -r scripts/requirements.txt
-          python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75 || true
+          python3 scripts/generate_eval_predictions.py \
+            --dataset evaluation/dataset.large.json \
+            --output evaluation/predictions.generated.json
+
+      - name: Run Regression Quality Gate
+        run: |
+          python3 scripts/run_regression.py \
+            --dataset evaluation/dataset.large.json \
+            --predictions evaluation/predictions.generated.json \
+            --threshold 0.70 \
+            --correctness-threshold 0.75 \
+            --citation-hit-threshold 0.75 \
+            --hallucination-max-rate 0.20 \
+            --failure-max-rate 0.05 \
+            --first-token-max-ms 4000
+
+      - name: Upload Regression Report
+        uses: actions/upload-artifact@v4
         if: always()
+        with:
+          name: regression-report
+          path: reports/regression/latest.*
+
+  e2e-smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Full Stack
+        run: docker compose up -d --build
+
+      - name: Wait for API Health
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health >/dev/null; then
+              echo "API is healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "API failed to become healthy"
+          docker compose ps
+          exit 1
+
+      - name: Wait for Web Health
+        run: |
+          for i in {1..40}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088/ || true)
+            if [ "$code" = "200" ]; then
+              echo "Web is healthy"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Web failed to become healthy"
+          docker compose ps
+          exit 1
+
+      - name: Run E2E Chat Flow
+        run: python3 scripts/e2e_chat_flow.py --base-url http://localhost:8080
+
+      - name: Run Live Eval (Latency/Failure SLO)
+        run: |
+          python3 scripts/eval_live_runner.py \
+            --dataset evaluation/dataset.json \
+            --output evaluation/predictions.live.json \
+            --base-url http://localhost:8080 \
+            --timeout 60
+
+          python3 scripts/run_regression.py \
+            --dataset evaluation/dataset.json \
+            --predictions evaluation/predictions.live.json \
+            --threshold 0.0 \
+            --correctness-threshold 0.0 \
+            --citation-hit-threshold 0.0 \
+            --hallucination-max-rate 1.0 \
+            --failure-max-rate 0.20 \
+            --first-token-max-ms 6000 \
+            --require-latency
+
+      - name: Collect Runtime Logs
+        if: always()
+        run: |
+          mkdir -p reports/e2e
+          docker compose ps > reports/e2e/docker-ps.txt || true
+          docker compose logs --no-color > reports/e2e/docker-logs.txt || true
+
+      - name: Upload E2E Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-artifacts
+          path: |
+            reports/e2e/**
+            reports/regression/latest.*
+
+      - name: Shutdown Stack
+        if: always()
+        run: docker compose down -v --remove-orphans
 
   docker:
-    needs: build
+    needs: [build, e2e-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read

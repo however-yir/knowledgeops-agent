@@ -2,6 +2,9 @@ package com.enterprise.iqk.rag;
 
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.llm.ModelRouter;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +16,10 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
@@ -26,48 +32,109 @@ public class RagAnswerService {
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
     private final RagProperties ragProperties;
+    private final MeterRegistry meterRegistry;
 
     public RagResult answer(String prompt, String chatId, String conversationId, String modelProfile) {
-        String filterExpression = "chat_id == '" + chatId.replace("'", "") + "'";
-        SearchRequest request = SearchRequest.builder()
-                .query(prompt)
-                .topK(ragProperties.getRetrieveTopK())
-                .similarityThreshold(ragProperties.getSimilarityThreshold())
-                .filterExpression(filterExpression)
-                .build();
-        List<Document> retrieved = vectorStore.similaritySearch(request);
-        if (retrieved == null || retrieved.isEmpty()) {
-            return RagResult.builder()
-                    .answer("没有在当前知识库中检索到可用内容。")
-                    .citations(List.of())
-                    .build();
-        }
-        List<Document> reranked = rerank(prompt, retrieved);
-        List<Document> selected = reranked.stream()
-                .limit(Math.max(1, ragProperties.getRerankTopK()))
-                .toList();
-        String context = buildContext(selected);
-        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag");
-        String answer = chatClient.prompt()
-                .options(ChatOptions.builder().model(decision.model()).build())
-                .system("你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
-                .user("""
-                        用户问题:
-                        %s
+        Timer.Sample pipelineSample = Timer.start(meterRegistry);
+        String pipelineOutcome = "error";
 
-                        上下文:
-                        %s
-                        """.formatted(prompt, context))
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
-                .call()
-                .content();
-        List<String> citations = selected.stream()
-                .map(this::citationText)
-                .toList();
-        return RagResult.builder()
-                .answer(answer)
-                .citations(citations)
-                .build();
+        try {
+            String filterExpression = "chat_id == '" + chatId.replace("'", "") + "'";
+            SearchRequest request = SearchRequest.builder()
+                    .query(prompt)
+                    .topK(ragProperties.getRetrieveTopK())
+                    .similarityThreshold(ragProperties.getSimilarityThreshold())
+                    .filterExpression(filterExpression)
+                    .build();
+
+            List<Document> retrieved = similaritySearchWithMetrics(request);
+            if (retrieved == null || retrieved.isEmpty()) {
+                pipelineOutcome = "empty";
+                return RagResult.builder()
+                        .answer("没有在当前知识库中检索到可用内容。")
+                        .citations(List.of())
+                        .build();
+            }
+
+            List<Document> reranked = rerankWithMetrics(prompt, retrieved);
+            List<Document> selected = reranked.stream()
+                    .limit(Math.max(1, ragProperties.getRerankTopK()))
+                    .toList();
+
+            String context = buildContext(selected);
+            ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag");
+            String answer = chatClient.prompt()
+                    .options(ChatOptions.builder().model(decision.model()).build())
+                    .system("你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
+                    .user("""
+                            用户问题:
+                            %s
+
+                            上下文:
+                            %s
+                            """.formatted(prompt, context))
+                    .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                    .call()
+                    .content();
+
+            List<String> citations = selected.stream()
+                    .map(this::citationText)
+                    .toList();
+
+            pipelineOutcome = "success";
+            return RagResult.builder()
+                    .answer(answer)
+                    .citations(citations)
+                    .build();
+        } finally {
+            pipelineSample.stop(Timer.builder("rag.pipeline.latency")
+                    .description("Overall latency for RAG answer pipeline")
+                    .tag("outcome", pipelineOutcome)
+                    .publishPercentileHistogram()
+                    .register(meterRegistry));
+            Counter.builder("rag.pipeline.requests")
+                    .description("Total number of RAG pipeline requests")
+                    .tag("outcome", pipelineOutcome)
+                    .register(meterRegistry)
+                    .increment();
+        }
+    }
+
+    private List<Document> similaritySearchWithMetrics(SearchRequest request) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        String outcome = "error";
+        try {
+            List<Document> docs = vectorStore.similaritySearch(request);
+            outcome = (docs == null || docs.isEmpty()) ? "empty" : "success";
+            return docs;
+        } finally {
+            sample.stop(Timer.builder("rag.retrieval.latency")
+                    .description("Latency of vector similarity search")
+                    .tag("outcome", outcome)
+                    .publishPercentileHistogram()
+                    .register(meterRegistry));
+            Counter.builder("rag.retrieval.requests")
+                    .description("Number of vector retrieval requests")
+                    .tag("outcome", outcome)
+                    .register(meterRegistry)
+                    .increment();
+        }
+    }
+
+    private List<Document> rerankWithMetrics(String prompt, List<Document> docs) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        String outcome = "error";
+        try {
+            List<Document> reranked = rerank(prompt, docs);
+            outcome = reranked.isEmpty() ? "empty" : "success";
+            return reranked;
+        } finally {
+            sample.stop(Timer.builder("rag.rerank.latency")
+                    .description("Latency of local rerank stage")
+                    .tag("outcome", outcome)
+                    .publishPercentileHistogram()
+                    .register(meterRegistry));
+        }
     }
 
     private List<Document> rerank(String prompt, List<Document> docs) {
