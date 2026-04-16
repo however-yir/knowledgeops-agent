@@ -55,10 +55,10 @@ jobs:
             --predictions evaluation/predictions.generated.json \
             --threshold 0.70 \
             --correctness-threshold 0.75 \
-            --citation-hit-threshold 0.75 \
-            --hallucination-max-rate 0.20 \
-            --failure-max-rate 0.05 \
-            --first-token-max-ms 4000
+            --citation-hit-threshold 0.70 \
+            --hallucination-max-rate 0.05 \
+            --failure-max-rate 0.02 \
+            --first-token-max-ms 1500
 
       - name: Upload Regression Report
         uses: actions/upload-artifact@v4
@@ -117,12 +117,12 @@ jobs:
           python3 scripts/run_regression.py \
             --dataset evaluation/dataset.json \
             --predictions evaluation/predictions.live.json \
-            --threshold 0.0 \
-            --correctness-threshold 0.0 \
-            --citation-hit-threshold 0.0 \
-            --hallucination-max-rate 1.0 \
-            --failure-max-rate 0.20 \
-            --first-token-max-ms 6000 \
+            --threshold 0.70 \
+            --correctness-threshold 0.75 \
+            --citation-hit-threshold 0.70 \
+            --hallucination-max-rate 0.05 \
+            --failure-max-rate 0.02 \
+            --first-token-max-ms 1500 \
             --require-latency
 
       - name: Collect Runtime Logs

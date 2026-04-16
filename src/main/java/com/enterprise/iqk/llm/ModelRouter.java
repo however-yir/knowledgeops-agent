@@ -1,28 +1,123 @@
 package com.enterprise.iqk.llm;
 
 import com.enterprise.iqk.config.properties.ModelRouterProperties;
-import lombok.RequiredArgsConstructor;
+import com.enterprise.iqk.domain.ModelAbExposure;
+import com.enterprise.iqk.mapper.ModelAbExposureMapper;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 @Service
-@RequiredArgsConstructor
 public class ModelRouter {
     private static final String DEFAULT_MODEL = "qwen-plus";
 
     private final ModelRouterProperties modelRouterProperties;
+    private final ModelAbExposureMapper modelAbExposureMapper;
+
+    public ModelRouter(ModelRouterProperties modelRouterProperties) {
+        this.modelRouterProperties = modelRouterProperties;
+        this.modelAbExposureMapper = null;
+    }
+
+    @Autowired
+    public ModelRouter(ModelRouterProperties modelRouterProperties,
+                       ObjectProvider<ModelAbExposureMapper> modelAbExposureMapperProvider) {
+        this.modelRouterProperties = modelRouterProperties;
+        this.modelAbExposureMapper = modelAbExposureMapperProvider.getIfAvailable();
+    }
 
     public ModelRouteDecision resolve(String requestedProfile, String endpoint) {
-        String initialProfile = normalizeProfile(selectInitialProfile(requestedProfile, endpoint));
+        return resolve(requestedProfile, endpoint, "public", "");
+    }
+
+    public ModelRouteDecision resolve(String requestedProfile,
+                                      String endpoint,
+                                      String tenantId,
+                                      String subjectKey) {
+        String normalizedTenant = normalizeTenant(tenantId);
+        ExperimentRouting experiment = applyExperiment(requestedProfile, endpoint, normalizedTenant, subjectKey);
+        String initialProfile = normalizeProfile(selectInitialProfile(experiment.routedProfile(), endpoint));
+
+        ModelRouteDecision baseDecision;
         if (!modelRouterProperties.isEnabled()) {
-            return resolveDisabled(initialProfile);
+            baseDecision = resolveDisabled(initialProfile);
+        } else {
+            baseDecision = resolveEnabled(initialProfile);
         }
-        return resolveEnabled(initialProfile);
+
+        ModelRouteDecision decision = new ModelRouteDecision(
+                baseDecision.profile(),
+                baseDecision.model(),
+                baseDecision.costTier(),
+                baseDecision.fallbackApplied(),
+                baseDecision.reason(),
+                experiment.experimentKey(),
+                experiment.variant(),
+                experiment.bucket()
+        );
+        saveExposure(normalizedTenant, endpoint, subjectKey, decision);
+        return decision;
+    }
+
+    private void saveExposure(String tenantId, String endpoint, String subjectKey, ModelRouteDecision decision) {
+        if (modelAbExposureMapper == null || !StringUtils.hasText(decision.experimentKey())) {
+            return;
+        }
+        try {
+            modelAbExposureMapper.insert(ModelAbExposure.builder()
+                    .tenantId(normalizeTenant(tenantId))
+                    .experimentKey(decision.experimentKey())
+                    .subjectKey(StringUtils.hasText(subjectKey) ? subjectKey : "na")
+                    .endpoint(StringUtils.hasText(endpoint) ? endpoint : "unknown")
+                    .bucket(decision.experimentBucket() == null ? -1 : decision.experimentBucket())
+                    .variant(StringUtils.hasText(decision.experimentVariant()) ? decision.experimentVariant() : "unknown")
+                    .routedProfile(decision.profile())
+                    .createdAt(LocalDateTime.now())
+                    .build());
+        } catch (Exception ignored) {
+            // exposure logging should never break routing path
+        }
+    }
+
+    private ExperimentRouting applyExperiment(String requestedProfile,
+                                              String endpoint,
+                                              String tenantId,
+                                              String subjectKey) {
+        String normalizedRequested = normalizeProfile(requestedProfile);
+        if ("quality_first".equals(normalizedRequested) || "quality-priority".equals(normalizedRequested)) {
+            return new ExperimentRouting("quality", "manual_quality_first", "quality", 100);
+        }
+        if ("cost_first".equals(normalizedRequested) || "cost-priority".equals(normalizedRequested)) {
+            return new ExperimentRouting("economy", "manual_cost_first", "cost", 0);
+        }
+
+        ModelRouterProperties.AbExperiment experiment = modelRouterProperties.getQualityCostExperiment();
+        String triggerProfile = normalizeProfile(experiment.getTriggerProfile());
+        boolean triggerMatched = StringUtils.hasText(triggerProfile) && triggerProfile.equals(normalizedRequested);
+        if (!experiment.isEnabled() || !triggerMatched) {
+            return new ExperimentRouting(normalizedRequested, "", "", null);
+        }
+
+        int qualityPercent = Math.min(100, Math.max(0, experiment.getQualityPercent()));
+        String normalizedEndpoint = StringUtils.hasText(endpoint) ? normalizeProfile(endpoint) : "na";
+        String normalizedSubject = StringUtils.hasText(subjectKey) ? subjectKey.trim() : "na";
+        int bucket = Math.floorMod((tenantId + "|" + normalizedEndpoint + "|" + normalizedSubject).hashCode(), 100);
+        boolean qualityVariant = bucket < qualityPercent;
+        String variant = qualityVariant ? "quality" : "cost";
+        String routedProfile = qualityVariant ? "quality" : "economy";
+        return new ExperimentRouting(
+                routedProfile,
+                StringUtils.hasText(experiment.getExperimentKey()) ? experiment.getExperimentKey() : "quality_vs_cost",
+                variant,
+                bucket
+        );
     }
 
     private ModelRouteDecision resolveDisabled(String initialProfile) {
@@ -32,9 +127,12 @@ public class ModelRouter {
                     profile.getModel(),
                     safeCostTier(profile.getCostTier()),
                     false,
-                    "router_disabled_profile_direct");
+                    "router_disabled_profile_direct",
+                    "",
+                    "",
+                    null);
         }
-        return new ModelRouteDecision(initialProfile, DEFAULT_MODEL, "balanced", false, "router_disabled_default");
+        return new ModelRouteDecision(initialProfile, DEFAULT_MODEL, "balanced", false, "router_disabled_default", "", "", null);
     }
 
     private ModelRouteDecision resolveEnabled(String initialProfile) {
@@ -48,7 +146,10 @@ public class ModelRouter {
                         route.getModel(),
                         safeCostTier(route.getCostTier()),
                         !current.equals(initialProfile),
-                        !current.equals(initialProfile) ? "fallback_chain" : "profile_match");
+                        !current.equals(initialProfile) ? "fallback_chain" : "profile_match",
+                        "",
+                        "",
+                        null);
             }
             String fallback = route == null ? "" : normalizeProfile(route.getFallbackProfile());
             if (!StringUtils.hasText(fallback)) {
@@ -66,10 +167,13 @@ public class ModelRouter {
                         route.getModel(),
                         safeCostTier(route.getCostTier()),
                         !entry.getKey().equals(initialProfile),
-                        "first_enabled_fallback");
+                        "first_enabled_fallback",
+                        "",
+                        "",
+                        null);
             }
         }
-        return new ModelRouteDecision(initialProfile, DEFAULT_MODEL, "balanced", true, "default_model_fallback");
+        return new ModelRouteDecision(initialProfile, DEFAULT_MODEL, "balanced", true, "default_model_fallback", "", "", null);
     }
 
     private String selectInitialProfile(String requestedProfile, String endpoint) {
@@ -102,10 +206,26 @@ public class ModelRouter {
         return StringUtils.hasText(costTier) ? costTier : "balanced";
     }
 
+    private String normalizeTenant(String tenantId) {
+        if (!StringUtils.hasText(tenantId)) {
+            return "public";
+        }
+        return tenantId.trim();
+    }
+
     public record ModelRouteDecision(String profile,
                                      String model,
                                      String costTier,
                                      boolean fallbackApplied,
-                                     String reason) {
+                                     String reason,
+                                     String experimentKey,
+                                     String experimentVariant,
+                                     Integer experimentBucket) {
+    }
+
+    private record ExperimentRouting(String routedProfile,
+                                     String experimentKey,
+                                     String variant,
+                                     Integer bucket) {
     }
 }

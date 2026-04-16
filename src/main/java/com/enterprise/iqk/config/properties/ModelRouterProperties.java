@@ -13,6 +13,7 @@ public class ModelRouterProperties {
     private String defaultProfile = "balanced";
     private Map<String, String> endpointProfiles = new LinkedHashMap<>();
     private Map<String, RouteProfile> profiles = new LinkedHashMap<>();
+    private AbExperiment qualityCostExperiment = new AbExperiment();
 
     @Data
     public static class RouteProfile {
@@ -20,5 +21,13 @@ public class ModelRouterProperties {
         private String costTier = "balanced";
         private boolean enabled = true;
         private String fallbackProfile;
+    }
+
+    @Data
+    public static class AbExperiment {
+        private boolean enabled = true;
+        private String triggerProfile = "ab_auto";
+        private int qualityPercent = 50;
+        private String experimentKey = "quality_vs_cost";
     }
 }

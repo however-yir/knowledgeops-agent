@@ -3,10 +3,12 @@ package com.enterprise.iqk.controller;
 
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
+import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.slf4j.MDC;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,7 +32,8 @@ public class CustomerServiceController {
         // 1.保存会话id
         chatHistoryRepository.save("service", chatId);
         String conversationId = ConversationIdHelper.build("service", chatId);
-        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "service");
+        String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
+        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "service", tenantId, chatId);
         // 2.请求模型
         return serviceChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())

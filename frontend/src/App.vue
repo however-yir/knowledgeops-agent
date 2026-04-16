@@ -29,6 +29,10 @@
             inactive-text="隐藏归档"
           />
         </div>
+        <div class="cloud-row">
+          <el-button size="small" :loading="cloudSyncing" :disabled="!canUseRemoteSync" @click="loadSessionsFromCloud">云端拉取</el-button>
+          <el-button size="small" type="primary" :loading="cloudSyncing" :disabled="!canUseRemoteSync" @click="syncActiveSessionToCloud">保存到云端</el-button>
+        </div>
       </section>
 
       <section class="session-panel">
@@ -71,6 +75,8 @@
           <div class="branch-head-actions">
             <span class="section-meta">{{ activeSession?.branches.length ?? 0 }} 条</span>
             <button type="button" @click="forkFromCurrent">从当前分叉</button>
+            <button type="button" :disabled="!activeBranch?.parentBranchId" @click="compareWithParent">对比父分支</button>
+            <button type="button" :disabled="!activeBranch?.parentBranchId" @click="mergeIntoParent">合并到父分支</button>
           </div>
         </div>
         <div class="branch-list">
@@ -113,7 +119,7 @@
             <el-form-item label="Model Profile">
               <el-segmented
                 v-model="modelProfile"
-                :options="['economy', 'balanced', 'quality']"
+                :options="['economy', 'balanced', 'quality', 'ab_auto', 'quality_first', 'cost_first']"
                 class="full-width"
               />
             </el-form-item>
@@ -162,6 +168,7 @@
           />
           <el-tag :type="streamStatusTagType" effect="plain">{{ streamStatusLabel }}</el-tag>
           <span class="stream-detail">{{ streamStatusDetail }}</span>
+          <span v-if="costSummary" class="stream-detail">成本: 本月 ${{ costSummary.monthCostUsd.toFixed(4) }} / 预算 ${{ costSummary.monthlyBudgetUsd.toFixed(4) }}</span>
           <el-button size="small" @click="clearConversation">清空会话</el-button>
         </div>
       </header>
@@ -217,7 +224,31 @@
                     <div></div>
                     <div></div>
                   </div>
-                  <div v-else class="markdown" v-html="renderMarkdown(entry.item.content)"></div>
+                  <div v-else>
+                    <div class="markdown" v-html="renderMarkdown(entry.item.content)"></div>
+                    <div v-if="entry.item.citations?.length" class="citation-panel">
+                      <p class="citation-title">来源引用</p>
+                      <div class="citation-list">
+                        <button
+                          v-for="(citation, citationIndex) in entry.item.citations"
+                          :key="`${entry.item.id}-${citationIndex}`"
+                          type="button"
+                          class="citation-chip"
+                          @click="openCitation(citation)"
+                        >
+                          [{{ citationIndex + 1 }}] {{ citation }}
+                        </button>
+                      </div>
+                    </div>
+                    <div v-if="entry.item.evidence?.length" class="evidence-panel">
+                      <p class="citation-title">证据片段</p>
+                      <ul>
+                        <li v-for="(snippet, snippetIndex) in entry.item.evidence" :key="`${entry.item.id}-ev-${snippetIndex}`">
+                          {{ snippet }}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
                 </template>
 
                 <template v-else>
@@ -252,6 +283,22 @@
                   @click="regenerateFrom(entry.index)"
                 >
                   重试分支
+                </button>
+                <button
+                  v-if="entry.item.role === 'assistant'"
+                  type="button"
+                  :disabled="Boolean(answerFeedbackMap[entry.item.id]) || Boolean(answerFeedbackLoading[entry.item.id])"
+                  @click="rateAnswer(entry.index, entry.item, 5)"
+                >
+                  👍有帮助
+                </button>
+                <button
+                  v-if="entry.item.role === 'assistant'"
+                  type="button"
+                  :disabled="Boolean(answerFeedbackMap[entry.item.id]) || Boolean(answerFeedbackLoading[entry.item.id])"
+                  @click="rateAnswer(entry.index, entry.item, 1)"
+                >
+                  👎待改进
                 </button>
                 <button
                   v-if="entry.item.role === 'user'"
@@ -321,12 +368,27 @@ import yamlLang from "highlight.js/lib/languages/yaml";
 import { ElMessage } from "element-plus";
 import { marked } from "marked";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { exchangeApiKey, reactChat, refreshJwt, streamReactChat } from "./api/client";
+import {
+  compareSessionBranches,
+  exchangeApiKey,
+  getTenantCostSummary,
+  listSessionStates,
+  mergeSessionBranches,
+  reactChat,
+  refreshJwt,
+  saveSessionState,
+  setSessionArchived,
+  setSessionPinned,
+  streamReactChat,
+  submitAnswerFeedback
+} from "./api/client";
 import type {
   ReactChatResponse,
   ReactErrorEvent,
   ReactTokenEvent,
-  ReactTraceStep
+  ReactTraceStep,
+  SessionState,
+  TenantCostSummary
 } from "./types/react";
 
 interface ChatMessage {
@@ -334,6 +396,8 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   createdAt: number;
+  citations?: string[];
+  evidence?: string[];
   state?: "pending" | "streaming" | "done" | "error" | "stopped";
 }
 
@@ -483,6 +547,12 @@ function normalizeMessage(raw: unknown): ChatMessage {
     role,
     content: typeof candidate.content === "string" ? candidate.content : "",
     createdAt: typeof candidate.createdAt === "number" ? candidate.createdAt : Date.now(),
+    citations: Array.isArray(candidate.citations)
+      ? candidate.citations.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    evidence: Array.isArray(candidate.evidence)
+      ? candidate.evidence.map((item) => String(item).trim()).filter(Boolean)
+      : [],
     state: candidate.state || "done"
   };
 }
@@ -668,6 +738,10 @@ const editingMessageId = ref<string | null>(null);
 const editingMessageDraft = ref("");
 const streamPhase = ref<StreamPhase>("idle");
 const streamStatusDetail = ref("");
+const cloudSyncing = ref(false);
+const costSummary = ref<TenantCostSummary | null>(null);
+const answerFeedbackMap = ref<Record<string, number>>({});
+const answerFeedbackLoading = ref<Record<string, boolean>>({});
 
 const messageHeights = ref<Record<string, number>>({});
 const viewportHeight = ref(0);
@@ -683,6 +757,8 @@ const quickPrompts = [
 ];
 
 const sessionCount = computed(() => sessions.value.length);
+
+const canUseRemoteSync = computed(() => Boolean(token.value || apiKeyInput.value.trim()));
 
 const workspaceOptions = computed(() => {
   const options = new Set<string>([DEFAULT_WORKSPACE]);
@@ -921,6 +997,78 @@ function authContext() {
   };
 }
 
+async function refreshCostSummary(): Promise<void> {
+  if (!canUseRemoteSync.value) {
+    costSummary.value = null;
+    return;
+  }
+  try {
+    costSummary.value = await getTenantCostSummary(authContext());
+  } catch {
+    // Keep UI usable even when cost endpoint is unavailable.
+  }
+}
+
+function normalizeRemoteSession(raw: unknown): SessionRecord {
+  return normalizeSession(raw);
+}
+
+async function loadSessionsFromCloud(): Promise<void> {
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning("请先完成鉴权后再同步");
+    return;
+  }
+  cloudSyncing.value = true;
+  try {
+    const page = await listSessionStates(authContext(), {
+      page: 1,
+      pageSize: 200,
+      includeArchived: true
+    });
+    if (Array.isArray(page.items) && page.items.length > 0) {
+      sessions.value = page.items.map((item) => normalizeRemoteSession(item));
+      const current = sessions.value.find((item) => item.id === activeSessionId.value) ?? sessions.value[0];
+      loadSession(current.id);
+      persistState();
+    }
+    await refreshCostSummary();
+    ElMessage.success("已从云端加载会话");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "云端拉取失败";
+    ElMessage.error(message);
+  } finally {
+    cloudSyncing.value = false;
+  }
+}
+
+async function syncActiveSessionToCloud(): Promise<void> {
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning("请先完成鉴权后再同步");
+    return;
+  }
+  syncCurrentSessionBranch();
+  cloudSyncing.value = true;
+  try {
+    const saved = await saveSessionState(activeSession.value as unknown as SessionState, authContext());
+    const normalized = normalizeRemoteSession(saved);
+    const index = sessions.value.findIndex((item) => item.id === normalized.id);
+    if (index >= 0) {
+      sessions.value[index] = normalized;
+    } else {
+      sessions.value.unshift(normalized);
+    }
+    loadSession(normalized.id);
+    persistState();
+    await refreshCostSummary();
+    ElMessage.success("当前会话已保存到云端");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "云端保存失败";
+    ElMessage.error(message);
+  } finally {
+    cloudSyncing.value = false;
+  }
+}
+
 function getSession(sessionId: string): SessionRecord | undefined {
   return sessions.value.find((item) => item.id === sessionId);
 }
@@ -1022,7 +1170,7 @@ function removeSession(sessionId: string): void {
   persistState();
 }
 
-function toggleSessionPin(sessionId: string): void {
+async function toggleSessionPin(sessionId: string): Promise<void> {
   const session = getSession(sessionId);
   if (!session) {
     return;
@@ -1030,9 +1178,17 @@ function toggleSessionPin(sessionId: string): void {
   session.pinned = !session.pinned;
   session.updatedAt = Date.now();
   persistState();
+  if (canUseRemoteSync.value) {
+    try {
+      await setSessionPinned(sessionId, session.pinned, authContext());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "会话置顶同步失败";
+      ElMessage.error(message);
+    }
+  }
 }
 
-function toggleSessionArchive(sessionId: string): void {
+async function toggleSessionArchive(sessionId: string): Promise<void> {
   const session = getSession(sessionId);
   if (!session) {
     return;
@@ -1054,6 +1210,14 @@ function toggleSessionArchive(sessionId: string): void {
   }
 
   persistState();
+  if (canUseRemoteSync.value) {
+    try {
+      await setSessionArchived(sessionId, session.archived, authContext());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "会话归档同步失败";
+      ElMessage.error(message);
+    }
+  }
 }
 
 function createWorkspace(): void {
@@ -1113,6 +1277,72 @@ function forkFromCurrent(): void {
   loadSession(session.id);
   persistState();
   ElMessage.success("已创建分支");
+}
+
+async function compareWithParent(): Promise<void> {
+  const current = activeBranch.value;
+  if (!current?.parentBranchId) {
+    ElMessage.warning("当前分支没有父分支可对比");
+    return;
+  }
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning("请先完成鉴权后再执行云端分支对比");
+    return;
+  }
+  syncCurrentSessionBranch();
+  try {
+    await syncActiveSessionToCloud();
+    const result = await compareSessionBranches(
+      activeSession.value.id,
+      {
+        sourceBranchId: current.id,
+        targetBranchId: current.parentBranchId
+      },
+      authContext()
+    );
+    ElMessage.success(`对比完成：公共 ${result.commonMessageCount}，当前独有 ${result.sourceOnlyCount}，父分支独有 ${result.targetOnlyCount}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "分支对比失败";
+    ElMessage.error(message);
+  }
+}
+
+async function mergeIntoParent(): Promise<void> {
+  const current = activeBranch.value;
+  if (!current?.parentBranchId) {
+    ElMessage.warning("当前分支没有父分支可合并");
+    return;
+  }
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning("请先完成鉴权后再执行云端分支合并");
+    return;
+  }
+  syncCurrentSessionBranch();
+  try {
+    await syncActiveSessionToCloud();
+    const result = await mergeSessionBranches(
+      activeSession.value.id,
+      {
+        sourceBranchId: current.id,
+        targetBranchId: current.parentBranchId,
+        title: `${current.title} -> ${current.parentBranchId} merge`
+      },
+      authContext()
+    );
+    const normalized = normalizeRemoteSession(result.session);
+    const index = sessions.value.findIndex((item) => item.id === normalized.id);
+    if (index >= 0) {
+      sessions.value[index] = normalized;
+    } else {
+      sessions.value.unshift(normalized);
+    }
+    loadSession(normalized.id);
+    persistState();
+    ElMessage.success(`合并完成，分支消息数 ${result.mergedMessageCount}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "分支合并失败";
+    ElMessage.error(message);
+  }
 }
 
 function startEditMessage(message: ChatMessage): void {
@@ -1257,6 +1487,82 @@ async function copyMessage(content: string): Promise<void> {
   }
 }
 
+function parseCitation(citation: string): { source: string; chunk: string } | null {
+  const matched = citation.match(/source=([^,]+),\s*chunk=(.+)$/i);
+  if (!matched) {
+    return null;
+  }
+  return {
+    source: matched[1].trim(),
+    chunk: matched[2].trim()
+  };
+}
+
+function openCitation(citation: string): void {
+  const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+  const target = parseCitation(citation);
+  const url = `${base}/ai/pdf/file/${encodeURIComponent(chatId.value)}${target
+    ? `?source=${encodeURIComponent(target.source)}&chunk=${encodeURIComponent(target.chunk)}`
+    : ""}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function findPreviousUserQuestion(index: number): string {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const candidate = messages.value[i];
+    if (candidate.role === "user" && candidate.content.trim()) {
+      return candidate.content.trim();
+    }
+  }
+  return "";
+}
+
+async function rateAnswer(index: number, message: ChatMessage, rating: number): Promise<void> {
+  if (message.role !== "assistant") {
+    return;
+  }
+  if (!canUseRemoteSync.value) {
+    ElMessage.warning("请先完成鉴权后再提交反馈");
+    return;
+  }
+  if (answerFeedbackMap.value[message.id]) {
+    ElMessage.info("该回答已评分");
+    return;
+  }
+  answerFeedbackLoading.value = {
+    ...answerFeedbackLoading.value,
+    [message.id]: true
+  };
+  try {
+    await submitAnswerFeedback(
+      {
+        chatId: chatId.value,
+        sessionId: activeSession.value.id,
+        branchId: activeBranch.value.id,
+        messageId: message.id,
+        rating,
+        question: findPreviousUserQuestion(index),
+        answer: message.content,
+        comment: rating >= 4 ? "回答有帮助" : "回答需要改进"
+      },
+      authContext()
+    );
+    answerFeedbackMap.value = {
+      ...answerFeedbackMap.value,
+      [message.id]: rating
+    };
+    ElMessage.success("反馈已提交并回灌评测集");
+  } catch (error) {
+    const tip = error instanceof Error ? error.message : "反馈提交失败";
+    ElMessage.error(tip);
+  } finally {
+    answerFeedbackLoading.value = {
+      ...answerFeedbackLoading.value,
+      [message.id]: false
+    };
+  }
+}
+
 function stopGenerating(): void {
   currentAbortController.value?.abort();
 }
@@ -1264,6 +1570,8 @@ function stopGenerating(): void {
 function clearConversation(): void {
   messages.value = [createMessage("assistant", "会话已重置。你可以继续发问。")];
   traceSteps.value = [];
+  answerFeedbackMap.value = {};
+  answerFeedbackLoading.value = {};
   prompt.value = "";
   streamPhase.value = "idle";
   streamStatusDetail.value = "";
@@ -1287,6 +1595,7 @@ async function handleLogin(): Promise<void> {
     }
     ElMessage.success("JWT 获取成功");
     persistState();
+    await loadSessionsFromCloud();
   } catch (error) {
     const message = error instanceof Error ? error.message : "token exchange failed";
     ElMessage.error(message);
@@ -1311,6 +1620,7 @@ async function handleRefresh(): Promise<void> {
     }
     ElMessage.success("令牌已刷新");
     persistState();
+    await refreshCostSummary();
   } catch (error) {
     const message = error instanceof Error ? error.message : "refresh failed";
     ElMessage.error(message);
@@ -1322,6 +1632,7 @@ async function handleRefresh(): Promise<void> {
 function clearAuth(): void {
   token.value = "";
   refreshToken.value = "";
+  costSummary.value = null;
   ElMessage.success("鉴权状态已清空");
   persistState();
 }
@@ -1342,6 +1653,8 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
 
   const assistantMsg: ChatMessage = {
     ...createMessage("assistant", ""),
+    citations: [],
+    evidence: [],
     state: "pending"
   };
 
@@ -1402,6 +1715,12 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
             if (done.answer?.trim()) {
               messages.value[assistantIndex].content = done.answer;
             }
+            messages.value[assistantIndex].citations = Array.isArray(done.citations)
+              ? done.citations.map((item) => String(item).trim()).filter(Boolean)
+              : [];
+            messages.value[assistantIndex].evidence = Array.isArray(done.evidence)
+              ? done.evidence.map((item) => String(item).trim()).filter(Boolean)
+              : [];
             messages.value[assistantIndex].state = "done";
             streamPhase.value = "done";
             streamStatusDetail.value = "响应已完成";
@@ -1431,6 +1750,12 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
       );
       traceSteps.value = result.trace ?? [];
       messages.value[assistantIndex].content = result.answer || "模型没有返回内容";
+      messages.value[assistantIndex].citations = Array.isArray(result.citations)
+        ? result.citations.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+      messages.value[assistantIndex].evidence = Array.isArray(result.evidence)
+        ? result.evidence.map((item) => String(item).trim()).filter(Boolean)
+        : [];
       messages.value[assistantIndex].state = "done";
       streamPhase.value = "done";
       streamStatusDetail.value = "响应已完成";
@@ -1518,6 +1843,11 @@ watch(
 
 watch([apiKeyInput, tenantInput, token, refreshToken], () => {
   persistState();
+  if (canUseRemoteSync.value) {
+    void refreshCostSummary();
+  } else {
+    costSummary.value = null;
+  }
 });
 
 watch(
@@ -1558,6 +1888,10 @@ onMounted(() => {
     hydrating.value = false;
     void scrollToBottom(true);
   }, 220);
+
+  if (canUseRemoteSync.value) {
+    void refreshCostSummary();
+  }
 
   void scrollToBottom(true);
 });
@@ -1655,6 +1989,12 @@ h1 {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+}
+
+.cloud-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .tool-select {
@@ -2111,6 +2451,47 @@ h2 {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.citation-panel,
+.evidence-panel {
+  margin-top: 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in oklab, var(--ui-panel) 86%, transparent);
+}
+
+.citation-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.citation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.citation-chip {
+  border: 1px solid var(--ui-border);
+  background: color-mix(in oklab, var(--ui-card) 88%, transparent);
+  color: var(--ui-text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.evidence-panel ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--ui-muted);
+  font-size: 12px;
 }
 
 .thinking {

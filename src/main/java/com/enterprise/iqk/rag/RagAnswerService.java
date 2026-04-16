@@ -2,6 +2,8 @@ package com.enterprise.iqk.rag;
 
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.llm.ModelRouter;
+import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.service.TenantCostService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -15,6 +17,7 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.slf4j.MDC;
 
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +36,7 @@ public class RagAnswerService {
     private final ModelRouter modelRouter;
     private final RagProperties ragProperties;
     private final MeterRegistry meterRegistry;
+    private final TenantCostService tenantCostService;
 
     public RagResult answer(String prompt, String chatId, String conversationId, String modelProfile) {
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
@@ -53,6 +57,7 @@ public class RagAnswerService {
                 return RagResult.builder()
                         .answer("没有在当前知识库中检索到可用内容。")
                         .citations(List.of())
+                        .evidence(List.of("未检索到匹配文档，请先上传资料或调整检索词。"))
                         .build();
             }
 
@@ -62,7 +67,10 @@ public class RagAnswerService {
                     .toList();
 
             String context = buildContext(selected);
-            ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag");
+            String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
+            ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag", tenantId, chatId);
+            long inputTokens = tenantCostService.estimateTokens(prompt + "\n" + context);
+            tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
             String answer = chatClient.prompt()
                     .options(ChatOptions.builder().model(decision.model()).build())
                     .system("你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
@@ -76,15 +84,21 @@ public class RagAnswerService {
                     .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                     .call()
                     .content();
+            long outputTokens = tenantCostService.estimateTokens(answer);
+            tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "rag");
 
             List<String> citations = selected.stream()
                     .map(this::citationText)
+                    .toList();
+            List<String> evidence = selected.stream()
+                    .map(this::evidenceText)
                     .toList();
 
             pipelineOutcome = "success";
             return RagResult.builder()
                     .answer(answer)
                     .citations(citations)
+                    .evidence(evidence)
                     .build();
         } finally {
             pipelineSample.stop(Timer.builder("rag.pipeline.latency")
@@ -181,10 +195,23 @@ public class RagAnswerService {
         return "source=" + file + ", chunk=" + chunk;
     }
 
+    private String evidenceText(Document d) {
+        String raw = emptyIfBlank(d.getFormattedContent()).replaceAll("\\s+", " ").trim();
+        if (raw.length() <= 180) {
+            return raw;
+        }
+        return raw.substring(0, 180) + "...";
+    }
+
+    private String emptyIfBlank(String value) {
+        return StringUtils.hasText(value) ? value : "";
+    }
+
     @Data
     @Builder
     public static class RagResult {
         private String answer;
         private List<String> citations;
+        private List<String> evidence;
     }
 }

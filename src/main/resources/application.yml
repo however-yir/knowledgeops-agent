@@ -112,6 +112,11 @@ app:
   model-router:
     enabled: ${APP_MODEL_ROUTER_ENABLED:true}
     default-profile: ${APP_MODEL_ROUTER_DEFAULT_PROFILE:balanced}
+    quality-cost-experiment:
+      enabled: ${APP_MODEL_ROUTER_AB_ENABLED:true}
+      trigger-profile: ${APP_MODEL_ROUTER_AB_TRIGGER_PROFILE:ab_auto}
+      quality-percent: ${APP_MODEL_ROUTER_AB_QUALITY_PERCENT:50}
+      experiment-key: ${APP_MODEL_ROUTER_AB_EXPERIMENT_KEY:quality_vs_cost}
     endpoint-profiles:
       chat: ${APP_MODEL_ROUTER_CHAT_PROFILE:balanced}
       service: ${APP_MODEL_ROUTER_SERVICE_PROFILE:quality}
@@ -142,6 +147,18 @@ app:
       schema: ${APP_PGVECTOR_SCHEMA:public}
       dimensions: ${APP_PGVECTOR_DIMENSIONS:1024}
       table: ${APP_PGVECTOR_TABLE:ai_knowledge_chunks}
+  feedback:
+    enabled: ${APP_FEEDBACK_ENABLED:true}
+    dataset-path: ${APP_FEEDBACK_DATASET_PATH:evaluation/feedback_dataset.jsonl}
+  cost-governance:
+    enabled: ${APP_COST_GOVERNANCE_ENABLED:true}
+    default-monthly-budget-usd: ${APP_COST_DEFAULT_MONTHLY_BUDGET_USD:25.0000}
+    default-hard-limit-enabled: ${APP_COST_DEFAULT_HARD_LIMIT_ENABLED:false}
+    token-estimate-divisor: ${APP_COST_TOKEN_ESTIMATE_DIVISOR:4}
+    usd-per1k-tokens:
+      low: ${APP_COST_PER_1K_LOW:0.0010}
+      medium: ${APP_COST_PER_1K_MEDIUM:0.0030}
+      high: ${APP_COST_PER_1K_HIGH:0.0100}
 
 rag:
   retrieve-top-k: ${RAG_RETRIEVE_TOP_K:12}

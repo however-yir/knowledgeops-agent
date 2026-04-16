@@ -22,8 +22,16 @@ def make_headers(args):
 def extract_citations(done_payload):
     if not isinstance(done_payload, dict):
         return []
-    trace = done_payload.get("trace") or []
     citations = []
+
+    direct = done_payload.get("citations")
+    if isinstance(direct, list):
+        for item in direct:
+            text = str(item).strip()
+            if text:
+                citations.append(text)
+
+    trace = done_payload.get("trace") or []
     for step in trace:
         if not isinstance(step, dict):
             continue
