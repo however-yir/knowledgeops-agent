@@ -156,6 +156,34 @@ flowchart TD
 - Docker & Docker Compose（推荐）
 - 有效模型密钥（OpenAI 兼容）
 
+### 快速安装（Mac / Windows）
+
+以下脚本会自动完成：
+
+1. 检查 Docker / Docker Compose 是否可用
+2. 自动生成 `.env`（若不存在）
+3. 引导填写 `OPENAI_API_KEY`
+4. 一键启动容器栈（`docker compose up --build -d`）
+
+macOS：
+
+```bash
+chmod +x scripts/install_mac.sh
+./scripts/install_mac.sh
+```
+
+Windows（PowerShell）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
+```
+
+Windows（CMD/双击）：
+
+```bat
+.\scripts\install_windows.bat
+```
+
 ### 本地开发启动
 
 ```bash
@@ -174,7 +202,7 @@ docker compose up --build -d
 
 启动后访问：
 
-- 前端控制台：`http://localhost`
+- 前端控制台：`http://localhost:8088`
 - 后端 API：`http://localhost:8080`
 - RabbitMQ 控制台：`http://localhost:15672`
 
