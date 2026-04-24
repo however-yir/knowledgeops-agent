@@ -5,8 +5,10 @@ import com.enterprise.iqk.domain.vo.MessageVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.mapper.ConversationMapper;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
+import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
 
@@ -29,12 +31,13 @@ public class MysqlChatHistoryRepository implements ChatHistoryRepository {
     public PagedResult<String> getChatIds(String type, int page, int pageSize) {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(pageSize, 1);
-        long total = conversationMapper.countConversationIdsByType(type);
+        String tenantId = currentTenantId();
+        long total = conversationMapper.countConversationIdsByType(tenantId, type);
         if (total == 0) {
             return new PagedResult<>(Collections.emptyList(), 0, safePage, safePageSize);
         }
         long offset = (long) (safePage - 1) * safePageSize;
-        List<String> items = conversationMapper.findConversationIdsByType(type, offset, safePageSize)
+        List<String> items = conversationMapper.findConversationIdsByType(tenantId, type, offset, safePageSize)
                 .stream()
                 .map(ConversationIdHelper::extractChatId)
                 .toList();
@@ -46,12 +49,13 @@ public class MysqlChatHistoryRepository implements ChatHistoryRepository {
         int safePage = Math.max(page, 1);
         int safePageSize = Math.max(pageSize, 1);
         String conversationId = ConversationIdHelper.build(type, chatId);
-        long total = conversationMapper.countMessagesByConversationId(conversationId);
+        String tenantId = currentTenantId();
+        long total = conversationMapper.countMessagesByConversationId(tenantId, conversationId);
         if (total == 0) {
             return new PagedResult<>(Collections.emptyList(), 0, safePage, safePageSize);
         }
         long offset = (long) (safePage - 1) * safePageSize;
-        List<MessageVO> items = conversationMapper.findMessagesByConversationId(conversationId, offset, safePageSize)
+        List<MessageVO> items = conversationMapper.findMessagesByConversationId(tenantId, conversationId, offset, safePageSize)
                 .stream()
                 .map(this::toMessageVO)
                 .toList();
@@ -69,5 +73,9 @@ public class MysqlChatHistoryRepository implements ChatHistoryRepository {
         vo.setRole(role);
         vo.setContent(conversation.getMessage());
         return vo;
+    }
+
+    private String currentTenantId() {
+        return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }
 }

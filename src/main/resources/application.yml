@@ -75,7 +75,7 @@ management:
 
 app:
   security:
-    enabled: ${APP_SECURITY_ENABLED:false}
+    enabled: ${APP_SECURITY_ENABLED:true}
     jwt-secret: ${APP_JWT_SECRET:}
     jwt-expire-minutes: ${APP_JWT_EXPIRE_MINUTES:120}
     refresh-expire-days: ${APP_JWT_REFRESH_EXPIRE_DAYS:14}

@@ -20,6 +20,7 @@ public class IngestionJob {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String jobId;
+    private String tenantId;
     private String chatId;
     private String sourceType;
     private String sourceName;

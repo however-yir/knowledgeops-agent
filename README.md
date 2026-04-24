@@ -57,8 +57,8 @@
 | 能力域 | 当前实现 |
 |---|---|
 | 对话与多模态 | `/ai/chat` 支持文本与附件输入、流式输出 |
-| 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，支持引用来源输出 |
-| 异步入库流水线 | 队列化 ingestion、幂等键、重试、DLQ、状态查询 |
+| 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，按 `tenant_id + chat_id` 检索，支持引用来源输出 |
+| 异步入库流水线 | 队列化 ingestion、租户级幂等键、重试、DLQ、状态查询 |
 | 安全体系 | API Key + JWT + Refresh Token + RBAC + 细粒度权限 |
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏 |
 | 数据持久化 | MySQL 会话与业务数据、pgvector 向量检索（可切 simple） |
@@ -129,7 +129,8 @@ flowchart TD
 - 多 ChatClient 分场景配置（通用、客服、知识问答）
 - 模型路由（按 `modelProfile` 与端点策略动态选型）
 - `QuestionAnswerAdvisor` + 向量检索增强
-- 会话隔离策略：`type::chatId` 组合 conversationId，避免串会话
+- 会话隔离策略：`tenant_id + type::chatId` 组合，避免跨租户串会话
+- ReAct 流式接口采用真实模型 token 流输出（非后处理切片）
 
 ### 3) 异步入库层
 
@@ -282,6 +283,8 @@ docker compose -f docker-compose.observability.yml up -d
 
 ## API 概览
 
+说明：多租户场景建议在请求头统一传递 `X-Tenant-Id`；会话历史、知识检索与入库任务均按租户隔离。
+
 ### 会话问答
 
 - `GET/POST /ai/chat`
@@ -290,7 +293,7 @@ docker compose -f docker-compose.observability.yml up -d
 ### ReAct 智能体问答
 
 - `POST /ai/react/chat`（JSON 返回 Thought/Action/Observation 轨迹）
-- `POST /ai/react/chat/stream`（SSE 流式返回 `trace/token/done/error`）
+- `POST /ai/react/chat/stream`（SSE 实时返回 `trace/token/done/error`，`token` 为模型原生流）
 
 ### 客服流程问答
 
@@ -382,6 +385,14 @@ docker compose -f docker-compose.observability.yml up -d
 - Security 组件测试
 - Ingestion 服务测试
 - Testcontainers（MySQL）集成测试
+
+```bash
+# 快速单元/切片测试，不启动 Testcontainers
+mvn test
+
+# 集成测试与烟测，包含 Testcontainers
+mvn verify -Pintegration-test
+```
 
 ### 回归评测
 

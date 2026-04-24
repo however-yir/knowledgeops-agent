@@ -7,8 +7,10 @@ import com.enterprise.iqk.config.properties.IngestionProperties;
 import com.enterprise.iqk.ingestion.IngestionService;
 import com.enterprise.iqk.rag.RagAnswerService;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
+import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -44,7 +46,8 @@ public class PdfController {
     public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
                                        @RequestParam("file") MultipartFile file,
                                        @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
-        IngestionJob job = ingestionService.submitPdf(chatId, file, idempotencyKey, "");
+        String tenantId = currentTenantId();
+        IngestionJob job = ingestionService.submitPdf(tenantId, chatId, file, idempotencyKey, "");
         chatHistoryRepository.save("pdf", chatId);
         return IngestionSubmitVO.builder()
                 .ok(1)
@@ -68,7 +71,7 @@ public class PdfController {
 
     @GetMapping("/file/{chatId}")
     public ResponseEntity<Resource> download(@PathVariable("chatId") String chatId) {
-        List<IngestionJob> jobs = ingestionService.listByChatId(chatId, 1);
+        List<IngestionJob> jobs = ingestionService.listByChatId(currentTenantId(), chatId, 1);
         if (jobs.isEmpty()) {
             throw new ResponseStatusException(NOT_FOUND, "file not found");
         }
@@ -91,9 +94,16 @@ public class PdfController {
     public Flux<String> chat(@RequestParam("prompt") String prompt,
                              @RequestParam("chatId") String chatId,
                              @RequestParam(value = "modelProfile", required = false) String modelProfile) {
+        String tenantId = currentTenantId();
         chatHistoryRepository.save("pdf", chatId);
         String conversationId = ConversationIdHelper.build("pdf", chatId);
-        RagAnswerService.RagResult result = ragAnswerService.answer(prompt, sanitize(chatId), conversationId, modelProfile);
+        RagAnswerService.RagResult result = ragAnswerService.answer(
+                prompt,
+                tenantId,
+                sanitize(chatId),
+                conversationId,
+                modelProfile
+        );
         StringBuilder output = new StringBuilder(result.getAnswer());
         if (result.getCitations() != null && !result.getCitations().isEmpty()) {
             output.append("\n\n引用来源:\n");
@@ -109,5 +119,9 @@ public class PdfController {
             return "";
         }
         return value.replace("'", "");
+    }
+
+    private String currentTenantId() {
+        return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }
 }

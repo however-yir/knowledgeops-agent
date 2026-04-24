@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StringUtils;
 
 @RestController
 @RequestMapping("/cost")
@@ -24,7 +25,11 @@ public class CostGovernanceController {
     }
 
     @PostMapping("/budget")
-    public TenantCostSummaryVO updateBudget(@RequestBody TenantBudgetUpdateVO request) {
+    public TenantCostSummaryVO updateBudget(@RequestBody TenantBudgetUpdateVO request,
+                                            @RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId) {
+        if (request != null && !StringUtils.hasText(request.getTenantId())) {
+            request.setTenantId(TenantContext.normalize(tenantId));
+        }
         return tenantCostService.updateBudget(request);
     }
 }

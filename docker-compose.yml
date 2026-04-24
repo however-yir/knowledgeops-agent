@@ -15,7 +15,7 @@ services:
       APP_SECURITY_ENABLED: "true"
       APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-jwt-secret-change-this-in-prod-123456}
       APP_VECTOR_STORE_BACKEND: simple
-      APP_VECTOR_STORE_REQUIRE_PGVECTOR: "false"
+      APP_REQUIRE_PGVECTOR: "false"
       APP_INGESTION_QUEUE_BACKEND: redis_stream
       REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq

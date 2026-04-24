@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -56,16 +57,17 @@ class IngestionServiceTest {
         VectorStoreProperties vectorStoreProperties = new VectorStoreProperties();
         IngestionJob existing = IngestionJob.builder()
                 .jobId("job-x")
+                .tenantId("public")
                 .chatId("chat-1")
                 .status(com.enterprise.iqk.domain.enums.IngestionJobStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .build();
-        when(mapper.findByIdempotencyKey("client:k1")).thenReturn(existing);
+        when(mapper.findByIdempotencyKey("public", "client:k1")).thenReturn(existing);
 
         IngestionService service = buildService(mapper, vectorStore, ingestionProperties, vectorStoreProperties, queue, scanner);
 
         MockMultipartFile file = new MockMultipartFile("file", "a.pdf", "application/pdf", "pdf".getBytes());
-        IngestionJob job = service.submitPdf("chat-1", file, "k1", "trace-1");
+        IngestionJob job = service.submitPdf("public", "chat-1", file, "k1", "trace-1");
         assertEquals("job-x", job.getJobId());
         verify(mapper, never()).insert(org.mockito.ArgumentMatchers.<IngestionJob>any());
     }
@@ -76,7 +78,7 @@ class IngestionServiceTest {
         org.springframework.ai.vectorstore.VectorStore vectorStore = mock(org.springframework.ai.vectorstore.VectorStore.class);
         IngestionQueue queue = mock(IngestionQueue.class);
         FileSafetyScanner scanner = mock(FileSafetyScanner.class);
-        when(mapper.findByIdempotencyKey(any())).thenReturn(null);
+        when(mapper.findByIdempotencyKey(anyString(), anyString())).thenReturn(null);
 
         IngestionProperties ingestionProperties = new IngestionProperties();
         Path temp = Files.createTempDirectory("ingestion-test");
@@ -85,8 +87,9 @@ class IngestionServiceTest {
 
         IngestionService service = buildService(mapper, vectorStore, ingestionProperties, vectorStoreProperties, queue, scanner);
         MockMultipartFile file = new MockMultipartFile("file", "sample.pdf", "application/pdf", "dummy".getBytes());
-        IngestionJob job = service.submitPdf("chat-2", file, null, "trace-x");
+        IngestionJob job = service.submitPdf("public", "chat-2", file, null, "trace-x");
         assertNotNull(job.getJobId());
+        assertEquals("public", job.getTenantId());
         assertEquals("chat-2", job.getChatId());
         verify(mapper).insert(org.mockito.ArgumentMatchers.<IngestionJob>any());
         verify(queue).publishJob(any(), any());

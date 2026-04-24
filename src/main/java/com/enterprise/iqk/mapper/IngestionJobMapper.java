@@ -14,11 +14,25 @@ import java.util.List;
 @Mapper
 public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
 
-    @Select("SELECT * FROM ingestion_job WHERE idempotency_key = #{idempotencyKey} LIMIT 1")
-    IngestionJob findByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND idempotency_key = #{idempotencyKey}
+            LIMIT 1
+            """)
+    IngestionJob findByIdempotencyKey(@Param("tenantId") String tenantId,
+                                      @Param("idempotencyKey") String idempotencyKey);
 
     @Select("SELECT * FROM ingestion_job WHERE job_id = #{jobId} LIMIT 1")
     IngestionJob findByJobId(@Param("jobId") String jobId);
+
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND job_id = #{jobId}
+            LIMIT 1
+            """)
+    IngestionJob findByJobIdAndTenant(@Param("tenantId") String tenantId, @Param("jobId") String jobId);
 
     @Select("""
             SELECT * FROM ingestion_job
@@ -59,8 +73,16 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                             @Param("errorMessage") String errorMessage,
                             @Param("nextRetryAt") LocalDateTime nextRetryAt);
 
-    @Select("SELECT * FROM ingestion_job WHERE chat_id = #{chatId} ORDER BY created_at DESC LIMIT #{limit}")
-    List<IngestionJob> findLatestByChatId(@Param("chatId") String chatId, @Param("limit") int limit);
+    @Select("""
+            SELECT * FROM ingestion_job
+            WHERE tenant_id = #{tenantId}
+              AND chat_id = #{chatId}
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
+    List<IngestionJob> findLatestByChatId(@Param("tenantId") String tenantId,
+                                          @Param("chatId") String chatId,
+                                          @Param("limit") int limit);
 
     @Select("""
             SELECT * FROM ingestion_job

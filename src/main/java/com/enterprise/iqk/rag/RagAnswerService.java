@@ -17,7 +17,6 @@ import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.slf4j.MDC;
 
 import java.util.Arrays;
 import java.util.List;
@@ -38,12 +37,14 @@ public class RagAnswerService {
     private final MeterRegistry meterRegistry;
     private final TenantCostService tenantCostService;
 
-    public RagResult answer(String prompt, String chatId, String conversationId, String modelProfile) {
+    public RagResult answer(String prompt, String tenantId, String chatId, String conversationId, String modelProfile) {
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
         String pipelineOutcome = "error";
 
         try {
-            String filterExpression = "chat_id == '" + chatId.replace("'", "") + "'";
+            String normalizedTenantId = TenantContext.normalize(tenantId);
+            String filterExpression = "tenant_id == '" + sanitizeFilterValue(normalizedTenantId) + "' && chat_id == '"
+                    + sanitizeFilterValue(chatId) + "'";
             SearchRequest request = SearchRequest.builder()
                     .query(prompt)
                     .topK(ragProperties.getRetrieveTopK())
@@ -67,10 +68,9 @@ public class RagAnswerService {
                     .toList();
 
             String context = buildContext(selected);
-            String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
-            ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag", tenantId, chatId);
+            ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "rag", normalizedTenantId, chatId);
             long inputTokens = tenantCostService.estimateTokens(prompt + "\n" + context);
-            tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
+            tenantCostService.assertBudget(normalizedTenantId, decision.costTier(), inputTokens, 600);
             String answer = chatClient.prompt()
                     .options(ChatOptions.builder().model(decision.model()).build())
                     .system("你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
@@ -85,7 +85,7 @@ public class RagAnswerService {
                     .call()
                     .content();
             long outputTokens = tenantCostService.estimateTokens(answer);
-            tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "rag");
+            tenantCostService.recordUsage(normalizedTenantId, decision.costTier(), inputTokens, outputTokens, "rag");
 
             List<String> citations = selected.stream()
                     .map(this::citationText)
@@ -205,6 +205,10 @@ public class RagAnswerService {
 
     private String emptyIfBlank(String value) {
         return StringUtils.hasText(value) ? value : "";
+    }
+
+    private String sanitizeFilterValue(String value) {
+        return emptyIfBlank(value).replace("'", "");
     }
 
     @Data

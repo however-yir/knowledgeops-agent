@@ -39,6 +39,7 @@ data/
 reports/regression/latest.json
 reports/regression/latest.md
 evaluation/predictions.generated.json
+evaluation/predictions.live.json
 logs/*.log
 
 # --- Baseline Ignore Rules ---

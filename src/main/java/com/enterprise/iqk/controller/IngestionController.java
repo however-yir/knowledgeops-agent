@@ -7,8 +7,10 @@ import com.enterprise.iqk.config.properties.IngestionProperties;
 import com.enterprise.iqk.ingestion.IngestionProcessResult;
 import com.enterprise.iqk.ingestion.IngestionService;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
+import com.enterprise.iqk.security.TenantContext;
 import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -34,7 +36,7 @@ public class IngestionController {
                                        @RequestParam("file") MultipartFile file,
                                        @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
         String traceId = currentTraceId();
-        IngestionJob job = ingestionService.submitPdf(chatId, file, idempotencyKey, traceId);
+        IngestionJob job = ingestionService.submitPdf(currentTenantId(), chatId, file, idempotencyKey, traceId);
         chatHistoryRepository.save("pdf", chatId);
         return IngestionSubmitVO.builder()
                 .ok(1)
@@ -45,7 +47,7 @@ public class IngestionController {
 
     @GetMapping("/jobs/{jobId}")
     public IngestionJobVO getJob(@PathVariable String jobId) {
-        IngestionJob job = ingestionService.getByJobId(jobId);
+        IngestionJob job = ingestionService.getByJobId(currentTenantId(), jobId);
         if (job == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "job not found");
         }
@@ -55,7 +57,7 @@ public class IngestionController {
     @GetMapping("/jobs")
     public List<IngestionJobVO> getJobsByChatId(@RequestParam("chatId") String chatId,
                                                 @RequestParam(value = "limit", defaultValue = "20") int limit) {
-        return ingestionService.listByChatId(chatId, Math.max(1, Math.min(limit, 100)))
+        return ingestionService.listByChatId(currentTenantId(), chatId, Math.max(1, Math.min(limit, 100)))
                 .stream()
                 .map(this::toVO)
                 .toList();
@@ -71,6 +73,10 @@ public class IngestionController {
                     .msg("requeue=" + enqueued)
                     .job(null)
                     .build();
+        }
+        IngestionJob scopedJob = ingestionService.getByJobId(currentTenantId(), jobId);
+        if (scopedJob == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "job not found");
         }
         IngestionProcessResult processed = ingestionService.processQueuedJob(jobId, currentTraceId());
         boolean picked = processed.isPicked();
@@ -105,5 +111,9 @@ public class IngestionController {
         }
         String traceId = tracer.currentSpan().context().traceId();
         return StringUtils.hasText(traceId) ? traceId : "";
+    }
+
+    private String currentTenantId() {
+        return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }
 }

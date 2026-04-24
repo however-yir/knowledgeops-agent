@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Data
 @ConfigurationProperties(prefix = "app.security")
 public class SecurityProperties {
-    private boolean enabled = false;
+    private boolean enabled = true;
     private String jwtSecret;
     private int jwtExpireMinutes = 120;
     private int refreshExpireDays = 14;

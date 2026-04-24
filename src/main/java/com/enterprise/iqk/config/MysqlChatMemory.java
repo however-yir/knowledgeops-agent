@@ -3,8 +3,10 @@ package com.enterprise.iqk.config;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.enterprise.iqk.domain.Conversation;
 import com.enterprise.iqk.mapper.ConversationMapper;
+import com.enterprise.iqk.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.stereotype.Component;
@@ -23,8 +25,10 @@ public class MysqlChatMemory implements ChatMemory {
 
     @Override
     public void add(String conversationId, List<Message> messages) {
+        String tenantId = currentTenantId();
         for (Message message : messages) {
             Conversation conversation = Conversation.builder()
+                    .tenantId(tenantId)
                     .conversationId(conversationId)
                     .createTime(LocalDateTime.now())
                     .message(message.getText())
@@ -39,7 +43,7 @@ public class MysqlChatMemory implements ChatMemory {
         if (lastN <= 0) {
             return List.of();
         }
-        List<Conversation> records = conversationMapper.findLatestMessages(conversationId, lastN);
+        List<Conversation> records = conversationMapper.findLatestMessages(currentTenantId(), conversationId, lastN);
         if(records==null||records.size()==0){
             //没查到
             return new ArrayList<>();
@@ -66,7 +70,13 @@ public class MysqlChatMemory implements ChatMemory {
     @Override
     public void clear(String conversationId) {
         //sql：delete from conversation where conversation_id = ?
-        conversationMapper.delete(new LambdaQueryWrapper<Conversation>().eq(Conversation::getConversationId,conversationId));
+        conversationMapper.delete(new LambdaQueryWrapper<Conversation>()
+                .eq(Conversation::getTenantId, currentTenantId())
+                .eq(Conversation::getConversationId, conversationId));
         //清空所有对话
+    }
+
+    private String currentTenantId() {
+        return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }
 }

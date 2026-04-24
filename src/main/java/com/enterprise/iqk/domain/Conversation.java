@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 public class Conversation {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
+    private String tenantId;
     private String conversationId;
     private String message;
     private String type;

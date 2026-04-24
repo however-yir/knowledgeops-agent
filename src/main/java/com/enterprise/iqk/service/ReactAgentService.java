@@ -32,12 +32,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 @RequiredArgsConstructor
 public class ReactAgentService {
     private static final int MAX_STEPS = 4;
-    private static final int STREAM_CHUNK_SIZE = 16;
 
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
@@ -102,35 +103,95 @@ public class ReactAgentService {
     }
 
     public Flux<String> stream(ReactChatRequestVO request) {
-        return Flux.create(sink -> {
-            long startedNs = System.nanoTime();
-            Long firstTokenLatencyMs = null;
-            String outcome = "error";
-            try {
-                ReactChatResponseVO response = chat(request);
+        long startedNs = System.nanoTime();
+        AtomicReference<Long> firstTokenLatencyMsRef = new AtomicReference<>(null);
+        AtomicReference<String> outcomeRef = new AtomicReference<>("error");
 
-                for (ReactTraceStepVO step : response.getTrace()) {
-                    sink.next(formatSse("trace", toJson(step)));
-                }
-                for (String chunk : chunkAnswer(response.getAnswer())) {
-                    if (firstTokenLatencyMs == null) {
-                        firstTokenLatencyMs = elapsedMs(startedNs);
+        return Flux.defer(() -> {
+                    validateRequest(request);
+                    String tenantId = currentTenantId();
+                    ModelRouter.ModelRouteDecision routeDecision = resolveRouteDecision(
+                            request.getModelProfile(),
+                            "react",
+                            request.getChatId(),
+                            tenantId
+                    );
+
+                    List<ReactTraceStepVO> trace = new ArrayList<>();
+                    String rollingContext = "";
+                    String directAnswer = "";
+
+                    for (int step = 1; step <= MAX_STEPS; step++) {
+                        ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
+                        if ("finish".equals(decision.action())) {
+                            Map<String, Object> observation = new LinkedHashMap<>();
+                            observation.put("status", "completed");
+                            if (decision.citations() != null && !decision.citations().isEmpty()) {
+                                observation.put("citations", decision.citations());
+                            }
+                            if (decision.evidence() != null && !decision.evidence().isEmpty()) {
+                                observation.put("evidence", decision.evidence());
+                            }
+                            trace.add(ReactTraceStepVO.builder()
+                                    .step(step)
+                                    .thought(decision.thought())
+                                    .action("finish")
+                                    .actionInput(decision.actionInput())
+                                    .observation(observation)
+                                    .build());
+                            directAnswer = emptyIfBlank(decision.answer());
+                            break;
+                        }
+
+                        Object observation = executeAction(request, decision.action(), decision.actionInput());
+                        trace.add(ReactTraceStepVO.builder()
+                                .step(step)
+                                .thought(decision.thought())
+                                .action(decision.action())
+                                .actionInput(decision.actionInput())
+                                .observation(observation)
+                                .build());
+                        rollingContext = appendContext(rollingContext, decision.action(), observation);
                     }
-                    sink.next(formatSse("token", toJson(Map.of("token", chunk))));
-                }
-                if (firstTokenLatencyMs == null) {
-                    firstTokenLatencyMs = elapsedMs(startedNs);
-                }
-                sink.next(formatSse("done", toJson(response)));
-                outcome = "success";
-                sink.complete();
-            } catch (Exception ex) {
-                sink.next(formatSse("error", toJson(Map.of("message", ex.getMessage()))));
-                sink.complete();
-            } finally {
-                recordStreamMetrics(startedNs, firstTokenLatencyMs, outcome);
-            }
-        });
+
+                    Flux<String> traceFlux = Flux.fromIterable(trace)
+                            .map(step -> formatSse("trace", toJson(step)));
+                    StringBuilder answerBuilder = new StringBuilder();
+
+                    Flux<String> answerSourceFlux = StringUtils.hasText(directAnswer)
+                            ? Flux.just(directAnswer)
+                            : callModelStream(
+                            "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
+                            buildFinalPrompt(request, trace, rollingContext),
+                            routeDecision,
+                            tenantId,
+                            "react_final"
+                    );
+
+                    Flux<String> tokenFlux = answerSourceFlux
+                            .map(token -> {
+                                if (firstTokenLatencyMsRef.get() == null) {
+                                    firstTokenLatencyMsRef.set(elapsedMs(startedNs));
+                                }
+                                answerBuilder.append(token);
+                                return formatSse("token", toJson(Map.of("token", token)));
+                            });
+
+                    return Flux.concat(traceFlux, tokenFlux)
+                            .concatWith(Flux.defer(() -> {
+                                if (firstTokenLatencyMsRef.get() == null) {
+                                    firstTokenLatencyMsRef.set(elapsedMs(startedNs));
+                                }
+                                ReactChatResponseVO response = success(request.getChatId(), answerBuilder.toString(), trace, routeDecision);
+                                outcomeRef.set("success");
+                                return Flux.just(formatSse("done", toJson(response)));
+                            }));
+                })
+                .onErrorResume(ex -> {
+                    String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "stream failed";
+                    return Flux.just(formatSse("error", toJson(Map.of("message", message))));
+                })
+                .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenLatencyMsRef.get(), outcomeRef.get()));
     }
 
     private long elapsedMs(long startedNs) {
@@ -268,8 +329,10 @@ public class ReactAgentService {
     private Map<String, Object> executeRagSearch(ReactChatRequestVO request, Map<String, Object> actionInput) {
         String query = stringVal(actionInput, "query", request.getPrompt());
         String conversationId = ConversationIdHelper.build("react", request.getChatId());
+        String tenantId = currentTenantId();
         RagAnswerService.RagResult result = ragAnswerService.answer(
                 query,
+                tenantId,
                 sanitizeChatId(request.getChatId()),
                 conversationId,
                 request.getModelProfile()
@@ -311,18 +374,7 @@ public class ReactAgentService {
                                    String rollingContext,
                                    ModelRouter.ModelRouteDecision routeDecision,
                                    String tenantId) {
-        String finalPrompt = """
-                用户问题:
-                %s
-
-                ReAct轨迹:
-                %s
-
-                观察上下文:
-                %s
-
-                请输出最终中文答案，要求简洁、可执行、结构清晰。
-                """.formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
+        String finalPrompt = buildFinalPrompt(request, trace, rollingContext);
         try {
             String answer = callModel(
                     "你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
@@ -338,6 +390,23 @@ public class ReactAgentService {
             // fallback below
         }
         return "当前未能生成最终答案，请稍后重试。";
+    }
+
+    private String buildFinalPrompt(ReactChatRequestVO request,
+                                    List<ReactTraceStepVO> trace,
+                                    String rollingContext) {
+        return """
+                用户问题:
+                %s
+
+                ReAct轨迹:
+                %s
+
+                观察上下文:
+                %s
+
+                请输出最终中文答案，要求简洁、可执行、结构清晰。
+                """.formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
     }
 
     private ModelRouter.ModelRouteDecision resolveRouteDecision(String requestedProfile,
@@ -367,6 +436,31 @@ public class ReactAgentService {
         long outputTokens = tenantCostService.estimateTokens(output);
         tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens, outputTokens, endpointTag);
         return output;
+    }
+
+    private Flux<String> callModelStream(String systemPrompt,
+                                         String userPrompt,
+                                         ModelRouter.ModelRouteDecision routeDecision,
+                                         String tenantId,
+                                         String endpointTag) {
+        long inputTokens = tenantCostService.estimateTokens(systemPrompt) + tenantCostService.estimateTokens(userPrompt);
+        tenantCostService.assertBudget(tenantId, routeDecision.costTier(), inputTokens, 600);
+
+        StringBuilder outputCollector = new StringBuilder();
+        AtomicBoolean usageRecorded = new AtomicBoolean(false);
+        return routedPrompt(routeDecision)
+                .system(systemPrompt)
+                .user(userPrompt)
+                .stream()
+                .content()
+                .doOnNext(chunk -> outputCollector.append(emptyIfBlank(chunk)))
+                .doFinally(signalType -> {
+                    if (!usageRecorded.compareAndSet(false, true)) {
+                        return;
+                    }
+                    long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
+                    tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens, outputTokens, endpointTag);
+                });
     }
 
     private ReasonDecision parseDecision(String rawModelOutput) {
@@ -542,19 +636,6 @@ public class ReactAgentService {
                 .experimentBucket(routeDecision == null ? null : routeDecision.experimentBucket())
                 .trace(trace)
                 .build();
-    }
-
-    private List<String> chunkAnswer(String answer) {
-        String safeAnswer = emptyIfBlank(answer);
-        if (!StringUtils.hasText(safeAnswer)) {
-            return List.of();
-        }
-        List<String> chunks = new ArrayList<>();
-        for (int i = 0; i < safeAnswer.length(); i += STREAM_CHUNK_SIZE) {
-            int end = Math.min(i + STREAM_CHUNK_SIZE, safeAnswer.length());
-            chunks.add(safeAnswer.substring(i, end));
-        }
-        return chunks;
     }
 
     private String formatSse(String event, String data) {

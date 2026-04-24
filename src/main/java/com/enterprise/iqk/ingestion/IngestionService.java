@@ -1,6 +1,5 @@
 package com.enterprise.iqk.ingestion;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.enterprise.iqk.config.properties.IngestionProperties;
 import com.enterprise.iqk.config.properties.RagProperties;
 import com.enterprise.iqk.config.properties.VectorStoreProperties;
@@ -9,6 +8,7 @@ import com.enterprise.iqk.domain.enums.IngestionJobStatus;
 import com.enterprise.iqk.ingestion.queue.IngestionQueue;
 import com.enterprise.iqk.mapper.IngestionJobMapper;
 import com.enterprise.iqk.security.FileSafetyScanner;
+import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.util.HashUtils;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -52,7 +52,8 @@ public class IngestionService {
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
 
-    public IngestionJob submitPdf(String chatId, MultipartFile file, String idempotencyKey, String traceId) {
+    public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
+        String normalizedTenantId = TenantContext.normalize(tenantId);
         if (!StringUtils.hasText(chatId)) {
             throw new IllegalArgumentException("chatId is required");
         }
@@ -62,8 +63,8 @@ public class IngestionService {
         fileSafetyScanner.scan(file);
 
         String sourceName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "unknown.pdf";
-        String normalizedKey = normalizeIdempotencyKey(chatId, file, idempotencyKey);
-        IngestionJob existing = ingestionJobMapper.findByIdempotencyKey(normalizedKey);
+        String normalizedKey = normalizeIdempotencyKey(normalizedTenantId, chatId, file, idempotencyKey);
+        IngestionJob existing = ingestionJobMapper.findByIdempotencyKey(normalizedTenantId, normalizedKey);
         if (existing != null) {
             return existing;
         }
@@ -73,6 +74,7 @@ public class IngestionService {
         String filePath = persistFile(jobId, sourceName, file);
         IngestionJob job = IngestionJob.builder()
                 .jobId(jobId)
+                .tenantId(normalizedTenantId)
                 .chatId(chatId)
                 .sourceType("PDF")
                 .sourceName(sourceName)
@@ -92,11 +94,12 @@ public class IngestionService {
             }
             Counter.builder("ingestion.jobs.submitted")
                     .tag("source", "pdf")
+                    .tag("tenant", normalizedTenantId)
                     .register(meterRegistry)
                     .increment();
             return job;
         } catch (DuplicateKeyException duplicateKeyException) {
-            IngestionJob concurrent = ingestionJobMapper.findByIdempotencyKey(normalizedKey);
+            IngestionJob concurrent = ingestionJobMapper.findByIdempotencyKey(normalizedTenantId, normalizedKey);
             if (concurrent != null) {
                 return concurrent;
             }
@@ -104,12 +107,12 @@ public class IngestionService {
         }
     }
 
-    public IngestionJob getByJobId(String jobId) {
-        return ingestionJobMapper.findByJobId(jobId);
+    public IngestionJob getByJobId(String tenantId, String jobId) {
+        return ingestionJobMapper.findByJobIdAndTenant(TenantContext.normalize(tenantId), jobId);
     }
 
-    public List<IngestionJob> listByChatId(String chatId, int limit) {
-        return ingestionJobMapper.findLatestByChatId(chatId, Math.max(limit, 1));
+    public List<IngestionJob> listByChatId(String tenantId, String chatId, int limit) {
+        return ingestionJobMapper.findLatestByChatId(TenantContext.normalize(tenantId), chatId, Math.max(limit, 1));
     }
 
     public IngestionProcessResult processQueuedJob(String jobId, String traceId) {
@@ -133,7 +136,7 @@ public class IngestionService {
                     .build();
         }
 
-        IngestionJob running = getByJobId(jobId);
+        IngestionJob running = ingestionJobMapper.findByJobId(jobId);
         if (running == null) {
             return IngestionProcessResult.builder()
                     .picked(false)
@@ -145,6 +148,7 @@ public class IngestionService {
         }
 
         Timer.Sample sample = Timer.start(meterRegistry);
+        String tenantTag = TenantContext.normalize(running.getTenantId());
         try {
             processPdfJob(running);
             ingestionJobMapper.updateTerminalState(
@@ -157,9 +161,11 @@ public class IngestionService {
             );
             sample.stop(Timer.builder("ingestion.jobs.duration")
                     .tag("status", "succeeded")
+                    .tag("tenant", tenantTag)
                     .register(meterRegistry));
             Counter.builder("ingestion.jobs.finished")
                     .tag("status", "succeeded")
+                    .tag("tenant", tenantTag)
                     .register(meterRegistry)
                     .increment();
             return IngestionProcessResult.builder()
@@ -170,7 +176,7 @@ public class IngestionService {
                     .build();
         } catch (Exception ex) {
             log.error("Failed to process ingestion job: {}", running.getJobId(), ex);
-            IngestionJob latest = getByJobId(running.getJobId());
+            IngestionJob latest = ingestionJobMapper.findByJobId(running.getJobId());
             int attempts = latest != null && latest.getAttemptCount() != null ? latest.getAttemptCount() : 1;
             int maxRetries = latest != null && latest.getMaxRetries() != null ? latest.getMaxRetries() : ingestionProperties.getMaxRetries();
 
@@ -191,9 +197,11 @@ public class IngestionService {
             );
             sample.stop(Timer.builder("ingestion.jobs.duration")
                     .tag("status", nextStatus.name().toLowerCase())
+                    .tag("tenant", tenantTag)
                     .register(meterRegistry));
             Counter.builder("ingestion.jobs.finished")
                     .tag("status", nextStatus.name().toLowerCase())
+                    .tag("tenant", tenantTag)
                     .register(meterRegistry)
                     .increment();
 
@@ -256,6 +264,7 @@ public class IngestionService {
         for (int i = 0; i < chunks.size(); i++) {
             Document chunk = chunks.get(i);
             Map<String, Object> metadata = new HashMap<>(chunk.getMetadata());
+            metadata.put("tenant_id", TenantContext.normalize(job.getTenantId()));
             metadata.put("chat_id", job.getChatId());
             metadata.put("job_id", job.getJobId());
             metadata.put("file_name", job.getSourceName());
@@ -299,12 +308,17 @@ public class IngestionService {
         }
     }
 
-    private String normalizeIdempotencyKey(String chatId, MultipartFile file, String provided) {
+    private String normalizeIdempotencyKey(String tenantId, String chatId, MultipartFile file, String provided) {
         if (StringUtils.hasText(provided)) {
             return "client:" + provided.trim();
         }
-        String seed = chatId + "|" + file.getOriginalFilename() + "|" + file.getSize();
-        return "auto:" + HashUtils.sha256Hex(seed);
+        try {
+            String contentHash = HashUtils.sha256Hex(file.getInputStream());
+            return "auto:" + HashUtils.sha256Hex(tenantId + "|" + chatId + "|" + contentHash);
+        } catch (IOException e) {
+            String seed = tenantId + "|" + chatId + "|" + file.getOriginalFilename() + "|" + file.getSize();
+            return "auto:" + HashUtils.sha256Hex(seed);
+        }
     }
 
     private String truncateError(String msg) {
