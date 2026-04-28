@@ -40,11 +40,11 @@ Expected local surfaces:
 
 ## Authenticate
 
-The local development seed includes a demo administrator API key:
+The local development seed includes a demo administrator API key. Use the seeded value from `.env.example` or the frontend authentication card.
 
 ```bash
 curl -X POST http://localhost:8080/auth/token \
-  -H "X-API-Key: dev-admin-key-2026" \
+  -H "X-API-Key: <local-demo-api-key>" \
   -H "X-Tenant-Id: default"
 ```
 
@@ -54,7 +54,7 @@ Use the returned JWT as `Authorization: Bearer <token>` for protected routes. Th
 
 ```bash
 curl "http://localhost:8080/ai/chat?prompt=hello&chatId=demo-chat" \
-  -H "X-API-Key: dev-admin-key-2026" \
+  -H "X-API-Key: <local-demo-api-key>" \
   -H "X-Tenant-Id: default"
 ```
 

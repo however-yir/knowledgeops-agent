@@ -33,7 +33,7 @@ After startup:
 - Frontend console: `http://localhost:8088`
 - Backend API: `http://localhost:8080`
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- Local demo API key: `dev-admin-key-2026`
+- Local demo API key: see the seeded development value in `.env.example` or the authentication card in the frontend console.
 
 ## Links
 
@@ -255,9 +255,7 @@ docker compose up --build -d
 - 后端 API：`http://localhost:8080`
 - RabbitMQ 控制台：`http://localhost:15672`
 
-本仓库内置开发演示用管理员 API Key（仅限本地演示，生产必须轮换）：
-
-- `dev-admin-key-2026`
+本仓库内置开发演示用管理员 API Key（仅限本地演示，生产必须轮换）。具体值请查看 `.env.example` 或前端「鉴权」卡片。
 
 可在前端「鉴权」卡片中直接换取 JWT，或用 `X-API-Key` 直接请求接口。
 

@@ -6,7 +6,7 @@ These recipes assume the local Docker Compose stack is running on `http://localh
 
 ```bash
 export BASE_URL=http://localhost:8080
-export API_KEY=dev-admin-key-2026
+export API_KEY=<local-demo-api-key>
 export TENANT_ID=default
 ```
 
@@ -16,7 +16,7 @@ Most local examples can use the seeded API key:
 -H "X-API-Key: $API_KEY" -H "X-Tenant-Id: $TENANT_ID"
 ```
 
-For JWT-based calls, exchange the API key first:
+For JWT-based calls, set `API_KEY` to the seeded development value from `.env.example`, then exchange the API key first:
 
 ```bash
 curl -X POST "$BASE_URL/auth/token" \
