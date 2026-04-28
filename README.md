@@ -488,6 +488,8 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 ## 文档索引
 
 - 运维手册：[docs/operations.md](docs/operations.md)
+- 快速上手：[docs/getting-started.md](docs/getting-started.md)
+- API 示例：[docs/api-recipes.md](docs/api-recipes.md)
 - 企业部署指南：[docs/deployment-enterprise.md](docs/deployment-enterprise.md)
 - 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 - 分布式演练：[docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
