@@ -1,5 +1,7 @@
 # KnowledgeOps Agent | Intelligent Q&A and Knowledge Retrieval Platform | 智能问答与知识检索平台
 
+[![CI](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml)
+
 🔥 Enterprise-ready Spring AI platform for intelligent Q&A, retrieval augmentation, controlled tool execution, and ReAct visualization.  
 🚀 Built with Spring Boot, Spring AI, MySQL, Redis/RabbitMQ, pgvector, and full observability components.  
 ⭐ Supports secure deployment, asynchronous ingestion, auditability, and production operations.
