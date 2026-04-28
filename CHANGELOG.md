@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+- No unreleased changes yet.
+
+## [1.0.0] - 2026-04-28
+
 ### Added
 - Redis Stream ingestion queue with DLQ, retry re-enqueue, and multi-worker concurrency.
 - RabbitMQ ingestion queue backend with dedicated queue/DLX/DLQ declarations and concurrent listeners.
