@@ -8,6 +8,7 @@ KnowledgeOps Agent is an enterprise-ready Spring AI platform for intelligent Q&A
 - [Enterprise Architecture](architecture-enterprise.md)
 - [Enterprise Deployment Guide](deployment-enterprise.md)
 - [Operations Manual](operations.md)
+- [Roadmap](roadmap.md)
 - [Distributed and Observability Drill](drills/distributed-and-observability-drill.md)
 - [Runbook Template](drills/runbook_template.md)
 

@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an improvement or roadmap item.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or operator problem should this solve?
+      placeholder: Teams deploying KnowledgeOps Agent to Kubernetes need...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the desired behavior, API, configuration, or workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - RAG and retrieval
+        - Agent and tool calling
+        - Security and governance
+        - Observability and operations
+        - Deployment
+        - Frontend console
+        - Documentation

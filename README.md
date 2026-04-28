@@ -1,24 +1,56 @@
-# KnowledgeOps Agent | Intelligent Q&A and Knowledge Retrieval Platform | 智能问答与知识检索平台
+# KnowledgeOps Agent | Enterprise Spring AI RAG Platform | 智能问答与知识运营平台
 
 [![CI](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/however-yir/knowledgeops-agent)](https://github.com/however-yir/knowledgeops-agent/releases)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://however-yir.github.io/knowledgeops-agent/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 
-🔥 Enterprise-ready Spring AI platform for intelligent Q&A, retrieval augmentation, controlled tool execution, and ReAct visualization.  
-🚀 Built with Spring Boot, Spring AI, MySQL, Redis/RabbitMQ, pgvector, and full observability components.  
-⭐ Supports secure deployment, asynchronous ingestion, auditability, and production operations.
+KnowledgeOps Agent is an enterprise-ready Spring AI platform for intelligent Q&A, retrieval-augmented generation, controlled tool execution, asynchronous document ingestion, tenant-aware security, and production observability.
 
 > 一个面向企业落地的智能问答与知识检索平台全栈工程，覆盖“会话问答、知识入库、检索增强、工具调用、安全治理、可观测与运维”全链路。  
 > 本仓库定位为可部署、可运维、可扩展的生产级基线，面向长期业务迭代。
 
-## 项目主周期（Main Timeline）
+## Highlights
 
-- `main 日期`：`2025.07 - 2025.09`
-- `推进次数`：约 `10` 次（按里程碑拆分提交）
+- Production RAG: PDF ingestion, tenant-scoped pgvector retrieval, answer citations, and multi-document fusion.
+- Agent workflows: Spring AI chat, tool calling, ReAct trace payloads, and true SSE token streaming.
+- Enterprise controls: API Key, JWT, refresh tokens, RBAC, tenant isolation, rate limiting, and audit logs.
+- Operations baseline: Docker Compose, Flyway migrations, Prometheus, Loki, Tempo, Alertmanager, CI, regression gates, and k6 load tests.
+
+## Quick Start
+
+```bash
+git clone https://github.com/however-yir/knowledgeops-agent.git
+cd knowledgeops-agent
+cp .env.example .env
+# set OPENAI_API_KEY in .env
+docker compose up --build -d
+```
+
+After startup:
+
+- Frontend console: `http://localhost:8088`
+- Backend API: `http://localhost:8080`
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- Local demo API key: `dev-admin-key-2026`
+
+## Links
+
+- Documentation: [however-yir.github.io/knowledgeops-agent](https://however-yir.github.io/knowledgeops-agent/)
+- Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
+- Operations guide: [docs/operations.md](docs/operations.md)
+- Enterprise architecture: [docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 
 ---
 
 ## 目录
 
+- Highlights
+- Quick Start
+- Links
 - 项目定位
+- Why KnowledgeOps Agent?
 - 企业级能力矩阵
 - 技术栈与版本基线
 - 架构总览
@@ -34,6 +66,7 @@
 - 性能与容量规划
 - 文档索引
 - 路线图
+- 项目主周期
 
 ---
 
@@ -51,6 +84,19 @@
 - 智能客服与企业知识问答
 - 内部知识库检索问答（文档上传、切片、向量化、检索）
 - 需要 AI + 业务工具联合执行的流程型场景
+
+---
+
+## Why KnowledgeOps Agent?
+
+| Capability | KnowledgeOps Agent | Typical RAG demo | Typical Spring AI sample |
+|---|---|---|---|
+| Deployable full stack | Spring Boot API, Vue console, MySQL, Redis/RabbitMQ, pgvector, Docker Compose | Often API-only or notebook-level | Usually focused on one framework feature |
+| Tenant-aware security | API Key, JWT, refresh tokens, RBAC, tenant headers, audit logs, rate limits | Rarely included | Usually omitted for clarity |
+| Async ingestion | Redis Stream or RabbitMQ queues, retries, DLQ, idempotency, job status | Often synchronous upload and parse | Usually sample-specific |
+| RAG production path | Tenant-scoped retrieval, citations, chunking, reranking hooks, pgvector indexes | Basic vector lookup | Demonstrates core API usage |
+| Observability | Prometheus, Loki, Tempo, Alertmanager, structured logs, runbooks | Usually absent | Minimal or external |
+| Quality gates | Unit tests, integration tests, CI, regression evaluation, k6 load scripts | Manual validation | Varies by example |
 
 ---
 
@@ -457,6 +503,15 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [ ] 检索重排策略可插拔实现
 - [ ] 告警自动化处置脚本
 - [ ] 企业 SSO（OIDC/SAML）接入
+
+See the release-oriented roadmap in [docs/roadmap.md](docs/roadmap.md).
+
+---
+
+## 项目主周期（Main Timeline）
+
+- `main 日期`：`2025.07 - 2025.09`
+- `推进次数`：约 `10` 次（按里程碑拆分提交）
 
 ---
 

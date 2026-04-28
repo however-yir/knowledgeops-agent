@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible problem in KnowledgeOps Agent.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve KnowledgeOps Agent. Please include enough detail for maintainers to reproduce the issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: The ingestion job remains pending after...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: List the smallest set of steps that reproduces the problem.
+      placeholder: |
+        1. Start with docker compose up --build -d
+        2. Upload a PDF with ...
+        3. Query ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v1.0.0 or commit SHA
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Java version, Docker version, database/vector backend, queue backend
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: shell
