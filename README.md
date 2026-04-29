@@ -68,6 +68,18 @@ make demo-down
 - Operations guide: [docs/operations.md](docs/operations.md)
 - Enterprise architecture: [docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 
+## AI 工程作品矩阵
+
+KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Spring AI RAG 平台”。这组主项目覆盖企业 RAG、业务 Agent、知识治理、AI 工程执行平台和云原生微服务集成五类方向。
+
+| Repo | 定位 | 核心场景 | 技术重点 |
+|---|---|---|---|
+| [`knowledgeops-agent`](https://github.com/however-yir/knowledgeops-agent) | 企业级 Spring AI RAG 平台 | 企业知识问答、权限治理、可观测部署 | Spring AI、RAG、JWT/RBAC、异步入库、Observability |
+| [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) | 业务 Agent 工程案例 | 课程咨询、课程推荐、购买流程、多智能体路由 | Java、Spring AI、Tool Calling、MCP、SSE、多模态 |
+| [`nebula-kb`](https://github.com/however-yir/nebula-kb) | 知识运营中枢 | 知识入库、知识治理、检索问答、反馈闭环 | Django、PostgreSQL、Redis、知识资产生命周期 |
+| [`forgepilot-studio`](https://github.com/however-yir/forgepilot-studio) | AI 工程执行工作台 | AI 编程任务、执行编排、审计回放、团队工作台 | Python、FastAPI、React、Runtime Sandbox、MCP |
+| [`however-microservices-lab`](https://github.com/however-yir/however-microservices-lab) | 云原生微服务 + AI 集成实验室 | 多语言微服务、Kubernetes、gRPC、AI 服务接入 | Go、Python、Java、Node.js、C#、K8s、Ollama/Gemini |
+
 ---
 
 ## 目录
@@ -77,6 +89,7 @@ make demo-down
 - Architecture At a Glance
 - 5-Minute Proof Path
 - Evidence Links
+- AI 工程作品矩阵
 - 项目定位
 - Why KnowledgeOps Agent?
 - 企业级能力矩阵
