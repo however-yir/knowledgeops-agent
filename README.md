@@ -10,7 +10,7 @@ KnowledgeOps Agent is an enterprise Spring AI RAG platform that turns document k
 
 > 面向企业知识运营场景的 Spring AI RAG 旗舰项目：覆盖“企业 RAG、租户隔离、异步入库、权限审计、可观测、回归评测”全链路，目标是提供可部署、可运维、可验证的生产级工程基线。
 
-![KnowledgeOps Agent console](docs/assets/console-overview.png)
+![KnowledgeOps Agent demo](docs/assets/screenshots/demo.gif)
 
 ## Why It Is More Than a Demo
 
