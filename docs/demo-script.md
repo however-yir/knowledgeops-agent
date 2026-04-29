@@ -32,9 +32,10 @@ export CHAT_ID=heat-safety-demo
 curl -X POST "$BASE_URL/ingestion/upload/$CHAT_ID" \
   -H "X-API-Key: $API_KEY" \
   -H "X-Tenant-Id: $TENANT_ID" \
-  -H "X-Idempotency-Key: heat-safety-policy-v1" \
   -F "file=@demo-data/heat-safety-policy.pdf"
 ```
+
+For idempotency validation, repeat the upload with your own non-sensitive idempotency header value and confirm the job is not duplicated.
 
 Record the returned `jobId`.
 
