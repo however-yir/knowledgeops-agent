@@ -107,7 +107,6 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Sprin
 - 性能与容量规划
 - 文档索引
 - 路线图
-- 项目主周期
 
 ---
 
@@ -557,13 +556,6 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [ ] 企业 SSO（OIDC/SAML）接入
 
 See the release-oriented roadmap in [docs/roadmap.md](docs/roadmap.md).
-
----
-
-## 项目主周期（Main Timeline）
-
-- `main 日期`：`2025.07 - 2025.09`
-- `推进次数`：约 `10` 次（按里程碑拆分提交）
 
 ---
 
