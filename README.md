@@ -23,9 +23,7 @@ KnowledgeOps Agent is an enterprise-ready Spring AI platform for intelligent Q&A
 ```bash
 git clone https://github.com/however-yir/knowledgeops-agent.git
 cd knowledgeops-agent
-cp .env.example .env
-# set OPENAI_API_KEY in .env
-docker compose up --build -d
+./scripts/demo.sh
 ```
 
 After startup:
@@ -34,6 +32,14 @@ After startup:
 - Backend API: `http://localhost:8080`
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
 - Local demo API key: see the seeded development value in `.env.example` or the authentication card in the frontend console.
+
+Prefer Make targets if you use `make`:
+
+```bash
+make demo
+make demo-verify
+make demo-down
+```
 
 ## Links
 
@@ -244,6 +250,14 @@ mvn spring-boot:run
 默认端口：`8080`
 
 ### 一键容器启动（应用 + 中间件）
+
+推荐使用 demo 脚本，它会生成本地 `.env.demo`、启动容器、等待健康检查，并执行一次端到端 smoke test：
+
+```bash
+./scripts/demo.sh
+```
+
+也可以直接使用 Docker Compose：
 
 ```bash
 docker compose up --build -d

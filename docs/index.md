@@ -15,7 +15,7 @@ KnowledgeOps Agent is an enterprise-ready Spring AI platform for intelligent Q&A
 
 ## Recommended First 15 Minutes
 
-1. Start with [Getting Started](getting-started.md) and confirm `/actuator/health` is up.
+1. Start with [Getting Started](getting-started.md) and run `./scripts/demo.sh`.
 2. Use [API Recipes](api-recipes.md) to exchange the demo API key for a JWT.
 3. Try `/ai/chat`, upload a PDF with `/ingestion/upload/{chatId}`, then query `/ai/pdf/chat`.
 4. Review [Enterprise Architecture](architecture-enterprise.md) to understand the production path.

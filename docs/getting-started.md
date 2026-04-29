@@ -13,14 +13,16 @@ This guide gets KnowledgeOps Agent running locally with Docker Compose and verif
 ```bash
 git clone https://github.com/however-yir/knowledgeops-agent.git
 cd knowledgeops-agent
-cp .env.example .env
+./scripts/demo.sh
 ```
 
-Set `OPENAI_API_KEY` in `.env`, then start the stack:
+The demo script creates a gitignored `.env.demo` file when missing, starts the Docker Compose stack, waits for API/web health checks, and runs a smoke test.
 
 ```bash
-docker compose up --build -d
+make demo
 ```
+
+Use `make demo` when you prefer Make targets.
 
 ## Verify Startup
 
@@ -61,10 +63,20 @@ curl "http://localhost:8080/ai/chat?prompt=hello&chatId=demo-chat" \
 ## Shut Down
 
 ```bash
-docker compose down
+./scripts/demo.sh down
 ```
 
 Use `docker compose down -v` only when you intentionally want to remove local volumes.
+
+## Demo Script Commands
+
+```bash
+./scripts/demo.sh verify
+./scripts/demo.sh logs
+./scripts/demo.sh down
+```
+
+Use `DEMO_RESET=1 ./scripts/demo.sh` when you intentionally want to remove demo volumes before startup.
 
 ## Next Steps
 
