@@ -6,19 +6,38 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 
-KnowledgeOps Agent is an enterprise-ready Spring AI platform for intelligent Q&A, retrieval-augmented generation, controlled tool execution, asynchronous document ingestion, tenant-aware security, and production observability.
+KnowledgeOps Agent is an enterprise Spring AI RAG platform that turns document knowledge into deployable, governed, and measurable AI workflows. It combines tenant-isolated retrieval, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, Prometheus/Loki/Tempo observability, and regression evaluation so teams can verify the system as a platform instead of treating it as a one-off demo.
 
-> 一个面向企业落地的智能问答与知识检索平台全栈工程，覆盖“会话问答、知识入库、检索增强、工具调用、安全治理、可观测与运维”全链路。  
-> 本仓库定位为可部署、可运维、可扩展的生产级基线，面向长期业务迭代。
+> 面向企业知识运营场景的 Spring AI RAG 旗舰项目：覆盖“企业 RAG、租户隔离、异步入库、权限审计、可观测、回归评测”全链路，目标是提供可部署、可运维、可验证的生产级工程基线。
 
-## Highlights
+![KnowledgeOps Agent console](docs/assets/console-overview.png)
 
-- Production RAG: PDF ingestion, tenant-scoped pgvector retrieval, answer citations, and multi-document fusion.
-- Agent workflows: Spring AI chat, tool calling, ReAct trace payloads, and true SSE token streaming.
-- Enterprise controls: API Key, JWT, refresh tokens, RBAC, tenant isolation, rate limiting, and audit logs.
-- Operations baseline: Docker Compose, Flyway migrations, Prometheus, Loki, Tempo, Alertmanager, CI, regression gates, and k6 load tests.
+## Why It Is More Than a Demo
 
-## Quick Start
+| Proof point | Repository evidence |
+|---|---|
+| Enterprise RAG | PDF upload, async ingestion jobs, tenant-scoped retrieval, answer citations, evidence snippets |
+| Tenant and permission boundary | API Key, JWT, refresh token lifecycle, RBAC permissions, tenant headers, audit logging |
+| Operations baseline | Docker Compose, Flyway migrations, structured logs, Prometheus metrics, Loki logs, Tempo traces, Alertmanager rules |
+| Quality evidence | Unit tests, Testcontainers integration tests, JaCoCo, regression evaluation, E2E smoke logs, Docker image build |
+| Extensible AI workflow | Spring AI chat, ReAct trace payloads, SSE token streaming, model routing, tool execution hooks |
+
+## Product Surfaces
+
+| Surface | What to inspect |
+|---|---|
+| Console workspace | Session branches, streaming mode, model profile, JWT/API key auth, tenant context |
+| RAG answer | Citation chips, evidence snippets, empty-result fallback policy |
+| API surface | Swagger UI, curl recipes, chat/RAG/ingestion/auth/audit endpoints |
+| Operations surface | Health, Prometheus metrics, E2E artifacts, regression reports, container image |
+
+![RAG answer with citations](docs/assets/rag-answer-citations.png)
+
+## Architecture At a Glance
+
+![KnowledgeOps Agent architecture](docs/assets/architecture-overview.svg)
+
+## 5-Minute Proof Path
 
 ```bash
 git clone https://github.com/however-yir/knowledgeops-agent.git
@@ -41,10 +60,11 @@ make demo-verify
 make demo-down
 ```
 
-## Links
+## Evidence Links
 
 - Documentation: [however-yir.github.io/knowledgeops-agent](https://however-yir.github.io/knowledgeops-agent/)
 - Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
+- Reproducible demo script: [docs/demo-script.md](docs/demo-script.md)
 - Operations guide: [docs/operations.md](docs/operations.md)
 - Enterprise architecture: [docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 
@@ -52,9 +72,11 @@ make demo-down
 
 ## 目录
 
-- Highlights
-- Quick Start
-- Links
+- Why It Is More Than a Demo
+- Product Surfaces
+- Architecture At a Glance
+- 5-Minute Proof Path
+- Evidence Links
 - 项目定位
 - Why KnowledgeOps Agent?
 - 企业级能力矩阵
@@ -78,7 +100,9 @@ make demo-down
 
 ## 项目定位
 
-本项目提供企业场景下可直接对接业务系统的 AI 后端能力，重点解决以下问题：
+本项目按“企业级 Spring AI RAG 平台”设计，不停留在单接口聊天示例，而是把知识入库、检索问答、租户与权限边界、审计可追溯、可观测运维、质量回归放在同一条可验证链路里。它适合作为企业知识库、智能客服、内部运营助手或 AI 平台工程基线继续扩展。
+
+重点解决以下问题：
 
 1. 如何把对话能力稳定落在业务流程中，而不是仅做单轮聊天。
 2. 如何把 PDF/文档知识接入检索增强链路，并保证可追溯来源。
@@ -501,6 +525,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 
 - 运维手册：[docs/operations.md](docs/operations.md)
 - 快速上手：[docs/getting-started.md](docs/getting-started.md)
+- 可复现 Demo：[docs/demo-script.md](docs/demo-script.md)
 - API 示例：[docs/api-recipes.md](docs/api-recipes.md)
 - 企业部署指南：[docs/deployment-enterprise.md](docs/deployment-enterprise.md)
 - 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)

@@ -80,6 +80,7 @@ Use `DEMO_RESET=1 ./scripts/demo.sh` when you intentionally want to remove demo 
 
 ## Next Steps
 
+- Run the full [Reproducible Demo Script](demo-script.md) with `demo-data/heat-safety-policy.pdf`.
 - Use [API Recipes](api-recipes.md) for common endpoint examples.
 - Read [Enterprise Architecture](architecture-enterprise.md) before changing data flow or security boundaries.
 - Read [Operations Manual](operations.md) before running drills, load tests, or observability components.

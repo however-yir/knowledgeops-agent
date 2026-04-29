@@ -45,7 +45,7 @@ curl -X POST "$BASE_URL/ingestion/upload/demo-rag" \
   -H "X-API-Key: $API_KEY" \
   -H "X-Tenant-Id: $TENANT_ID" \
   -H "X-Idempotency-Key: demo-rag-001" \
-  -F "file=@/path/to/document.pdf"
+  -F "file=@demo-data/heat-safety-policy.pdf"
 ```
 
 Check the returned `jobId`:

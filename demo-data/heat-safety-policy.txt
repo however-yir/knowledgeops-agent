@@ -1,0 +1,45 @@
+KnowledgeOps Demo Policy: Heat Safety Operations
+
+Document owner: Operations Risk Office
+Version: 2026.04
+Intended tenant: tenant-acme
+
+1. Scope
+
+This policy applies to field inspection, warehouse loading, outdoor maintenance,
+and any work pattern where employees may remain in high-temperature conditions
+for more than 30 minutes.
+
+2. Risk Classification
+
+Heat exposure risk must be classified by temperature, exposure duration, labor
+intensity, ventilation, hydration availability, and protective equipment.
+High-risk roles include outdoor inspection, warehouse loading, delivery staging,
+and maintenance work without cooling access.
+
+3. Control Requirements
+
+Teams must schedule hydration breaks, rotate workers during peak heat periods,
+provide shaded or cooled recovery areas, and record abnormal symptoms through
+the incident reporting process. Supervisors must review high-risk work plans
+before the shift starts.
+
+4. Emergency Response
+
+If a worker shows dizziness, confusion, fainting, abnormal sweating, or suspected
+heat stroke symptoms, the supervisor must stop the task, move the worker to a
+cool area, start first aid, and escalate according to the operations runbook.
+
+5. KnowledgeOps RAG Validation Notes
+
+A compliant RAG answer must cite the source document and the matched chunk. If
+the question cannot be answered from the indexed policy content, the assistant
+must say that the current knowledge base has no matching content and ask the
+operator to upload or select the correct document. The assistant must not invent
+policy conclusions without retrieval evidence.
+
+6. Tenant Isolation Test
+
+The tenant-acme policy must not be returned to another tenant. Cross-tenant
+requests should return an authorization failure, an empty retrieval result, or an
+auditable rejection depending on the route and credential used.

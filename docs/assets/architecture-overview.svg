@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">KnowledgeOps Agent enterprise RAG architecture</title>
+  <desc id="desc">Architecture diagram showing console and API clients, Spring Boot services, async ingestion, vector retrieval, security, persistence, and observability.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#eef7fb"/>
+      <stop offset="55%" stop-color="#f6f8fb"/>
+      <stop offset="100%" stop-color="#eef4ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#24435c" flood-opacity="0.14"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b6b85"/>
+    </marker>
+    <style>
+      .title { font: 700 34px Inter, Arial, sans-serif; fill: #122033; }
+      .subtitle { font: 500 16px Inter, Arial, sans-serif; fill: #52657a; }
+      .band-title { font: 700 13px Inter, Arial, sans-serif; letter-spacing: 1.8px; fill: #5a6f84; }
+      .box-title { font: 700 18px Inter, Arial, sans-serif; fill: #14233a; }
+      .box-text { font: 500 13px Inter, Arial, sans-serif; fill: #52657a; }
+      .chip { font: 700 12px Inter, Arial, sans-serif; fill: #0f5162; }
+      .line { stroke: #4b6b85; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .soft-line { stroke: #8aa1b7; stroke-width: 1.6; fill: none; marker-end: url(#arrow); stroke-dasharray: 5 7; }
+      .box { rx: 18; fill: #ffffff; stroke: #cdd9e6; filter: url(#shadow); }
+      .accent-teal { fill: #dff6f3; stroke: #7fc7bd; }
+      .accent-blue { fill: #e8f0ff; stroke: #9bb8ef; }
+      .accent-green { fill: #e8f7ea; stroke: #9fd0a5; }
+      .accent-amber { fill: #fff4dd; stroke: #e3bb69; }
+      .accent-rose { fill: #fdecef; stroke: #e5a2ad; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <text x="56" y="64" class="title">KnowledgeOps Agent</text>
+  <text x="56" y="94" class="subtitle">Enterprise Spring AI RAG platform with tenant isolation, async ingestion, security, observability, and regression evidence.</text>
+
+  <text x="72" y="148" class="band-title">ENTRY POINTS</text>
+  <text x="372" y="148" class="band-title">SPRING BOOT PLATFORM</text>
+  <text x="764" y="148" class="band-title">DATA AND AI PLANE</text>
+  <text x="1004" y="148" class="band-title">OPERATIONS</text>
+
+  <rect class="box accent-teal" x="56" y="172" width="220" height="116"/>
+  <text x="82" y="207" class="box-title">Vue Console</text>
+  <text x="82" y="232" class="box-text">ReAct chat workspace</text>
+  <text x="82" y="254" class="box-text">RAG answers with citations</text>
+
+  <rect class="box accent-teal" x="56" y="326" width="220" height="116"/>
+  <text x="82" y="361" class="box-title">API Clients</text>
+  <text x="82" y="386" class="box-text">Swagger, curl, SDK-ready REST</text>
+  <text x="82" y="408" class="box-text">JWT or API key headers</text>
+
+  <rect class="box accent-blue" x="344" y="164" width="304" height="112"/>
+  <text x="374" y="199" class="box-title">REST Controllers</text>
+  <text x="374" y="224" class="box-text">Chat, PDF RAG, ingestion, auth</text>
+  <text x="374" y="246" class="box-text">History, audit, cost governance</text>
+
+  <rect class="box accent-blue" x="344" y="306" width="304" height="112"/>
+  <text x="374" y="341" class="box-title">Enterprise Guardrails</text>
+  <text x="374" y="366" class="box-text">API Key, JWT, RBAC, tenant scope</text>
+  <text x="374" y="388" class="box-text">Rate limits, masking, audit log</text>
+
+  <rect class="box accent-blue" x="344" y="448" width="304" height="112"/>
+  <text x="374" y="483" class="box-title">RAG and Agent Services</text>
+  <text x="374" y="508" class="box-text">Model routing and tool execution</text>
+  <text x="374" y="530" class="box-text">Retrieval, rerank, citations</text>
+
+  <rect class="box accent-amber" x="728" y="164" width="220" height="112"/>
+  <text x="754" y="199" class="box-title">Async Ingestion</text>
+  <text x="754" y="224" class="box-text">Redis Stream or RabbitMQ</text>
+  <text x="754" y="246" class="box-text">Retry, DLQ, job status</text>
+
+  <rect class="box accent-amber" x="728" y="306" width="220" height="112"/>
+  <text x="754" y="341" class="box-title">Vector Retrieval</text>
+  <text x="754" y="366" class="box-text">pgvector or simple store</text>
+  <text x="754" y="388" class="box-text">tenant_id + chat_id filters</text>
+
+  <rect class="box accent-amber" x="728" y="448" width="220" height="112"/>
+  <text x="754" y="483" class="box-title">LLM Gateway</text>
+  <text x="754" y="508" class="box-text">OpenAI-compatible endpoints</text>
+  <text x="754" y="530" class="box-text">economy, balanced, quality</text>
+
+  <rect class="box accent-green" x="1012" y="164" width="220" height="112"/>
+  <text x="1038" y="199" class="box-title">Persistence</text>
+  <text x="1038" y="224" class="box-text">MySQL and Flyway migrations</text>
+  <text x="1038" y="246" class="box-text">conversations, audit, cost</text>
+
+  <rect class="box accent-green" x="1012" y="306" width="220" height="112"/>
+  <text x="1038" y="341" class="box-title">Observability</text>
+  <text x="1038" y="366" class="box-text">Prometheus, Loki, Tempo</text>
+  <text x="1038" y="388" class="box-text">alerts, traces, structured logs</text>
+
+  <rect class="box accent-rose" x="1012" y="448" width="220" height="112"/>
+  <text x="1038" y="483" class="box-title">Quality Evidence</text>
+  <text x="1038" y="508" class="box-text">CI, JaCoCo, regression eval</text>
+  <text x="1038" y="530" class="box-text">E2E logs and Docker image</text>
+
+  <path class="line" d="M276 230 C304 230 316 220 344 220"/>
+  <path class="line" d="M276 384 C304 384 316 362 344 362"/>
+  <path class="line" d="M648 220 C682 220 694 220 728 220"/>
+  <path class="line" d="M648 504 C682 504 694 362 728 362"/>
+  <path class="line" d="M648 504 C682 504 694 504 728 504"/>
+  <path class="line" d="M948 220 C980 220 980 220 1012 220"/>
+  <path class="line" d="M948 362 C980 362 980 362 1012 362"/>
+  <path class="line" d="M948 504 C980 504 980 504 1012 504"/>
+  <path class="soft-line" d="M496 276 C496 292 496 292 496 306"/>
+  <path class="soft-line" d="M496 418 C496 434 496 434 496 448"/>
+  <path class="soft-line" d="M838 276 C838 292 838 292 838 306"/>
+  <path class="soft-line" d="M838 418 C838 434 838 434 838 448"/>
+
+  <rect x="56" y="608" width="1176" height="62" rx="22" fill="#ffffff" stroke="#d4e1ec"/>
+  <text x="84" y="646" class="chip">One command demo</text>
+  <text x="228" y="646" class="box-text">./scripts/demo.sh</text>
+  <text x="386" y="646" class="chip">Runtime surfaces</text>
+  <text x="542" y="646" class="box-text">Console :8088  API :8080  Swagger /swagger-ui</text>
+  <text x="860" y="646" class="chip">Evidence</text>
+  <text x="950" y="646" class="box-text">Coverage, regression report, E2E artifacts, GHCR image</text>
+</svg>
