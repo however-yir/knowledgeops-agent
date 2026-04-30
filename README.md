@@ -8,7 +8,7 @@
 
 KnowledgeOps Agent is an enterprise Spring AI RAG platform that turns document knowledge into deployable, governed, and measurable AI workflows. It combines tenant-isolated retrieval, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, Prometheus/Loki/Tempo observability, and regression evaluation so teams can verify the system as a platform instead of treating it as a one-off demo.
 
-> 面向企业知识运营场景的 Spring AI RAG 旗舰项目：覆盖“企业 RAG、租户隔离、异步入库、权限审计、可观测、回归评测”全链路，目标是提供可部署、可运维、可验证的生产级工程基线。
+> 面向企业知识运营场景的 Spring AI RAG 旗舰项目：覆盖"企业 RAG、租户隔离、异步入库、权限审计、可观测、回归评测"全链路，目标是提供可部署、可运维、可验证的生产级工程基线。
 
 ![KnowledgeOps Agent demo](docs/assets/screenshots/demo.gif)
 
@@ -70,12 +70,12 @@ make demo-down
 
 ## AI 工程作品矩阵
 
-KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Spring AI RAG 平台”。这组主项目覆盖企业 RAG、业务 Agent、知识治理、AI 工程执行平台和云原生微服务集成五类方向。
+KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的"企业级 Spring AI RAG 平台"。这组主项目覆盖企业 RAG、业务 Agent、知识治理、AI 工程执行平台和云原生微服务集成五类方向。
 
 | Repo | 定位 | 核心场景 | 技术重点 |
 |---|---|---|---|
 | [`knowledgeops-agent`](https://github.com/however-yir/knowledgeops-agent) | 企业级 Spring AI RAG 平台 | 企业知识问答、权限治理、可观测部署 | Spring AI、RAG、JWT/RBAC、异步入库、Observability |
-| [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) | 业务 Agent 工程案例 | 课程咨询、课程推荐、购买流程、多智能体路由 | Java、Spring AI、Tool Calling、MCP、SSE、多模态 |
+| [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) | 业务 Agent 工程案例（学习/展示用途） | 课程咨询、课程推荐、购买流程、多智能体路由 | Java、Spring AI、Tool Calling、MCP、SSE、多模态 |
 | [`nebula-kb`](https://github.com/however-yir/nebula-kb) | 知识运营中枢 | 知识入库、知识治理、检索问答、反馈闭环 | Django、PostgreSQL、Redis、知识资产生命周期 |
 | [`forgepilot-studio`](https://github.com/however-yir/forgepilot-studio) | AI 工程执行工作台 | AI 编程任务、执行编排、审计回放、团队工作台 | Python、FastAPI、React、Runtime Sandbox、MCP |
 | [`however-microservices-lab`](https://github.com/however-yir/however-microservices-lab) | 云原生微服务 + AI 集成实验室 | 多语言微服务、Kubernetes、gRPC、AI 服务接入 | Go、Python、Java、Node.js、C#、K8s、Ollama/Gemini |
@@ -112,7 +112,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Sprin
 
 ## 项目定位
 
-本项目按“企业级 Spring AI RAG 平台”设计，不停留在单接口聊天示例，而是把知识入库、检索问答、租户与权限边界、审计可追溯、可观测运维、质量回归放在同一条可验证链路里。它适合作为企业知识库、智能客服、内部运营助手或 AI 平台工程基线继续扩展。
+本项目按"企业级 Spring AI RAG 平台"设计，不停留在单接口聊天示例，而是把知识入库、检索问答、租户与权限边界、审计可追溯、可观测运维、质量回归放在同一条可验证链路里。它适合作为企业知识库、智能客服、内部运营助手或 AI 平台工程基线继续扩展。
 
 重点解决以下问题：
 
@@ -345,7 +345,7 @@ docker compose -f docker-compose.observability.yml up -d
 ### 2) 发布策略
 
 - 推荐滚动发布或蓝绿发布
-- 接口兼容遵循“先向后兼容，再灰度切流”
+- 接口兼容遵循"先向后兼容，再灰度切流"
 - Flyway 脚本纳入发布流水线（先迁移后流量）
 
 ### 3) 生产前检查
