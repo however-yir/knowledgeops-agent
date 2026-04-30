@@ -41,6 +41,13 @@ reports/regression/latest.md
 evaluation/predictions.generated.json
 evaluation/predictions.live.json
 logs/*.log
+coverage/
+tmp/
+.runtime/
+
+# Local copy/conflict artifacts
+* 2
+* 2.*
 
 # --- Baseline Ignore Rules ---
 __pycache__/
