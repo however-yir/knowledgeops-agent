@@ -15,7 +15,7 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
       APP_SECURITY_ENABLED: "true"
       APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-jwt-secret-change-this-in-prod-123456}
-      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:*}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-*}
       APP_VECTOR_STORE_BACKEND: simple
       APP_REQUIRE_PGVECTOR: "false"
       APP_INGESTION_QUEUE_BACKEND: redis_stream

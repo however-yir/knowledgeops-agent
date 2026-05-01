@@ -142,11 +142,14 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Sprin
 | 对话与多模态 | `/ai/chat` 支持文本与附件输入、流式输出 |
 | 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，按 `tenant_id + chat_id` 检索，支持引用来源输出 |
 | 异步入库流水线 | 队列化 ingestion、租户级幂等键、重试、DLQ、状态查询 |
-| 安全体系 | API Key + JWT + Refresh Token + RBAC + 细粒度权限 |
-| 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏 |
-| 数据持久化 | MySQL 会话与业务数据、pgvector 向量检索（可切 simple） |
-| 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail |
-| 工程质量 | Flyway 迁移、CI、单测/集成测试、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
+| 安全体系 | API Key + JWT + Refresh Token + RBAC + 细粒度权限 + 安全响应头 + CORS 白名单 + 速率限制（Bucket4j Redis） |
+| 弹性与容错 | Resilience4j CircuitBreaker / Retry / TimeLimiter，模型调用自动降级 |
+| 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏（API Key / Email / 参数级） |
+| 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
+| 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail + Grafana 仪表盘 + OTel 可配置采样 |
+| 工程质量 | Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs 静态扫描、OWASP 依赖检查、CycloneDX SBOM、Trivy 容器扫描、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
+| 容器化 | Docker 多阶段构建、安全加固、docker-compose 资源限制、命名卷持久化 |
+| 前端工程化 | Vue 3 + TypeScript + ESLint + Prettier + vue-tsc 类型检查 |
 
 ---
 
@@ -155,12 +158,17 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Sprin
 - Java 17
 - Spring Boot 3.4.3
 - Spring AI 1.0.0-M6
+- Spring Security 6.x（JWT + API Key + RBAC）
+- Resilience4j 2.2.0（CircuitBreaker / Retry / TimeLimiter）
+- Bucket4j + Redis（分布式限流）
 - MyBatis-Plus 3.5.12
-- MySQL 8.x
+- MySQL 8.x + HikariCP 连接池
 - Redis 7.x
 - RabbitMQ 3.x
 - pgvector / SimpleVectorStore
-- OpenTelemetry + Micrometer + Prometheus
+- Vue 3 + TypeScript + Element Plus
+- OpenTelemetry + Micrometer + Prometheus + Grafana
+- Checkstyle / PMD 7.x / SpotBugs / OWASP Dependency-Check / CycloneDX SBOM
 - Maven 3.9+
 
 > **版本说明**：Spring AI 锁定在 `1.0.0-M6`（项目启动时最新的 feature-complete milestone）。
@@ -431,10 +439,14 @@ docker compose -f docker-compose.observability.yml up -d
 - API Key 与 JWT 双鉴权
 - Refresh Token 生命周期管理
 - 租户隔离（`X-Tenant-Id`，tenant 级 API Key 与审计）
-- RBAC + 权限矩阵
-- 限流（Bucket4j，tenant + principal 复合维度）
+- RBAC + 权限矩阵（`PERM_*` / `ROLE_*` 细粒度控制）
+- 限流（Bucket4j Redis，tenant + principal 复合维度）
+- 安全响应头（X-Content-Type-Options / X-Frame-Options / Permissions-Policy）
+- CORS 白名单（可配置 `APP_CORS_ALLOWED_ORIGINS`）
 - 审计日志与保留策略
+- 敏感信息脱敏（API Key / Email / 查询参数级）
 - 上传文件类型/大小安全检查
+- Resilience4j 熔断与重试保护
 
 生产建议：
 
@@ -449,23 +461,29 @@ docker compose -f docker-compose.observability.yml up -d
 
 ### 指标与健康检查
 
-- `/actuator/health`
-- `/actuator/prometheus`
+- `/actuator/health`（含 Kubernetes liveness/readiness 探针）
+- `/actuator/prometheus`（HTTP 延迟、RAG 管线、JVM、HikariCP 等指标）
+- Grafana 预置仪表盘：Request Rate / P95 Latency / Error Rate / RAG Pipeline / Ingestion / JVM Heap / HikariCP Pool
 
 ### 日志
 
-- JSON 结构化日志（含 `request_id` / `trace_id` / `chat_id`）
+- JSON 结构化日志（含 `request_id` / `trace_id` / `tenant_id` / `chat_id`）
 - 默认文件：`logs/knowledgeops-agent.log`
 
 ### 链路追踪
 
-- OTLP 导出到 Tempo
+- OTLP 导出到 Tempo（采样率可配置 `OTEL_SAMPLING_PROBABILITY`）
 - 支持按 `trace_id` 串联请求日志与调用链
+- Tempo 72h 块保留 + WAL + Bloom Filter 优化
 
-### 告警基线
+### 告警规则
 
-- `HighHttpP95Latency`
-- `IngestionFailureRateHigh`
+- `HighHttpP95Latency`（HTTP P95 > 2s）
+- `IngestionFailureRateHigh`（入库失败率 > 5%）
+- `DiskSpaceLow`（磁盘 < 15%）
+- `HikariPoolExhausted`（连接池 pending > 10）
+- `JvmMemoryHigh`（堆使用 > 85%）
+- Alertmanager 按 severity 路由（critical / warning）
 
 ---
 
@@ -486,6 +504,25 @@ mvn test
 mvn verify -Pintegration-test
 ```
 
+### 静态分析与安全扫描
+
+```bash
+# Checkstyle：代码风格
+mvn checkstyle:check
+
+# PMD：Bug 与代码异味
+mvn pmd:check
+
+# SpotBugs：Bug 检测
+mvn spotbugs:check
+
+# OWASP：CVE 漏洞扫描
+mvn org.owasp:dependency-check-maven:check
+
+# CycloneDX：SBOM 生成
+mvn cyclonedx:makeAggregateBom
+```
+
 ### 回归评测
 
 ```bash
@@ -496,12 +533,17 @@ python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --pred
 
 ### CI
 
-GitHub Actions 工作流：`Intelligent QA Platform CI`
+GitHub Actions 工作流：`Intelligent QA Platform CI`（7-job 流水线）
 
-- Maven compile / test / verify（含 integration profile）
-- JaCoCo 报告生成 + Codecov 上传
-- Regression 评测脚本自动执行
-- Docker Buildx + GHCR 推送
+| Job | 职责 |
+|---|---|
+| code-quality | Checkstyle / PMD / SpotBugs 静态扫描 |
+| build | 编译、单测、集成测试、JaCoCo 覆盖率、CycloneDX SBOM、回归评测 |
+| frontend | ESLint / Prettier / vue-tsc / Vite 构建 |
+| owasp-scan | OWASP 依赖漏洞扫描 |
+| e2e-smoke | 端到端烟测 |
+| trivy-scan | 容器镜像漏洞扫描 |
+| docker | Docker Buildx 构建 + GHCR 推送 |
 
 ---
 
@@ -547,6 +589,12 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 
 - [x] 多租户隔离（租户级密钥、限流与审计）
 - [x] 模型路由与成本控制策略（economy/balanced/quality）
+- [x] 安全响应头 + CORS 白名单
+- [x] Resilience4j 熔断/重试/超时
+- [x] 静态分析流水线（Checkstyle / PMD / SpotBugs）
+- [x] OWASP 依赖检查 + CycloneDX SBOM + Trivy 容器扫描
+- [x] 前端工程化（ESLint / Prettier / vue-tsc）
+- [x] Grafana 预置仪表盘 + 增强告警规则
 - [ ] 检索重排策略可插拔实现
 - [ ] 告警自动化处置脚本
 - [ ] 企业 SSO（OIDC/SAML）接入
