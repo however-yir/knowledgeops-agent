@@ -64,9 +64,9 @@
             <property name="allowEmptyLambdas" value="true"/>
         </module>
 
-        <!-- SQL injection prevention: flag ${} usage in MyBatis is N/A here but we flag string concat in SQL -->
+        <!-- SQL injection prevention: flag string concat in SQL queries -->
         <module name="RegexpSinglelineJava">
-            <property name="format" value="\".*SELECT.*\+.*"/>
+            <property name="format" value="&quot;.*SELECT.*\+.*"/>
             <property name="message" value="Possible SQL injection: string concatenation in SQL query."/>
             <property name="severity" value="error"/>
         </module>
