@@ -230,11 +230,13 @@ export async function streamReactChat(
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  let reading = true;
 
-  while (true) {
+  while (reading) {
     const { done, value } = await reader.read();
     if (done) {
-      break;
+      reading = false;
+      continue;
     }
     buffer += decoder.decode(value, { stream: true });
 

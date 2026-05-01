@@ -203,10 +203,10 @@
           <article
             v-for="entry in virtualMessages"
             :key="entry.item.id"
+            :ref="(el) => setMessageRowRef(entry.item.id, el as HTMLElement | null)"
             :data-msg-id="entry.item.id"
             class="message-row"
             :class="[entry.item.role, entry.item.state || 'done']"
-            :ref="(el) => setMessageRowRef(entry.item.id, el as HTMLElement | null)"
           >
             <div class="avatar">{{ entry.item.role === 'user' ? 'U' : 'AI' }}</div>
             <div class="bubble-wrap">
@@ -225,6 +225,7 @@
                     <div></div>
                   </div>
                   <div v-else>
+                    <!-- eslint-disable-next-line vue/no-v-html -->
                     <div class="markdown" v-html="renderMarkdown(entry.item.content)"></div>
                     <div v-if="entry.item.citations?.length" class="citation-panel">
                       <p class="citation-title">来源引用</p>
@@ -472,7 +473,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
@@ -504,13 +505,13 @@ renderer.code = ((token: { text: string; lang?: string }) => {
   const numbered = lines
     .map((line, index) => {
       const content = line || "&nbsp;";
-      return `<span class=\"code-line\"><span class=\"line-no\">${index + 1}</span><span class=\"line-content\">${content}</span></span>`;
+      return `<span class="code-line"><span class="line-no">${index + 1}</span><span class="line-content">${content}</span></span>`;
     })
     .join("");
 
   const payload = escapeHtml(toBase64(rawCode));
 
-  return `<div class=\"code-block\"><div class=\"code-toolbar\"><span class=\"code-lang\">${language}</span><button class=\"copy-code-btn\" type=\"button\" data-code=\"${payload}\">复制代码</button></div><pre><code class=\"hljs language-${language}\">${numbered}</code></pre></div>`;
+  return `<div class="code-block"><div class="code-toolbar"><span class="code-lang">${language}</span><button class="copy-code-btn" type="button" data-code="${payload}">复制代码</button></div><pre><code class="hljs language-${language}">${numbered}</code></pre></div>`;
 }) as typeof renderer.code;
 
 marked.use({
@@ -665,17 +666,6 @@ function formatTime(value: number): string {
 
 function shortId(id: string): string {
   return id.slice(0, 10);
-}
-
-function stringify(data: unknown): string {
-  if (data === undefined || data === null) {
-    return "{}";
-  }
-  try {
-    return JSON.stringify(data, null, 2);
-  } catch {
-    return String(data);
-  }
 }
 
 function renderMarkdown(content: string): string {
