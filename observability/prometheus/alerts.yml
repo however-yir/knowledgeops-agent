@@ -9,6 +9,7 @@ groups:
         annotations:
           summary: "High p95 latency"
           description: "p95 latency is above 1.5s for 5 minutes."
+          runbook_url: "https://github.com/however-yir/knowledgeops-agent/docs/operations.md"
 
       - alert: Http5xxRateHigh
         expr: |
@@ -22,6 +23,7 @@ groups:
         annotations:
           summary: "HTTP 5xx error rate high"
           description: "5xx ratio exceeded 5% in the last 5 minutes."
+          runbook_url: "https://github.com/however-yir/knowledgeops-agent/docs/operations.md"
 
       - alert: IngestionFailureRateHigh
         expr: rate(ingestion_jobs_finished_total{status="failed"}[5m]) > 0.05
@@ -96,3 +98,32 @@ groups:
         annotations:
           summary: "ReAct stream error rate high"
           description: "Stream error ratio exceeded 20% in the last 10 minutes."
+
+      # --- New enterprise alerts ---
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/app"} / node_filesystem_size_bytes{mountpoint="/app"} < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space low (< 15%)"
+          description: "Disk space on /app is below 15%. Consider cleaning up old data."
+
+      - alert: HikariPoolExhausted
+        expr: hikaricp_connections_pending > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HikariCP connection pool pending requests"
+          description: "More than 10 pending HikariCP connections for 5 minutes."
+
+      - alert: JvmMemoryHigh
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap usage high (> 85%)"
+          description: "JVM heap memory usage is above 85%. Risk of OOM."

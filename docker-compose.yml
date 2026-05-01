@@ -3,20 +3,23 @@ services:
     build: .
     image: knowledgeops-agent:latest
     container_name: knowledgeops-agent
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:mysql://mysql:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root
-      DB_PASSWORD: root
+      DB_PASSWORD: ${DB_PASSWORD:-root}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-local-dev-placeholder}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
       APP_SECURITY_ENABLED: "true"
       APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-jwt-secret-change-this-in-prod-123456}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:*}
       APP_VECTOR_STORE_BACKEND: simple
       APP_REQUIRE_PGVECTOR: "false"
       APP_INGESTION_QUEUE_BACKEND: redis_stream
+      OTEL_SAMPLING_PROBABILITY: ${OTEL_SAMPLING_PROBABILITY:-0.1}
       REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
@@ -35,27 +38,43 @@ services:
       interval: 20s
       timeout: 5s
       retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1536M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
 
   mysql:
     image: mysql:8.0.36
     container_name: knowledgeops-agent-mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
       MYSQL_DATABASE: knowledgeops_agent
     ports:
       - "3306:3306"
-    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max-connections=200", "--innodb-buffer-pool-size=256M"]
+    volumes:
+      - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${DB_PASSWORD:-root}"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   redis:
-    image: redis:7.4
+    image: redis:7.4-alpine
     container_name: knowledgeops-agent-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -65,9 +84,12 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: knowledgeops-agent-rabbitmq
+    restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -77,9 +99,11 @@ services:
   tempo:
     image: grafana/tempo:2.6.1
     container_name: knowledgeops-agent-tempo-lite
+    restart: unless-stopped
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/tmp/tempo
     ports:
       - "4319:4318"
 
@@ -89,6 +113,7 @@ services:
       dockerfile: frontend/Dockerfile
     image: knowledgeops-agent-web:latest
     container_name: knowledgeops-agent-web
+    restart: unless-stopped
     depends_on:
       app:
         condition: service_healthy
@@ -99,3 +124,9 @@ services:
       interval: 20s
       timeout: 5s
       retries: 5
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  tempo-data:

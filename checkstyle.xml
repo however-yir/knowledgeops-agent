@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    Enterprise Checkstyle configuration for knowledgeops-agent.
+    Based on Google Java Style with project-specific adjustments.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="warning"/>
+    <property name="fileExtensions" value="java"/>
+
+    <!-- File length -->
+    <module name="FileLength">
+        <property name="max" value="500"/>
+        <property name="severity" value="warning"/>
+    </module>
+
+    <!-- No tab characters -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+
+    <!-- Trailing whitespace -->
+    <module name="RegexpSingleline">
+        <property name="format" value="\s+$"/>
+        <property name="message" value="Line has trailing whitespace."/>
+    </module>
+
+    <module name="TreeWalker">
+        <!-- Naming conventions -->
+        <module name="ConstantName"/>
+        <module name="LocalVariableName"/>
+        <module name="MemberName"/>
+        <module name="MethodName"/>
+        <module name="PackageName"/>
+        <module name="ParameterName"/>
+        <module name="TypeName"/>
+
+        <!-- Imports -->
+        <module name="AvoidStarImport"/>
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+
+        <!-- Coding -->
+        <module name="EmptyStatement"/>
+        <module name="EqualsHashCode"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="OneStatementPerLine"/>
+
+        <!-- Blocks -->
+        <module name="NeedBraces">
+            <property name="allowSingleLineStatement" value="true"/>
+        </module>
+
+        <!-- Whitespace -->
+        <module name="WhitespaceAround">
+            <property name="allowEmptyConstructors" value="true"/>
+            <property name="allowEmptyMethods" value="true"/>
+            <property name="allowEmptyTypes" value="true"/>
+            <property name="allowEmptyLambdas" value="true"/>
+        </module>
+
+        <!-- SQL injection prevention: flag ${} usage in MyBatis is N/A here but we flag string concat in SQL -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\".*SELECT.*\+.*"/>
+            <property name="message" value="Possible SQL injection: string concatenation in SQL query."/>
+            <property name="severity" value="error"/>
+        </module>
+    </module>
+</module>

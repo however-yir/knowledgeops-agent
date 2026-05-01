@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!-- Suppress false positive for Spring AI milestone version -->
+    <suppress>
+        <notes><![CDATA[
+            Spring AI M6 is a milestone release, not a CVE-affected version.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.ai/.*@.*$</packageUrl>
+        <cpe>cpe:/a:spring:spring_ai</cpe>
+    </suppress>
+</suppressions>

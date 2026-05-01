@@ -1,13 +1,53 @@
+server:
+  port: 8080
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
+    max-connections: 8192
+    accept-count: 100
+    connection-timeout: 5000
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      idle-timeout: 300000
+      max-lifetime: 600000
+      connection-timeout: 10000
+      leak-detection-threshold: 60000
+  data:
+    redis:
+      timeout: 3000
+  rabbitmq:
+    connection-timeout: 5000
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+
 app:
   security:
     enabled: true
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:https://your-domain.com}
   ingestion:
     worker-enabled: true
     queue-backend: redis_stream
+    worker-count: 5
   vector-store:
     backend: pgvector
     require-pgvector: true
+  rate-limit:
+    enabled: true
+    capacity: ${APP_RATE_LIMIT_CAPACITY:100}
+    refill-tokens: ${APP_RATE_LIMIT_REFILL_TOKENS:100}
+    refill-seconds: ${APP_RATE_LIMIT_REFILL_SECONDS:60}
 
 logging:
   level:
     com.enterprise.iqk: INFO
+    org.springframework.security: WARN
+    org.springframework.ai: INFO

@@ -1,0 +1,87 @@
+{
+  "dashboard": {
+    "title": "KnowledgeOps Agent - Enterprise Dashboard",
+    "uid": "knowledgeops-agent-main",
+    "tags": ["knowledgeops", "enterprise"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "panels": [
+      {
+        "title": "Request Rate (req/s)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+        "targets": [{"expr": "sum(rate(http_requests_latency_seconds_count[5m]))", "legendFormat": "Total req/s"}]
+      },
+      {
+        "title": "P95 Latency (s)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+        "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_requests_latency_seconds_bucket[5m])) by (le))", "legendFormat": "p95"}]
+      },
+      {
+        "title": "Error Rate (%)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+        "targets": [{"expr": "sum(rate(http_requests_latency_seconds_count{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_latency_seconds_count[5m])), 0.0001) * 100", "legendFormat": "5xx %"}]
+      },
+      {
+        "title": "RAG Pipeline Latency",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {"expr": "histogram_quantile(0.95, sum(rate(rag_retrieval_latency_seconds_bucket[5m])) by (le))", "legendFormat": "retrieval p95"},
+          {"expr": "histogram_quantile(0.95, sum(rate(rag_rerank_latency_seconds_bucket[5m])) by (le))", "legendFormat": "rerank p95"},
+          {"expr": "histogram_quantile(0.95, sum(rate(rag_pipeline_latency_seconds_bucket[5m])) by (le))", "legendFormat": "pipeline p95"}
+        ]
+      },
+      {
+        "title": "ReAct Stream Latency",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {"expr": "histogram_quantile(0.95, sum(rate(react_stream_total_latency_seconds_bucket[5m])) by (le))", "legendFormat": "total p95"},
+          {"expr": "histogram_quantile(0.95, sum(rate(react_stream_first_token_latency_seconds_bucket[5m])) by (le))", "legendFormat": "first-token p95"}
+        ]
+      },
+      {
+        "title": "Ingestion Jobs",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16},
+        "targets": [
+          {"expr": "rate(ingestion_jobs_submitted_total[5m])", "legendFormat": "submitted/s"},
+          {"expr": "rate(ingestion_jobs_finished_total{status=\"success\"}[5m])", "legendFormat": "success/s"},
+          {"expr": "rate(ingestion_jobs_finished_total{status=\"failed\"}[5m])", "legendFormat": "failed/s"}
+        ]
+      },
+      {
+        "title": "Ingestion Duration (P95)",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16},
+        "targets": [{"expr": "histogram_quantile(0.95, sum(rate(ingestion_jobs_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95"}]
+      },
+      {
+        "title": "JVM Heap Usage",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16},
+        "targets": [{"expr": "jvm_memory_used_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"} * 100", "legendFormat": "heap %"}],
+        "fieldConfig": {"defaults": {"unit": "percent", "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 70}, {"color": "red", "value": 85}]}}}
+      },
+      {
+        "title": "HikariCP Pool",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {"expr": "hikaricp_connections_active", "legendFormat": "active"},
+          {"expr": "hikaricp_connections_idle", "legendFormat": "idle"},
+          {"expr": "hikaricp_connections_pending", "legendFormat": "pending"}
+        ]
+      },
+      {
+        "title": "Tool Query P95 by Tool",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [{"expr": "histogram_quantile(0.95, sum(rate(tool_query_latency_seconds_bucket{status=\"success\"}[5m])) by (le, tool))", "legendFormat": "{{tool}}"}]
+      }
+    ]
+  }
+}

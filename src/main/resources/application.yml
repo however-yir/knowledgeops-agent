@@ -33,6 +33,13 @@ spring:
     url: ${DB_URL:jdbc:mysql://localhost:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8}
     username: ${DB_USERNAME:}
     password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      idle-timeout: 300000
+      max-lifetime: 600000
+      connection-timeout: 10000
+      pool-name: knowledgeops-hikari
   servlet:
     multipart:
       max-file-size: 100MB
@@ -59,7 +66,7 @@ management:
   tracing:
     enabled: true
     sampling:
-      probability: 1.0
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
@@ -80,6 +87,8 @@ app:
     jwt-expire-minutes: ${APP_JWT_EXPIRE_MINUTES:120}
     refresh-expire-days: ${APP_JWT_REFRESH_EXPIRE_DAYS:14}
     api-key-expire-days: ${APP_API_KEY_EXPIRE_DAYS:30}
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
   rate-limit:
     enabled: ${APP_RATE_LIMIT_ENABLED:true}
     capacity: ${APP_RATE_LIMIT_CAPACITY:60}

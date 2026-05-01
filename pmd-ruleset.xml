@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<ruleset name="KnowledgeOps Agent PMD Rules"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>Enterprise PMD rules for knowledgeops-agent</description>
+
+    <!-- Best practices -->
+    <rule ref="category/java/bestpractices.xml/UnusedLocalVariable"/>
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateField"/>
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"/>
+    <rule ref="category/java/bestpractices.xml/UseTryWithResources"/>
+
+    <!-- Code style -->
+    <rule ref="category/java/codestyle.xml/UnnecessaryImport"/>
+    <rule ref="category/java/codestyle.xml/ExtendsObject"/>
+    <rule ref="category/java/codestyle.xml/ForLoopShouldBeWhileLoop"/>
+
+    <!-- Design -->
+    <rule ref="category/java/design.xml/SimplifyBooleanReturns"/>
+    <rule ref="category/java/design.xml/SimplifyBooleanExpressions"/>
+    <rule ref="category/java/design.xml/CollapsibleIfStatements"/>
+    <rule ref="category/java/design.xml/UselessOverridingMethod"/>
+
+    <!-- Error prone -->
+    <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
+        <properties>
+            <property name="allowCommentedBlocks" value="true"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/errorprone.xml/EmptyIfStmt"/>
+    <rule ref="category/java/errorprone.xml/EmptyWhileStmt"/>
+    <rule ref="category/java/errorprone.xml/EmptyTryBlock"/>
+    <rule ref="category/java/errorprone.xml/EmptyFinallyBlock"/>
+    <rule ref="category/java/errorprone.xml/EmptySwitchStatements"/>
+    <rule ref="category/java/errorprone.xml/JumbledIncrementer"/>
+    <rule ref="category/java/errorprone.xml/UnconditionalIfStatement"/>
+    <rule ref="category/java/errorprone.xml/BrokenNullCheck"/>
+    <rule ref="category/java/errorprone.xml/OverrideBothEqualsAndHashcode"/>
+    <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock"/>
+    <rule ref="category/java/errorprone.xml/CloseResource"/>
+
+    <!-- Performance -->
+    <rule ref="category/java/performance.xml/StringInstantiation"/>
+    <rule ref="category/java/performance.xml/StringToString"/>
+    <rule ref="category/java/performance.xml/UseArrayListInsteadOfVector"/>
+
+    <!-- Security -->
+    <rule ref="category/java/security.xml/HardCodedCryptoKey"/>
+    <rule ref="category/java/security.xml/InsecureCryptoIv"/>
+</ruleset>

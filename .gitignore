@@ -45,6 +45,10 @@ coverage/
 tmp/
 .runtime/
 
+### Generated SBOM ###
+target/bom.*
+target/dependency-check-report.*
+
 # Local copy/conflict artifacts
 * 2
 * 2.*

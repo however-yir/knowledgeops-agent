@@ -1,0 +1,53 @@
+# Build artifacts
+target/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Git
+.git/
+.github/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Reports & evaluation
+reports/
+evaluation/
+
+# Demo data
+demo-data/
+
+# Observability (mounted via volumes)
+observability/
+
+# Scripts
+scripts/
+
+# Docker
+docker-compose*.yml
+.dockerignore
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Data
+data/

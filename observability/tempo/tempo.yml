@@ -8,12 +8,23 @@ distributor:
         http:
           endpoint: 0.0.0.0:4318
 
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 500_000
+  max_block_duration: 1m
+
+compactor:
+  compaction:
+    block_retention: 72h
+    compacted_block_retention: 48h
+
 storage:
   trace:
     backend: local
     local:
       path: /tmp/tempo/traces
-
-compactor:
-  compaction:
-    compacted_block_retention: 24h
+    wal:
+      path: /tmp/tempo/wal
+    block:
+      bloom_filter_false_positive: 0.05
+      index_downsample_bytes: 1000
