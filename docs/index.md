@@ -40,7 +40,7 @@ KnowledgeOps Agent is an enterprise Spring AI RAG platform for tenant-isolated r
 | Local evaluation | [Getting Started](getting-started.md), [Reproducible Demo Script](demo-script.md), [API Recipes](api-recipes.md) |
 | Architecture and deployment | [Enterprise Architecture](architecture-enterprise.md), [Enterprise Deployment Guide](deployment-enterprise.md) |
 | Operations | [Operations Manual](operations.md), [Distributed and Observability Drill](drills/distributed-and-observability-drill.md), [Runbook Template](drills/runbook_template.md) |
-| Career packaging | [Resume Upgrade Checklist](resume-upgrade-checklist.md) |
+| Career packaging | [Resume Upgrade Checklist](career/resume-upgrade-checklist.md) |
 
 ## Platform Capabilities
 

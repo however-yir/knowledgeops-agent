@@ -5,6 +5,7 @@
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://however-yir.github.io/knowledgeops-agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
+[![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
 KnowledgeOps Agent is an enterprise Spring AI RAG platform that turns document knowledge into deployable, governed, and measurable AI workflows. It combines tenant-isolated retrieval, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, Prometheus/Loki/Tempo observability, and regression evaluation so teams can verify the system as a platform instead of treating it as a one-off demo.
 
@@ -70,7 +71,7 @@ make demo-down
 
 ## 矩阵角色
 
-KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Spring AI RAG 平台”，负责证明企业 RAG、租户隔离、异步入库、鉴权审计、可观测和回归评测可以落到一条可部署的 Spring AI 工程基线里。完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)，面试讲解提纲见 [docs/interview-notes.md](docs/interview-notes.md)。
+KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Spring AI RAG 平台”，负责证明企业 RAG、租户隔离、异步入库、鉴权审计、可观测和回归评测可以落到一条可部署的 Spring AI 工程基线里。完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)，面试讲解提纲见 [docs/career/interview-notes.md](docs/career/interview-notes.md)。
 
 ---
 
@@ -162,7 +163,8 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Sprin
 - OpenTelemetry + Micrometer + Prometheus
 - Maven 3.9+
 
-Spring AI 当前锁定在 `1.0.0-M6`，升级计划和兼容性检查见 [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
+> **版本说明**：Spring AI 锁定在 `1.0.0-M6`（项目启动时最新的 feature-complete milestone）。
+> GA 升级计划已制定完成（含逐文件风险矩阵），详见 [spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
 
 ---
 
@@ -537,7 +539,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 - 分布式演练：[docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
 - 演练模板：[docs/drills/runbook_template.md](docs/drills/runbook_template.md)
-- 简历升级清单：[docs/resume-upgrade-checklist.md](docs/resume-upgrade-checklist.md)
+- 简历升级清单：[docs/career/resume-upgrade-checklist.md](docs/career/resume-upgrade-checklist.md)
 
 ---
 
