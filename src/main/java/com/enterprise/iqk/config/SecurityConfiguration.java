@@ -37,15 +37,7 @@ public class SecurityConfiguration {
         http.headers(headers -> headers
                 .contentTypeOptions(cto -> {})
                 .frameOptions(fo -> fo.deny())
-                .xssProtection(xss -> xss
-                        .headerValue(XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))
-                .referrerPolicy(referrer -> referrer
-                        .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                 .permissionsPolicy(permissions -> permissions.policy("camera=(), microphone=(), geolocation=()"))
-                .cacheControl(cc -> {})
-                .httpStrictTransportSecurity(hsts -> hsts
-                        .includeSubDomains(true)
-                        .maxAgeInSeconds(31536000))
         );
 
         if (!securityProperties.isEnabled()) {
