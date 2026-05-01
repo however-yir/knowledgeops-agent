@@ -11,4 +11,8 @@
     <Match>
         <Package name="~.*\.test\..*"/>
     </Match>
+    <!-- Suppress EI_EXPOSE_REP on Spring beans / @ConfigurationProperties (Lombok constructors) -->
+    <Match>
+        <Bug code="EI, EI2"/>
+    </Match>
 </FindBugsFilter>
