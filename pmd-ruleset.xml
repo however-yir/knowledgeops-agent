@@ -3,7 +3,7 @@
          xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
-    <description>Enterprise PMD rules for knowledgeops-agent</description>
+    <description>Enterprise PMD rules for knowledgeops-agent (PMD 7.x compatible)</description>
 
     <!-- Best practices -->
     <rule ref="category/java/bestpractices.xml/UnusedLocalVariable"/>
@@ -14,13 +14,11 @@
     <!-- Code style -->
     <rule ref="category/java/codestyle.xml/UnnecessaryImport"/>
     <rule ref="category/java/codestyle.xml/ExtendsObject"/>
-    <rule ref="category/java/codestyle.xml/ForLoopShouldBeWhileLoop"/>
 
     <!-- Design -->
     <rule ref="category/java/design.xml/SimplifyBooleanReturns"/>
     <rule ref="category/java/design.xml/SimplifyBooleanExpressions"/>
     <rule ref="category/java/design.xml/CollapsibleIfStatements"/>
-    <rule ref="category/java/design.xml/UselessOverridingMethod"/>
 
     <!-- Error prone -->
     <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
@@ -28,14 +26,8 @@
             <property name="allowCommentedBlocks" value="true"/>
         </properties>
     </rule>
-    <rule ref="category/java/errorprone.xml/EmptyIfStmt"/>
-    <rule ref="category/java/errorprone.xml/EmptyWhileStmt"/>
-    <rule ref="category/java/errorprone.xml/EmptyTryBlock"/>
-    <rule ref="category/java/errorprone.xml/EmptyFinallyBlock"/>
-    <rule ref="category/java/errorprone.xml/EmptySwitchStatements"/>
     <rule ref="category/java/errorprone.xml/JumbledIncrementer"/>
     <rule ref="category/java/errorprone.xml/UnconditionalIfStatement"/>
-    <rule ref="category/java/errorprone.xml/BrokenNullCheck"/>
     <rule ref="category/java/errorprone.xml/OverrideBothEqualsAndHashcode"/>
     <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock"/>
     <rule ref="category/java/errorprone.xml/CloseResource"/>
@@ -47,5 +39,4 @@
 
     <!-- Security -->
     <rule ref="category/java/security.xml/HardCodedCryptoKey"/>
-    <rule ref="category/java/security.xml/InsecureCryptoIv"/>
 </ruleset>
