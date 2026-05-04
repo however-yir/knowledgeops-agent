@@ -12,6 +12,7 @@ env:
 
 jobs:
   code-quality:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +37,7 @@ jobs:
         continue-on-error: true
 
   build:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     needs: code-quality
     runs-on: ubuntu-latest
     steps:
@@ -104,6 +106,7 @@ jobs:
           path: reports/regression/latest.*
 
   frontend:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -136,6 +139,7 @@ jobs:
         run: npm run build
 
   owasp-scan:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -159,6 +163,7 @@ jobs:
           path: target/dependency-check-report.*
 
   e2e-smoke:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     needs: [build, frontend]
     runs-on: ubuntu-latest
     steps:
@@ -237,6 +242,7 @@ jobs:
         run: docker compose down -v --remove-orphans
 
   trivy-scan:
+    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     needs: [build, frontend]
     runs-on: ubuntu-latest
     steps:
