@@ -1,0 +1,69 @@
+{
+  "description": "V1 演示链路评测数据集 — 覆盖 DeepResearch、智能客服路由、混合检索问答",
+  "version": "1.0",
+  "paths": {
+    "deep_research": {
+      "name": "DeepResearch 行业研究",
+      "cases": [
+        {"id": "dr-001", "topic": "AI Agent 在企業服務領域的應用趨勢", "expect": {"subQuestions": 3, "hasReport": true}},
+        {"id": "dr-002", "topic": "2025年大模型在線教育的落地實踐", "expect": {"subQuestions": 3, "hasReport": true}},
+        {"id": "dr-003", "topic": "RAG 技術在企業知識管理中的最佳實踐", "expect": {"subQuestions": 2, "hasReport": true}},
+        {"id": "dr-004", "topic": "多Agent協同架構的設計模式與取捨", "expect": {"subQuestions": 3, "hasReport": true}},
+        {"id": "dr-005", "topic": "混合檢索策略的性能對比：向量 vs 關鍵詞 vs 圖譜", "expect": {"subQuestions": 3, "hasReport": true}},
+        {"id": "dr-006", "topic": "開源大模型在企業私有化部署的成本分析", "expect": {"subQuestions": 2, "hasReport": true}},
+        {"id": "dr-007", "topic": "知識圖譜與大模型結合的工程方案", "expect": {"subQuestions": 3, "hasReport": true}},
+        {"id": "dr-008", "topic": "Agent 記憶系統的設計：短期vs長期vs任務記憶", "expect": {"subQuestions": 2, "hasReport": true}},
+        {"id": "dr-009", "topic": "SSE 流式輸出的異常處理與降級策略", "expect": {"subQuestions": 2, "hasReport": true}},
+        {"id": "dr-010", "topic": "企業AI平台的權限隔離與多租戶設計", "expect": {"subQuestions": 3, "hasReport": true}}
+      ]
+    },
+    "customer_service_routing": {
+      "name": "智能客服意图路由",
+      "cases": [
+        {"id": "cs-001", "question": "我零基础，想学Java后端开发，帮我推荐课程", "expect": {"intent": "RECOMMEND", "confidence_min": 0.7}},
+        {"id": "cs-002", "question": "1589905661084430337 这门课适合谁，价格多少", "expect": {"intent": "CONSULT", "confidence_min": 0.7}},
+        {"id": "cs-003", "question": "我要购买课程 1589905661084430337，帮我生成订单", "expect": {"intent": "BUY", "confidence_min": 0.7}},
+        {"id": "cs-004", "question": "Java 中 Redis 缓存穿透是什么，怎么处理", "expect": {"intent": "KNOWLEDGE", "confidence_min": 0.7}},
+        {"id": "cs-005", "question": "我买的课程看不了，能退款吗", "expect": {"intent": "AFTER_SALE", "confidence_min": 0.5}},
+        {"id": "cs-006", "question": "课程内容有严重错误，我要投诉", "expect": {"intent": "COMPLAINT", "confidence_min": 0.5}},
+        {"id": "cs-007", "question": "我有半年Python基础，想转AI方向，规划学习路线", "expect": {"intent": "STUDY_PLAN", "confidence_min": 0.5}},
+        {"id": "cs-008", "question": "这个问题太复杂了，能转人工客服吗", "expect": {"intent": "HUMAN_HANDOFF", "confidence_min": 0.5}},
+        {"id": "cs-009", "question": "我想学Python，有什么入门课程推荐", "expect": {"intent": "RECOMMEND", "confidence_min": 0.7}},
+        {"id": "cs-010", "question": "帮我查一下最近有什么优惠活动", "expect": {"intent": "CONSULT", "confidence_min": 0.5}}
+      ]
+    },
+    "hybrid_retrieval_qa": {
+      "name": "混合检索问答",
+      "cases": [
+        {"id": "hr-001", "question": "文档中提到的核心概念是什么", "expect": {"hasAnswer": true, "hasCitations": true, "hasEvidence": true}},
+        {"id": "hr-002", "question": "系统架构的主要组件有哪些", "expect": {"hasAnswer": true, "hasCitations": true}},
+        {"id": "hr-003", "question": "数据流是如何设计的", "expect": {"hasAnswer": true}},
+        {"id": "hr-004", "question": "安全机制包括哪些层面", "expect": {"hasAnswer": true, "hasCitations": true}},
+        {"id": "hr-005", "question": "部署方案支持哪些环境", "expect": {"hasAnswer": true}},
+        {"id": "hr-006", "question": "性能优化的关键策略是什么", "expect": {"hasAnswer": true}},
+        {"id": "hr-007", "question": "与其他系统的集成方式", "expect": {"hasAnswer": true, "hasEvidence": true}},
+        {"id": "hr-008", "question": "监控和告警是如何配置的", "expect": {"hasAnswer": true}},
+        {"id": "hr-009", "question": "数据备份和恢复策略", "expect": {"hasAnswer": true}},
+        {"id": "hr-010", "question": "API接口的版本管理策略", "expect": {"hasAnswer": true}}
+      ]
+    },
+    "edge_cases": {
+      "name": "异常场景",
+      "cases": [
+        {"id": "ec-001", "question": "", "expect": {"status": "error", "reason": "empty_prompt"}},
+        {"id": "ec-002", "question": "xyzxyz 不存在的概念 xyzxyz", "expect": {"status": "empty", "reason": "no_match"}},
+        {"id": "ec-003", "question": "😀😀😀", "expect": {"status": "empty_or_fallback"}},
+        {"id": "ec-004", "question": "AAAAAAAAAA", "expect": {"status": "short_input"}},
+        {"id": "ec-005", "question": "<script>alert(1)</script>", "expect": {"status": "safe_response"}}
+      ]
+    }
+  },
+  "metrics": {
+    "route_accuracy": {"description": "意图识别准确率", "target": 0.70},
+    "retrieval_hit_rate": {"description": "检索命中率", "target": 0.60},
+    "evidence_availability": {"description": "证据可用率（有打分证据占比）", "target": 0.50},
+    "hallucination_refuse_rate": {"description": "幻觉拒答率（无上下文时明确说明）", "target": 0.80},
+    "tool_call_success_rate": {"description": "工具调用成功率", "target": 0.90},
+    "workflow_completion_rate": {"description": "客服流程完成率", "target": 0.75}
+  }
+}
