@@ -72,6 +72,7 @@ make demo-down
 ## Evidence Links
 
 - Documentation: [however-yir.github.io/knowledgeops-agent](https://however-yir.github.io/knowledgeops-agent/)
+- Evidence pack: [docs/evidence/README.md](docs/evidence/README.md)
 - Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
 - 3 条演示路径: [docs/demo-paths.md](docs/demo-paths.md)
 - Reproducible demo script: [docs/demo-script.md](docs/demo-script.md)
@@ -629,7 +630,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
 - 分布式演练：[docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
 - 演练模板：[docs/drills/runbook_template.md](docs/drills/runbook_template.md)
-- 简历升级清单：[docs/career/resume-upgrade-checklist.md](docs/career/resume-upgrade-checklist.md)
+- 工程证据清单：[docs/career/resume-upgrade-checklist.md](docs/career/resume-upgrade-checklist.md)
 
 ---
 
