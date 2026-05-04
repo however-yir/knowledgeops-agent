@@ -5,9 +5,11 @@ This pack collects the shortest public proof path for reviewing the project as a
 ## Runtime Evidence
 
 - Local proof path: `./scripts/demo.sh`
+- Pullable image: `docker pull ghcr.io/however-yir/knowledgeops-agent:latest`
 - Container workflow: `.github/workflows/publish-image.yml`
 - Main CI: `.github/workflows/ci.yml`
 - Regression workflow: `.github/workflows/nightly-regression.yml`
+- Baseline release: `AI Matrix Baseline 2026.05`
 - Release: `v1.0.0 - Enterprise-ready KnowledgeOps Agent`
 
 ## Product And Architecture Evidence
@@ -28,4 +30,3 @@ This pack collects the shortest public proof path for reviewing the project as a
 - Run an Agent workflow and confirm task/step/event state is visible.
 - Check Prometheus/Grafana/trace documentation in `docs/observability.md`.
 - Open the latest GitHub Actions run and confirm the baseline CI is green.
-
