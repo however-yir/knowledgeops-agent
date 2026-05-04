@@ -61,10 +61,19 @@ make demo-verify
 make demo-down
 ```
 
+## V1 三条演示路径（3-5 分钟/条）
+
+| # | 路径 | 展示能力 | 文档 |
+|---|---|---|---|
+| 1 | **DeepResearch 行业研究** | 主题拆解→混合检索→证据评分→报告生成 | [demo-paths.md](docs/demo-paths.md#链路一deepresearch-行业研究) |
+| 2 | **智能客服（tianji）** | 意图识别→9子Agent路由→工具调用→SSE卡片 | tianji [README](https://github.com/however-yir/tianji-ai-agent) |
+| 3 | **知识库混合检索问答** | PDF入库→四路召回→证据评分→引用溯源 | [demo-paths.md](docs/demo-paths.md#链路三知识库问答混合检索--引用溯源) |
+
 ## Evidence Links
 
 - Documentation: [however-yir.github.io/knowledgeops-agent](https://however-yir.github.io/knowledgeops-agent/)
 - Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
+- 3 条演示路径: [docs/demo-paths.md](docs/demo-paths.md)
 - Reproducible demo script: [docs/demo-script.md](docs/demo-script.md)
 - Operations guide: [docs/operations.md](docs/operations.md)
 - Enterprise architecture: [docs/architecture-enterprise.md](docs/architecture-enterprise.md)
