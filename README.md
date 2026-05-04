@@ -87,7 +87,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | **KnowledgeOps Agent** | 多 Agent + RAG + 记忆 + 图谱的企业 AI 平台 | 提供 RAG/记忆/图谱/DeepResearch API |
 | **tianji-ai-agent** | CloudAgent 智能客服/课程顾问应用 | 调用 KnowledgeOps 平台能力 |
 
-完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)，面试讲解提纲见 [docs/career/interview-notes.md](docs/career/interview-notes.md)。
+完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)。
 
 ---
 
