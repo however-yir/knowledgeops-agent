@@ -387,6 +387,32 @@ public class AgentSessionService {
         }
     }
 
+    /**
+     * Attach a workflow task snapshot to a session branch message.
+     * This links the conversational message to its agent execution trace.
+     */
+    public AgentSessionStateVO attachWorkflowSnapshot(String tenantId, String sessionId,
+                                                       String branchId, String messageId,
+                                                       String taskId, String traceId,
+                                                       List<Map<String, Object>> memorySnapshot,
+                                                       Map<String, Object> workflowState) {
+        AgentSessionStateVO state = get(tenantId, sessionId);
+        if (state.getBranches() == null) return state;
+
+        for (AgentSessionBranchVO branch : state.getBranches()) {
+            if (!branch.getId().equals(branchId)) continue;
+            if (branch.getMessages() == null) continue;
+            for (AgentSessionMessageVO msg : branch.getMessages()) {
+                if (!msg.getId().equals(messageId)) continue;
+                msg.setTaskId(taskId);
+                msg.setTraceId(traceId);
+                msg.setMemorySnapshot(memorySnapshot);
+                msg.setWorkflowState(workflowState);
+            }
+        }
+        return upsert(tenantId, sessionId, state);
+    }
+
     private String emptyToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
     }

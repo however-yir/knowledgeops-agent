@@ -7,9 +7,9 @@
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
-KnowledgeOps Agent is an enterprise Spring AI RAG platform that turns document knowledge into deployable, governed, and measurable AI workflows. It combines tenant-isolated retrieval, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, Prometheus/Loki/Tempo observability, and regression evaluation so teams can verify the system as a platform instead of treating it as a one-off demo.
+KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. It combines **Agent Workflow Engine**, **Hybrid Retrieval (vector + keyword + graph + web)**, **Knowledge Graph**, **Long/Short-term Memory**, **DeepResearch**, tenant-isolated RAG, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, and Prometheus/Loki/Tempo observability — a complete knowledge operations baseline that is deployable, observable, and verifiable.
 
-> 面向企业知识运营场景的 Spring AI RAG 旗舰项目：覆盖"企业 RAG、租户隔离、异步入库、权限审计、可观测、回归评测"全链路，目标是提供可部署、可运维、可验证的生产级工程基线。
+> 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的生产级 AI 平台工程基线。
 
 ![KnowledgeOps Agent demo](docs/assets/screenshots/demo.gif)
 
@@ -71,7 +71,14 @@ make demo-down
 
 ## 矩阵角色
 
-KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Spring AI RAG 平台”，负责证明企业 RAG、租户隔离、异步入库、鉴权审计、可观测和回归评测可以落到一条可部署的 Spring AI 工程基线里。完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)，面试讲解提纲见 [docs/career/interview-notes.md](docs/career/interview-notes.md)。
+KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + RAG + 记忆 + 图谱的企业 AI 平台”**，作为 **tianji-ai-agent（智能客服/课程顾问）** 的能力底座。
+
+| 项目 | 定位 | 关系 |
+|---|---|---|
+| **KnowledgeOps Agent** | 多 Agent + RAG + 记忆 + 图谱的企业 AI 平台 | 提供 RAG/记忆/图谱/DeepResearch API |
+| **tianji-ai-agent** | CloudAgent 智能客服/课程顾问应用 | 调用 KnowledgeOps 平台能力 |
+
+完整项目矩阵见 [docs/project-matrix.md](docs/project-matrix.md)，面试讲解提纲见 [docs/career/interview-notes.md](docs/career/interview-notes.md)。
 
 ---
 
@@ -139,6 +146,12 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的“企业级 Sprin
 
 | 能力域 | 当前实现 |
 |---|---|
+| 多Agent工作流 | AgentWorkflowEngine 状态机（CREATED→PLANNING→SEARCHING→RETRIEVING→JUDGING→REFLECTING→WRITING→DONE），agent_task/step/event 持久化与事件溯源 |
+| DeepResearch 深度研究 | ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent，SSE 流式输出研究过程 |
+| 混合检索 | VectorRetriever（pgvector）+ KeywordRetriever（关键词）+ GraphRetriever（知识图谱）+ WebRetriever（外部搜索）= HybridRetrievalService 融合排序 |
+| 证据评分与引用溯源 | EvidenceJudgeService 三维评分（相关性/权威性/时效性），CitationService 编号引用（来源/片段/可信度） |
+| 知识图谱 | MySQL 轻量图谱（kg_entity/kg_relation/kg_fact），支持实体搜索、一跳邻居、事实检索，种子课程图谱数据 |
+| 长短期记忆 | MemoryService 四层记忆：short（会话窗口）、long（用户画像/偏好）、task（任务中间结论）、fact（可引用事实），自动过期清理 |
 | 对话与多模态 | `/ai/chat` 支持文本与附件输入、流式输出 |
 | 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，按 `tenant_id + chat_id` 检索，支持引用来源输出 |
 | 异步入库流水线 | 队列化 ingestion、租户级幂等键、重试、DLQ、状态查询 |
@@ -220,9 +233,13 @@ flowchart TD
 
 ### 2) 智能体与检索层
 
+- **AgentWorkflowEngine**：通用工作流引擎，状态机管理（CREATED→PLANNING→...→DONE），事件溯源
+- **DeepResearch**：ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent
+- **混合检索**：VectorRetriever + KeywordRetriever + GraphRetriever + WebRetriever → HybridRetrievalService 融合
+- **证据评分**：EvidenceJudgeService（相关性/权威性/时效性三维评分）+ CitationService（编号引用）
+- **知识图谱**：kg_entity/kg_relation/kg_fact 轻量图谱表 + GraphService（实体搜索、邻居查询、事实检索）
 - 多 ChatClient 分场景配置（通用、客服、知识问答）
 - 模型路由（按 `modelProfile` 与端点策略动态选型）
-- `QuestionAnswerAdvisor` + 向量检索增强
 - 会话隔离策略：`tenant_id + type::chatId` 组合，避免跨租户串会话
 - ReAct 流式接口采用真实模型 token 流输出（非后处理切片）
 
@@ -394,6 +411,28 @@ docker compose -f docker-compose.observability.yml up -d
 
 - `POST /ai/react/chat`（JSON 返回 Thought/Action/Observation 轨迹）
 - `POST /ai/react/chat/stream`（SSE 实时返回 `trace/token/done/error`，`token` 为模型原生流）
+
+### Agent 工作流（v2）
+
+- `POST /ai/workflow/react/chat`（同步工作流，含 agent_task/step/event 持久化）
+- `POST /ai/workflow/react/chat/stream`（SSE 流式工作流）
+- `GET /ai/workflow/tasks/{taskId}`（查询工作流详情与步骤）
+- `GET /ai/workflow/tasks/{taskId}/events`（查询事件流）
+- `GET /ai/workflow/tasks`（租户任务列表）
+
+### DeepResearch 深度研究
+
+- `POST /ai/research/tasks`（创建并执行研究任务）
+- `GET /ai/research/tasks/{taskId}`（查询研究任务状态与步骤）
+- `GET /ai/research/tasks/{taskId}/events`（查询研究事件流）
+- `GET /ai/research/tasks/{taskId}/report`（查询研究报告）
+
+### 混合检索与记忆
+
+- `POST /ai/rag/search`（混合检索：vector + keyword + graph + web）
+- `GET /ai/memory/query`（查询用户长短期记忆）
+- `POST /ai/memory/save`（保存记忆）
+- `GET /ai/graph/search`（知识图谱实体与关系搜索）
 
 ### 客服流程问答
 
@@ -589,14 +628,21 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 
 - [x] 多租户隔离（租户级密钥、限流与审计）
 - [x] 模型路由与成本控制策略（economy/balanced/quality）
+- [x] Agent 工作流引擎（状态机 + agent_task/step/event 持久化）
+- [x] DeepResearch 多Agent研究模块（主题拆解→检索→报告）
+- [x] 混合检索（Vector + Keyword + Graph + Web 四路召回融合）
+- [x] 证据评分与引用溯源（三维评分 + 编号引用）
+- [x] 知识图谱（kg_entity/kg_relation/kg_fact + GraphRetriever）
+- [x] 长短期记忆系统（short/long/task/fact 四层记忆）
 - [x] 安全响应头 + CORS 白名单
 - [x] Resilience4j 熔断/重试/超时
 - [x] 静态分析流水线（Checkstyle / PMD / SpotBugs）
 - [x] OWASP 依赖检查 + CycloneDX SBOM + Trivy 容器扫描
 - [x] 前端工程化（ESLint / Prettier / vue-tsc）
 - [x] Grafana 预置仪表盘 + 增强告警规则
-- [ ] 检索重排策略可插拔实现
-- [ ] 告警自动化处置脚本
+- [ ] tianji-ai-agent KnowledgeOpsClient 端到端联调
+- [ ] 检索重排策略可插拔实现（LLM-as-reranker）
+- [ ] 评测数据集（路由准确率、检索命中率、证据质量）
 - [ ] 企业 SSO（OIDC/SAML）接入
 
 See the release-oriented roadmap in [docs/roadmap.md](docs/roadmap.md).
