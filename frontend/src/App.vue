@@ -249,6 +249,34 @@
                         </li>
                       </ul>
                     </div>
+                    <!-- Agent Trace Panel -->
+                    <div v-if="traceSteps.length && entry.index === virtualMessages.length - 1" class="trace-panel">
+                      <p class="citation-title">Agent 执行轨迹</p>
+                      <div class="trace-steps">
+                        <div
+                          v-for="(ts, tsIdx) in traceSteps"
+                          :key="`trace-${tsIdx}`"
+                          class="trace-card"
+                          :class="{ 'trace-finish': ts.action === 'finish' }"
+                        >
+                          <div class="trace-step-head">
+                            <span class="trace-step-num">Step {{ ts.step }}</span>
+                            <span class="trace-action-tag">{{ ts.action }}</span>
+                          </div>
+                          <div v-if="ts.thought" class="trace-thought">
+                            <span class="trace-label">Thought:</span> {{ ts.thought }}
+                          </div>
+                          <div v-if="ts.actionInput && Object.keys(ts.actionInput).length" class="trace-input">
+                            <span class="trace-label">Input:</span>
+                            <pre>{{ JSON.stringify(ts.actionInput, null, 2) }}</pre>
+                          </div>
+                          <details v-if="ts.observation" class="trace-obs">
+                            <summary><span class="trace-label">Observation</span></summary>
+                            <pre>{{ typeof ts.observation === 'string' ? ts.observation : JSON.stringify(ts.observation, null, 2) }}</pre>
+                          </details>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </template>
 
@@ -2482,6 +2510,80 @@ h2 {
   gap: 4px;
   color: var(--ui-muted);
   font-size: 12px;
+}
+
+/* ── Agent Trace Panel ─────────────────────────── */
+.trace-panel {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--ui-bg, #f8fafc);
+  border: 1px solid var(--ui-border, #e2e8f0);
+}
+.trace-steps {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+.trace-card {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+.trace-card.trace-finish {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.trace-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.trace-step-num {
+  font-weight: 600;
+  color: #475569;
+}
+.trace-action-tag {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.trace-finish .trace-action-tag {
+  background: #10b981;
+}
+.trace-label {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 11px;
+  margin-right: 4px;
+}
+.trace-thought {
+  color: #475569;
+  margin: 4px 0;
+  line-height: 1.4;
+}
+.trace-input pre,
+.trace-obs pre {
+  margin: 4px 0 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  font-size: 11px;
+  overflow-x: auto;
+  max-height: 120px;
+}
+.trace-obs summary {
+  cursor: pointer;
+  color: #6366f1;
+  font-size: 11px;
+  padding: 2px 0;
 }
 
 .thinking {
