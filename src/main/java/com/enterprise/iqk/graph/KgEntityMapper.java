@@ -10,9 +10,13 @@ import java.util.List;
 @Mapper
 public interface KgEntityMapper extends BaseMapper<KgEntityRecord> {
 
-    @Select("SELECT * FROM kg_entity WHERE tenant_id = #{tenantId} AND name LIKE CONCAT('%', #{keyword}, '%') " +
-            "OR tenant_id = #{tenantId} AND JSON_CONTAINS(aliases, JSON_QUOTE(#{keyword})) " +
-            "LIMIT #{limit}")
+    @Select("""
+            SELECT * FROM kg_entity
+            WHERE tenant_id = #{tenantId}
+              AND (name LIKE CONCAT('%', #{keyword}, '%')
+                   OR JSON_CONTAINS(aliases, JSON_QUOTE(#{keyword})))
+            LIMIT #{limit}
+            """)
     List<KgEntityRecord> searchByName(@Param("tenantId") String tenantId,
                                        @Param("keyword") String keyword,
                                        @Param("limit") int limit);

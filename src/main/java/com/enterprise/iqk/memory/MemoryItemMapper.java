@@ -11,15 +11,26 @@ import java.util.List;
 @Mapper
 public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
 
-    @Select("SELECT * FROM memory_item WHERE tenant_id = #{tenantId} AND user_id = #{userId} " +
-            "AND type = #{type} ORDER BY created_at DESC LIMIT #{limit}")
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND user_id = #{userId}
+              AND type = #{type}
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
     List<MemoryItemRecord> findByUserAndType(@Param("tenantId") String tenantId,
                                               @Param("userId") String userId,
                                               @Param("type") String type,
                                               @Param("limit") int limit);
 
-    @Select("SELECT * FROM memory_item WHERE tenant_id = #{tenantId} AND user_id = #{userId} " +
-            "ORDER BY created_at DESC LIMIT #{limit}")
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND user_id = #{userId}
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
     List<MemoryItemRecord> findByUser(@Param("tenantId") String tenantId,
                                        @Param("userId") String userId,
                                        @Param("limit") int limit);
@@ -27,8 +38,14 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
     @Select("SELECT * FROM memory_item WHERE source_task_id = #{taskId}")
     List<MemoryItemRecord> findByTaskId(@Param("taskId") String taskId);
 
-    @Select("SELECT * FROM memory_item WHERE tenant_id = #{tenantId} AND type = #{type} " +
-            "AND confidence >= #{minConfidence} ORDER BY created_at DESC LIMIT #{limit}")
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND type = #{type}
+              AND confidence >= #{minConfidence}
+            ORDER BY created_at DESC
+            LIMIT #{limit}
+            """)
     List<MemoryItemRecord> findByTypeAndConfidence(@Param("tenantId") String tenantId,
                                                     @Param("type") String type,
                                                     @Param("minConfidence") double minConfidence,

@@ -10,9 +10,14 @@ import java.util.List;
 @Mapper
 public interface KgFactMapper extends BaseMapper<KgFactRecord> {
 
-    @Select("SELECT * FROM kg_fact WHERE tenant_id = #{tenantId} " +
-            "AND (subject LIKE CONCAT('%', #{keyword}, '%') OR object LIKE CONCAT('%', #{keyword}, '%')) " +
-            "ORDER BY confidence DESC LIMIT #{limit}")
+    @Select("""
+            SELECT * FROM kg_fact
+            WHERE tenant_id = #{tenantId}
+              AND (subject LIKE CONCAT('%', #{keyword}, '%')
+                   OR object LIKE CONCAT('%', #{keyword}, '%'))
+            ORDER BY confidence DESC
+            LIMIT #{limit}
+            """)
     List<KgFactRecord> searchByKeyword(@Param("tenantId") String tenantId,
                                         @Param("keyword") String keyword,
                                         @Param("limit") int limit);
