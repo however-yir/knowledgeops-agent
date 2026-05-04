@@ -13,7 +13,9 @@ import com.enterprise.iqk.util.ConversationIdHelper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClient;
@@ -471,8 +473,10 @@ public class WorkflowReactAgentService {
             for (Object item : list) {
                 if (!(item instanceof Map<?, ?> raw)) continue;
                 CourseQuery.Sort s = new CourseQuery.Sort();
-                s.setField(String.valueOf(raw.getOrDefault("field", "")));
-                s.setIsAsc(Boolean.parseBoolean(String.valueOf(raw.getOrDefault("isAsc", "false"))));
+                Object fieldVal = raw.get("field");
+                Object isAscVal = raw.get("isAsc");
+                s.setField(fieldVal == null ? null : String.valueOf(fieldVal));
+                s.setIsAsc(isAscVal == null ? null : Boolean.parseBoolean(String.valueOf(isAscVal)));
                 result.add(s);
             }
             q.setSorts(result);
