@@ -139,49 +139,6 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  owasp-scan:
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: maven
-
-      - name: Cache OWASP NVD Database
-        id: cache-nvd
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository/org/owasp/dependency-check-data
-          key: owasp-nvd-${{ github.run_id }}
-          restore-keys: |
-            owasp-nvd-
-
-      - name: OWASP Dependency Check
-        run: |
-          EXTRA_ARGS=""
-          if [ "${{ steps.cache-nvd.outputs.cache-hit }}" != "true" ]; then
-            echo "No cached NVD data found - skipping full NVD download (deferred to nightly)"
-            EXTRA_ARGS="-DnvdValidForHours=168 -DfailOnError=false"
-          else
-            echo "Using cached NVD data with incremental update"
-            EXTRA_ARGS="-DnvdApiDelay=6000 -DnvdValidForHours=24"
-          fi
-          mvn org.owasp:dependency-check-maven:check $EXTRA_ARGS
-        continue-on-error: true
-
-      - name: Upload OWASP Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: owasp-report
-          path: target/dependency-check-report.*
-
   e2e-smoke:
     if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     needs: [build, frontend]
