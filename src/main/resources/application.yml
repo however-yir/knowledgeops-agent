@@ -159,6 +159,15 @@ app:
   feedback:
     enabled: ${APP_FEEDBACK_ENABLED:true}
     dataset-path: ${APP_FEEDBACK_DATASET_PATH:evaluation/feedback_dataset.jsonl}
+  web-search:
+    enabled: ${APP_WEB_SEARCH_ENABLED:false}
+    backend: ${APP_WEB_SEARCH_BACKEND:searxng}
+    searxng-url: ${APP_WEB_SEARCH_SEARXNG_URL:}
+    bing-api-key: ${APP_WEB_SEARCH_BING_API_KEY:}
+    bing-endpoint: ${APP_WEB_SEARCH_BING_ENDPOINT:https://api.bing.microsoft.com/v7.0}
+    connect-timeout-ms: ${APP_WEB_SEARCH_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${APP_WEB_SEARCH_READ_TIMEOUT_MS:8000}
+    max-results: ${APP_WEB_SEARCH_MAX_RESULTS:5}
   cost-governance:
     enabled: ${APP_COST_GOVERNANCE_ENABLED:true}
     default-monthly-budget-usd: ${APP_COST_DEFAULT_MONTHLY_BUDGET_USD:25.0000}

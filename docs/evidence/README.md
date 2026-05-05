@@ -22,6 +22,72 @@ This pack collects the shortest public proof path for reviewing the project as a
 - Knowledge graph architecture: `docs/architecture-knowledge-graph.md`
 - Memory system architecture: `docs/architecture-memory-system.md`
 
+## Cross-Repo Integration Evidence (KnowledgeOps → tianji)
+
+The following evidence demonstrates that the "KnowledgeOps→tianji" matrix link is a runnable code path, not just a README arrow.
+
+### Prerequisites
+
+```bash
+# 1. Start KnowledgeOps Agent stack
+cd knowledgeops-agent && ./scripts/demo.sh
+
+# 2. Start tianji-ai-agent stack (in another terminal)
+cd tianji-ai-agent && bash scripts/quick-start-mac.sh
+
+# 3. Set cross-repo environment variables for tianji
+export TJ_AI_KNOWLEDGEOPS_ENABLED=true
+export TJ_AI_KNOWLEDGEOPS_BASE_URL=http://localhost:8080
+export TJ_AI_KNOWLEDGEOPS_API_KEY=your-api-key
+```
+
+### Verification Steps
+
+1. **Web Retrieval is functional**: With `APP_WEB_SEARCH_ENABLED=true` and a SearXNG instance configured, send a research query → confirm `retrieval.web.latency` metric shows `outcome=success` (not `disabled` or `no-backend`).
+2. **KnowledgeOpsClient reaches KnowledgeOps**: With `TJ_AI_KNOWLEDGEOPS_ENABLED=true` in tianji, send a KNOWLEDGE or RECOMMEND prompt → check tianji logs for `KnowledgeOps platform RAG` or `KnowledgeOps platform memory` enrichment messages.
+3. **Fallback works**: With `TJ_AI_KNOWLEDGEOPS_ENABLED=false`, send the same prompt → tianji's KnowledgeAgent and RecommendAgent fall back to local VectorStore Advisor without errors.
+4. **Both CIs are green**: Open the latest GitHub Actions run for both repositories and confirm `✓` on main branch pushes.
+
+### Cross-Repo Docker Compose (Minimal)
+
+```yaml
+# docker-compose.cross-repo.yml — for local cross-repo verification
+version: "3.8"
+services:
+  searxng:
+    image: searxng/searxng:latest
+    ports: ["8888:8080"]
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8888/
+
+  knowledgeops:
+    image: ghcr.io/however-yir/knowledgeops-agent:latest
+    ports: ["8080:8080"]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      APP_WEB_SEARCH_ENABLED: "true"
+      APP_WEB_SEARCH_BACKEND: searxng
+      APP_WEB_SEARCH_SEARXNG_URL: http://searxng:8080
+    depends_on: [searxng]
+
+  tianji-aigc:
+    image: ghcr.io/however-yir/tianji-ai-agent:demo
+    ports: ["8094:8094"]
+    environment:
+      TJ_AI_KNOWLEDGEOPS_ENABLED: "true"
+      TJ_AI_KNOWLEDGEOPS_BASE_URL: http://knowledgeops:8080
+    depends_on: [knowledgeops]
+```
+
+### Evidence Artifacts
+
+| Evidence | How to verify |
+|---|---|
+| Web retrieval returns results | Check `retrieval.web.latency` metric with `outcome=success` |
+| tianji reaches KnowledgeOps | Check tianji logs for `KnowledgeOps platform RAG` debug messages |
+| Fallback without KnowledgeOps | Disable `TJ_AI_KNOWLEDGEOPS_ENABLED` → agents use local Advisor |
+| Both CIs are green | Open latest GitHub Actions run on `main` for both repos |
+
 ## Verification Checklist
 
 - Start the demo stack from a clean checkout.
@@ -30,3 +96,5 @@ This pack collects the shortest public proof path for reviewing the project as a
 - Run an Agent workflow and confirm task/step/event state is visible.
 - Check Prometheus/Grafana/trace documentation in `docs/observability.md`.
 - Open the latest GitHub Actions run and confirm the baseline CI is green.
+- *(Cross-repo)* With KnowledgeOps running, verify tianji's KnowledgeAgent reaches it via KnowledgeOpsClient.
+- *(Cross-repo)* With KnowledgeOps stopped, verify tianji's KnowledgeAgent falls back to local Advisor.
