@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   JAVA_VERSION: "17"
@@ -141,6 +142,7 @@ jobs:
   owasp-scan:
     if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
