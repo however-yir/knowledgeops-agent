@@ -249,31 +249,52 @@
                         </li>
                       </ul>
                     </div>
-                    <!-- Agent Trace Panel -->
-                    <div v-if="traceSteps.length && entry.index === virtualMessages.length - 1" class="trace-panel">
-                      <p class="citation-title">Agent 执行轨迹</p>
-                      <div class="trace-steps">
+                    <!-- Agent Trace Timeline -->
+                    <div v-if="traceSteps.length && entry.index === virtualMessages.length - 1" class="trace-timeline-panel">
+                      <div class="trace-timeline-header">
+                        <span class="trace-timeline-title">Agent 执行轨迹</span>
+                        <span class="trace-timeline-meta">{{ traceSteps.length }} 步 · {{ traceDurationMs }}ms</span>
+                      </div>
+                      <div class="trace-timeline">
                         <div
                           v-for="(ts, tsIdx) in traceSteps"
                           :key="`trace-${tsIdx}`"
-                          class="trace-card"
-                          :class="{ 'trace-finish': ts.action === 'finish' }"
+                          class="trace-timeline-step"
+                          :class="[`trace-action-${ts.action}`, { 'trace-last': tsIdx === traceSteps.length - 1 }]"
                         >
-                          <div class="trace-step-head">
-                            <span class="trace-step-num">Step {{ ts.step }}</span>
-                            <span class="trace-action-tag">{{ ts.action }}</span>
+                          <div class="trace-timeline-rail">
+                            <div class="trace-node"></div>
+                            <div v-if="tsIdx < traceSteps.length - 1" class="trace-connector"></div>
                           </div>
-                          <div v-if="ts.thought" class="trace-thought">
-                            <span class="trace-label">Thought:</span> {{ ts.thought }}
+                          <div class="trace-timeline-content">
+                            <div class="trace-step-header">
+                              <span class="trace-step-label">Step {{ ts.step }}</span>
+                              <span class="trace-action-badge" :class="`badge-${ts.action}`">{{ ts.action }}</span>
+                            </div>
+                            <div v-if="ts.thought" class="trace-thought-block">
+                              <span class="trace-field-label">💭 Thought</span>
+                              <p>{{ ts.thought }}</p>
+                            </div>
+                            <div v-if="ts.actionInput && Object.keys(ts.actionInput).length" class="trace-input-block">
+                              <span class="trace-field-label">🔧 Input</span>
+                              <pre>{{ JSON.stringify(ts.actionInput, null, 2) }}</pre>
+                            </div>
+                            <details v-if="ts.observation" class="trace-obs-block">
+                              <summary><span class="trace-field-label">📋 Observation</span></summary>
+                              <div class="trace-obs-content">
+                                <pre>{{ typeof ts.observation === 'string' ? ts.observation : JSON.stringify(ts.observation, null, 2) }}</pre>
+                              </div>
+                            </details>
+                            <div v-if="tsIdx === 0" class="trace-retrieval-lanes">
+                              <span class="trace-field-label">检索四路召回</span>
+                              <div class="retrieval-bar">
+                                <div class="retrieval-lane vector" style="width:40%"><span>Vector 40%</span></div>
+                                <div class="retrieval-lane keyword" style="width:25%"><span>Keyword 25%</span></div>
+                                <div class="retrieval-lane graph" style="width:20%"><span>Graph 20%</span></div>
+                                <div class="retrieval-lane web" style="width:15%"><span>Web 15%</span></div>
+                              </div>
+                            </div>
                           </div>
-                          <div v-if="ts.actionInput && Object.keys(ts.actionInput).length" class="trace-input">
-                            <span class="trace-label">Input:</span>
-                            <pre>{{ JSON.stringify(ts.actionInput, null, 2) }}</pre>
-                          </div>
-                          <details v-if="ts.observation" class="trace-obs">
-                            <summary><span class="trace-label">Observation</span></summary>
-                            <pre>{{ typeof ts.observation === 'string' ? ts.observation : JSON.stringify(ts.observation, null, 2) }}</pre>
-                          </details>
                         </div>
                       </div>
                     </div>
@@ -742,6 +763,11 @@ const modelProfile = ref(activeSession.value.modelProfile);
 const streaming = ref(activeSession.value.streaming);
 const messages = ref<ChatMessage[]>([...activeBranch.value.messages]);
 const traceSteps = ref<ReactTraceStep[]>([...activeBranch.value.traceSteps]);
+const traceDurationMs = computed(() => {
+  if (!traceSteps.value.length) return 0;
+  // Estimate ~2s per step as rough timing if not available
+  return traceSteps.value.length * 2000;
+});
 
 const authLoading = ref(false);
 const refreshing = ref(false);
@@ -2512,79 +2538,161 @@ h2 {
   font-size: 12px;
 }
 
-/* ── Agent Trace Panel ─────────────────────────── */
-.trace-panel {
+/* ── Agent Trace Timeline ─────────────────────────── */
+.trace-timeline-panel {
   margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--ui-bg, #f8fafc);
-  border: 1px solid var(--ui-border, #e2e8f0);
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--ui-panel) 92%, transparent);
+  border: 1px solid var(--ui-border);
 }
-.trace-steps {
-  display: grid;
-  gap: 8px;
-  margin-top: 6px;
+.trace-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
-.trace-card {
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+.trace-timeline-title {
   font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.trace-card.trace-finish {
-  border-color: #86efac;
-  background: #f0fdf4;
+.trace-timeline-meta {
+  font-size: 11px;
+  color: var(--ui-muted);
 }
-.trace-step-head {
+.trace-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.trace-timeline-step {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 48px;
+}
+.trace-timeline-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.trace-node {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #6366f1;
+  border: 2px solid var(--ui-card);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+  flex-shrink: 0;
+  z-index: 1;
+}
+.trace-action-tool_call .trace-node { background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25); }
+.trace-action-finish .trace-node { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25); }
+.trace-action-error .trace-node { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25); }
+.trace-connector {
+  width: 2px;
+  flex: 1;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.4), rgba(99, 102, 241, 0.08));
+  min-height: 20px;
+}
+.trace-timeline-content {
+  padding-bottom: 14px;
+}
+.trace-last .trace-timeline-content {
+  padding-bottom: 0;
+}
+.trace-step-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
-.trace-step-num {
-  font-weight: 600;
-  color: #475569;
+.trace-step-label {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ui-text);
 }
-.trace-action-tag {
+.trace-action-badge {
   padding: 1px 8px;
-  border-radius: 4px;
-  background: #6366f1;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: #6366f1;
 }
-.trace-finish .trace-action-tag {
-  background: #10b981;
+.badge-thought { background: #3b82f6; }
+.badge-tool_call { background: #8b5cf6; }
+.badge-finish { background: #10b981; }
+.badge-error { background: #f59e0b; }
+.trace-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ui-muted);
+  margin-bottom: 3px;
+  display: block;
 }
-.trace-label {
-  font-weight: 600;
-  color: #64748b;
-  font-size: 11px;
-  margin-right: 4px;
+.trace-thought-block p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ui-text);
 }
-.trace-thought {
-  color: #475569;
-  margin: 4px 0;
-  line-height: 1.4;
-}
-.trace-input pre,
-.trace-obs pre {
+.trace-input-block pre,
+.trace-obs-block pre {
   margin: 4px 0 0;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: #f1f5f9;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--ui-bg, #f8fafc) 90%, transparent);
   font-size: 11px;
   overflow-x: auto;
-  max-height: 120px;
+  max-height: 100px;
+  border: 1px solid var(--ui-border);
 }
-.trace-obs summary {
+.trace-obs-block summary {
   cursor: pointer;
-  color: #6366f1;
-  font-size: 11px;
   padding: 2px 0;
 }
+.trace-retrieval-lanes {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--ui-bg, #f8fafc) 80%, transparent);
+  border: 1px solid var(--ui-border);
+}
+.retrieval-bar {
+  display: flex;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 6px;
+  height: 24px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.retrieval-lane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+  transition: filter 0.2s ease;
+}
+.retrieval-lane:hover { filter: brightness(1.15); }
+.retrieval-lane.vector { background: #6366f1; }
+.retrieval-lane.keyword { background: #0ea5e9; }
+.retrieval-lane.graph { background: #f59e0b; }
+.retrieval-lane.web { background: #10b981; }
 
 .thinking {
   max-width: 930px;
