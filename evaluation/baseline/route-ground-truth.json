@@ -1,0 +1,22 @@
+[
+  {"query": "推荐Java入门课程", "expectedAgent": "RECOMMEND", "expectedConfidence": 0.85},
+  {"query": "这门课的价格是多少", "expectedAgent": "CONSULT", "expectedConfidence": 0.90},
+  {"query": "帮我生成订单", "expectedAgent": "BUY", "expectedConfidence": 0.85},
+  {"query": "Redis缓存穿透怎么处理", "expectedAgent": "KNOWLEDGE", "expectedConfidence": 0.80},
+  {"query": "我要申请退款", "expectedAgent": "AFTER_SALE", "expectedConfidence": 0.75},
+  {"query": "讲师态度差投诉", "expectedAgent": "COMPLAINT", "expectedConfidence": 0.75},
+  {"query": "制定3个月学习计划", "expectedAgent": "STUDY_PLAN", "expectedConfidence": 0.80},
+  {"query": "转人工客服", "expectedAgent": "HUMAN_HANDOFF", "expectedConfidence": 0.90},
+  {"query": "课程适合零基础吗", "expectedAgent": "CONSULT", "expectedConfidence": 0.80},
+  {"query": "Spring Boot怎么学", "expectedAgent": "RECOMMEND", "expectedConfidence": 0.75},
+  {"query": "订单查询", "expectedAgent": "AFTER_SALE", "expectedConfidence": 0.70},
+  {"query": "这个平台的课程有优惠吗", "expectedAgent": "CONSULT", "expectedConfidence": 0.75},
+  {"query": "帮我买第二门课", "expectedAgent": "BUY", "expectedConfidence": 0.85},
+  {"query": "JVM调优实战知识", "expectedAgent": "KNOWLEDGE", "expectedConfidence": 0.80},
+  {"query": "学习路径推荐", "expectedAgent": "STUDY_PLAN", "expectedConfidence": 0.80},
+  {"query": "课程视频看不了", "expectedAgent": "AFTER_SALE", "expectedConfidence": 0.75},
+  {"query": "我要投诉课程质量", "expectedAgent": "COMPLAINT", "expectedConfidence": 0.80},
+  {"query": "和真人说话", "expectedAgent": "HUMAN_HANDOFF", "expectedConfidence": 0.90},
+  {"query": "Python和Java哪个好学", "expectedAgent": "RECOMMEND", "expectedConfidence": 0.70},
+  {"query": "优惠券怎么用", "expectedAgent": "CONSULT", "expectedConfidence": 0.80}
+]

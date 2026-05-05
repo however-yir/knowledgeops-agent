@@ -13,3 +13,13 @@ This repository is one part of a five-project AI engineering portfolio. The matr
 ## How This Repository Fits
 
 `knowledgeops-agent` is the enterprise backend slice. It proves that RAG can be treated as a governed platform with tenant boundaries, asynchronous ingestion, auditability, observability, and repeatable quality checks.
+
+## Cross-Repo Verification
+
+The matrix link between KnowledgeOps and tianji is verified by:
+
+1. **Code path**: `KnowledgeOpsClient` in tianji calls KnowledgeOps Agent's REST API (`/ai/rag/search`, `/ai/memory/query`, `/ai/graph/search`)
+2. **Fallback strategy**: When platform is unavailable, tianji agents fall back to local VectorStore + Advisor
+3. **CI evidence**: Both repositories have green CI on `main` branch
+4. **Docker compose**: See `docs/evidence/README.md` for a 2-service + 3-env-var cross-repo Docker Compose
+5. **Interactive architecture page**: [however-yir.github.io/matrix](https://however-yir.github.io/matrix) — click any node to jump to its Evidence Pack
