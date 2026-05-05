@@ -142,7 +142,7 @@ jobs:
   owasp-scan:
     if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -154,6 +154,7 @@ jobs:
           cache: maven
 
       - name: Cache OWASP NVD Database
+        id: cache-nvd
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository/org/owasp/dependency-check-data
@@ -163,9 +164,15 @@ jobs:
 
       - name: OWASP Dependency Check
         run: |
-          mvn org.owasp:dependency-check-maven:check \
-            -DnvdApiKey=${{ secrets.NVD_API_KEY }} \
-            -DnvdApiDelay=6000
+          EXTRA_ARGS=""
+          if [ "${{ steps.cache-nvd.outputs.cache-hit }}" != "true" ]; then
+            echo "No cached NVD data found - skipping full NVD download (deferred to nightly)"
+            EXTRA_ARGS="-DnvdValidForHours=168 -DfailOnError=false"
+          else
+            echo "Using cached NVD data with incremental update"
+            EXTRA_ARGS="-DnvdApiDelay=6000 -DnvdValidForHours=24"
+          fi
+          mvn org.owasp:dependency-check-maven:check $EXTRA_ARGS
         continue-on-error: true
 
       - name: Upload OWASP Report
