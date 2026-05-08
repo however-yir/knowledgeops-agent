@@ -1,6 +1,8 @@
 app:
   security:
     enabled: false
+  cors:
+    allowed-origins: http://localhost:8088,http://localhost:5173
   ingestion:
     worker-enabled: false
     queue-backend: db_polling

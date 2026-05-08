@@ -398,7 +398,7 @@
                     <threshold>Medium</threshold>
                     <xmlOutput>true</xmlOutput>
                     <excludeFilterFile>spotbugs-exclude.xml</excludeFilterFile>
-                    <failOnError>false</failOnError>
+                    <failOnError>true</failOnError>
                 </configuration>
                 <executions>
                     <execution>

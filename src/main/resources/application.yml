@@ -88,7 +88,7 @@ app:
     refresh-expire-days: ${APP_JWT_REFRESH_EXPIRE_DAYS:14}
     api-key-expire-days: ${APP_API_KEY_EXPIRE_DAYS:30}
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:*}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:8088}
   rate-limit:
     enabled: ${APP_RATE_LIMIT_ENABLED:true}
     capacity: ${APP_RATE_LIMIT_CAPACITY:60}

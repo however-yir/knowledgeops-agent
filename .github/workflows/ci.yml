@@ -27,15 +27,14 @@ jobs:
 
       - name: Checkstyle
         run: mvn checkstyle:check -q
-        continue-on-error: true
+        continue-on-error: true  # TODO: tighten after current violations are resolved
 
       - name: PMD
         run: mvn pmd:check -q
-        continue-on-error: true
+        continue-on-error: true  # TODO: tighten after current violations are resolved
 
       - name: SpotBugs
         run: mvn spotbugs:check -q
-        continue-on-error: true
 
   build:
     if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
