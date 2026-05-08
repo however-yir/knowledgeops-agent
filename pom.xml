@@ -32,6 +32,9 @@
         <owasp.version>11.1.1</owasp.version>
         <cyclonedx.version>2.9.1</cyclonedx.version>
         <jacoco.version>0.8.12</jacoco.version>
+        <!-- Override managed versions to fix CVEs (keep Spring Boot 3.4.x base) -->
+        <netty.version>4.1.133.Final</netty.version>
+        <tomcat.version>10.1.53</tomcat.version>
     </properties>
     <dependencies>
         <dependency>
