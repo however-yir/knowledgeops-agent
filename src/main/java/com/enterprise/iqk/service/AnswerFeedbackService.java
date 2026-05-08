@@ -67,7 +67,8 @@ public class AnswerFeedbackService {
 
     private void appendToDataset(String tenantId, AnswerFeedback feedback, LocalDateTime createdAt) {
         Map<String, Object> datasetItem = new LinkedHashMap<>();
-        datasetItem.put("id", "feedback_" + createdAt.toLocalDate() + "_" + feedback.getId());
+        String feedbackId = feedback.getId() != null ? feedback.getId().toString() : String.valueOf(System.nanoTime());
+        datasetItem.put("id", "feedback_" + createdAt.toLocalDate() + "_" + feedbackId);
         datasetItem.put("category", "user_feedback");
         datasetItem.put("tenant_id", tenantId);
         datasetItem.put("chatId", feedback.getChatId());

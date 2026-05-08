@@ -27,11 +27,9 @@ jobs:
 
       - name: Checkstyle
         run: mvn checkstyle:check -q
-        continue-on-error: true  # TODO: tighten after current violations are resolved
 
       - name: PMD
         run: mvn pmd:check -q
-        continue-on-error: true  # TODO: tighten after current violations are resolved
 
       - name: SpotBugs
         run: mvn spotbugs:check -q
@@ -126,11 +124,9 @@ jobs:
 
       - name: ESLint
         run: npx eslint . --ext .ts,.tsx,.vue
-        continue-on-error: true
 
       - name: Prettier check
         run: npx prettier --check "src/**/*.{ts,tsx,vue,css}"
-        continue-on-error: true
 
       - name: TypeScript check
         run: npx vue-tsc --noEmit
@@ -142,6 +138,8 @@ jobs:
     if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     needs: [build, frontend]
     runs-on: ubuntu-latest
+    env:
+      COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
     steps:
       - uses: actions/checkout@v6
 

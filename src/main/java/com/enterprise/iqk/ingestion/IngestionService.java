@@ -284,6 +284,9 @@ public class IngestionService {
             return;
         }
         String storePath = vectorStoreProperties.getSimpleStorePath();
+        if (!StringUtils.hasText(storePath)) {
+            return;
+        }
         try {
             Path path = Path.of(storePath);
             if (path.getParent() != null) {

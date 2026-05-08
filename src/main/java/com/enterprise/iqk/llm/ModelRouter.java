@@ -30,7 +30,16 @@ public class ModelRouter {
     public ModelRouter(ModelRouterProperties modelRouterProperties,
                        ObjectProvider<ModelAbExposureMapper> modelAbExposureMapperProvider) {
         this.modelRouterProperties = modelRouterProperties;
-        this.modelAbExposureMapper = modelAbExposureMapperProvider.getIfAvailable();
+        this.modelAbExposureMapper = initMapper(modelAbExposureMapperProvider);
+    }
+
+    private static ModelAbExposureMapper initMapper(
+            ObjectProvider<ModelAbExposureMapper> provider) {
+        try {
+            return provider.getIfAvailable();
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     public ModelRouteDecision resolve(String requestedProfile, String endpoint) {
@@ -76,7 +85,7 @@ public class ModelRouter {
                     .experimentKey(decision.experimentKey())
                     .subjectKey(StringUtils.hasText(subjectKey) ? subjectKey : "na")
                     .endpoint(StringUtils.hasText(endpoint) ? endpoint : "unknown")
-                    .bucket(decision.experimentBucket() == null ? -1 : decision.experimentBucket())
+                    .bucket(decision.experimentBucket() != null ? decision.experimentBucket() : -1)
                     .variant(StringUtils.hasText(decision.experimentVariant()) ? decision.experimentVariant() : "unknown")
                     .routedProfile(decision.profile())
                     .createdAt(LocalDateTime.now())
@@ -108,7 +117,8 @@ public class ModelRouter {
         int qualityPercent = Math.min(100, Math.max(0, experiment.getQualityPercent()));
         String normalizedEndpoint = StringUtils.hasText(endpoint) ? normalizeProfile(endpoint) : "na";
         String normalizedSubject = StringUtils.hasText(subjectKey) ? subjectKey.trim() : "na";
-        int bucket = Math.floorMod((tenantId + "|" + normalizedEndpoint + "|" + normalizedSubject).hashCode(), 100);
+        int rawHash = (tenantId + "|" + normalizedEndpoint + "|" + normalizedSubject).hashCode();
+        int bucket = Math.floorMod(rawHash, 100);
         boolean qualityVariant = bucket < qualityPercent;
         String variant = qualityVariant ? "quality" : "cost";
         String routedProfile = qualityVariant ? "quality" : "economy";

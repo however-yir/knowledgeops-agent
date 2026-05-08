@@ -46,7 +46,7 @@ export interface ReactErrorEvent {
   message: string;
 }
 
-export type ReactStreamEvent = "trace" | "token" | "done" | "error";
+export type ReactStreamEvent = 'trace' | 'token' | 'done' | 'error';
 
 export interface AuthContext {
   token?: string;
@@ -56,10 +56,10 @@ export interface AuthContext {
 
 export interface SessionMessage {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   createdAt: number;
-  state?: "pending" | "streaming" | "done" | "error" | "stopped";
+  state?: 'pending' | 'streaming' | 'done' | 'error' | 'stopped';
   citations?: string[];
   evidence?: string[];
 }

@@ -11,13 +11,13 @@ import type {
   ReactStreamEvent,
   SessionState,
   TenantBudgetUpdate,
-  TenantCostSummary
-} from "../types/react";
+  TenantCostSummary,
+} from '../types/react';
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
 
 function resolveApi(path: string): string {
-  if (path.startsWith("http://") || path.startsWith("https://")) {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
   return `${API_BASE}${path}`;
@@ -28,10 +28,10 @@ function buildAuthHeaders(auth?: AuthContext): HeadersInit {
   if (auth?.token) {
     headers.Authorization = `Bearer ${auth.token}`;
   } else if (auth?.apiKey) {
-    headers["X-API-Key"] = auth.apiKey;
+    headers['X-API-Key'] = auth.apiKey;
   }
   if (auth?.tenantId) {
-    headers["X-Tenant-ID"] = auth.tenantId;
+    headers['X-Tenant-ID'] = auth.tenantId;
   }
   return headers;
 }
@@ -49,16 +49,19 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
 }
 
 function formatHttpError(status: number, message: string): Error {
-  return new Error(`HTTP ${status}: ${message || "request failed"}`);
+  return new Error(`HTTP ${status}: ${message || 'request failed'}`);
 }
 
-function withQuery(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+function withQuery(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): string {
   if (!params) {
     return path;
   }
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") {
+    if (value === undefined || value === null || value === '') {
       return;
     }
     search.set(key, String(value));
@@ -70,31 +73,34 @@ function withQuery(path: string, params?: Record<string, string | number | boole
   return `${path}?${query}`;
 }
 
-export async function exchangeApiKey(apiKey: string, tenantId?: string): Promise<AuthTokenResponse> {
-  const response = await fetch(resolveApi("/auth/token"), {
-    method: "POST",
+export async function exchangeApiKey(
+  apiKey: string,
+  tenantId?: string,
+): Promise<AuthTokenResponse> {
+  const response = await fetch(resolveApi('/auth/token'), {
+    method: 'POST',
     headers: {
-      "X-API-Key": apiKey,
-      ...(tenantId ? { "X-Tenant-ID": tenantId } : {})
-    }
+      'X-API-Key': apiKey,
+      ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
+    },
   });
   const payload = await parseJsonSafely<AuthTokenResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? "token exchange failed");
+    throw formatHttpError(response.status, payload?.msg ?? 'token exchange failed');
   }
   return payload;
 }
 
 export async function refreshJwt(refreshToken: string): Promise<AuthTokenResponse> {
-  const response = await fetch(resolveApi("/auth/refresh"), {
-    method: "POST",
+  const response = await fetch(resolveApi('/auth/refresh'), {
+    method: 'POST',
     headers: {
-      "X-Refresh-Token": refreshToken
-    }
+      'X-Refresh-Token': refreshToken,
+    },
   });
   const payload = await parseJsonSafely<AuthTokenResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? "refresh token failed");
+    throw formatHttpError(response.status, payload?.msg ?? 'refresh token failed');
   }
   return payload;
 }
@@ -102,20 +108,20 @@ export async function refreshJwt(refreshToken: string): Promise<AuthTokenRespons
 export async function reactChat(
   request: ReactChatRequest,
   auth?: AuthContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<ReactChatResponse> {
-  const response = await fetch(resolveApi("/ai/react/chat"), {
-    method: "POST",
+  const response = await fetch(resolveApi('/ai/react/chat'), {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders(auth)
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
     },
     body: JSON.stringify(request),
-    signal
+    signal,
   });
   const payload = await parseJsonSafely<ReactChatResponse>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? "react chat failed");
+    throw formatHttpError(response.status, payload?.msg ?? 'react chat failed');
   }
   return payload;
 }
@@ -128,37 +134,37 @@ interface ParsedEvent {
 }
 
 function parseSseChunk(rawChunk: string): ParsedEvent | null {
-  const normalized = rawChunk.replace(/\r/g, "");
-  const lines = normalized.split("\n");
-  let eventName: ReactStreamEvent = "token";
+  const normalized = rawChunk.replace(/\r/g, '');
+  const lines = normalized.split('\n');
+  let eventName: ReactStreamEvent = 'token';
   const dataLines: string[] = [];
   for (const line of lines) {
     if (!line.trim()) {
       continue;
     }
-    if (line.startsWith("data:event:")) {
-      const parsed = line.slice("data:event:".length).trim();
-      if (parsed === "trace" || parsed === "token" || parsed === "done" || parsed === "error") {
+    if (line.startsWith('data:event:')) {
+      const parsed = line.slice('data:event:'.length).trim();
+      if (parsed === 'trace' || parsed === 'token' || parsed === 'done' || parsed === 'error') {
         eventName = parsed;
       }
       continue;
     }
-    if (line.startsWith("data:data:")) {
-      const payload = line.slice("data:data:".length).trim();
+    if (line.startsWith('data:data:')) {
+      const payload = line.slice('data:data:'.length).trim();
       if (payload) {
         dataLines.push(payload);
       }
       continue;
     }
-    if (line.startsWith("event:")) {
-      const parsed = line.slice("event:".length).trim();
-      if (parsed === "trace" || parsed === "token" || parsed === "done" || parsed === "error") {
+    if (line.startsWith('event:')) {
+      const parsed = line.slice('event:'.length).trim();
+      if (parsed === 'trace' || parsed === 'token' || parsed === 'done' || parsed === 'error') {
         eventName = parsed;
       }
       continue;
     }
-    if (line.startsWith("data:")) {
-      const payload = line.slice("data:".length).trim();
+    if (line.startsWith('data:')) {
+      const payload = line.slice('data:'.length).trim();
       if (payload) {
         dataLines.push(payload);
       }
@@ -167,23 +173,23 @@ function parseSseChunk(rawChunk: string): ParsedEvent | null {
   if (dataLines.length === 0) {
     return null;
   }
-  const joined = dataLines.join("\n");
+  const joined = dataLines.join('\n');
   try {
     return {
       event: eventName,
-      payload: JSON.parse(joined)
+      payload: JSON.parse(joined),
     };
   } catch {
     return {
       event: eventName,
-      payload: joined
+      payload: joined,
     };
   }
 }
 
 function takeNextChunk(input: string): { chunk: string; rest: string } | null {
-  const lf = input.indexOf("\n\n");
-  const crlf = input.indexOf("\r\n\r\n");
+  const lf = input.indexOf('\n\n');
+  const crlf = input.indexOf('\r\n\r\n');
 
   if (lf < 0 && crlf < 0) {
     return null;
@@ -198,7 +204,7 @@ function takeNextChunk(input: string): { chunk: string; rest: string } | null {
 
   return {
     chunk: input.slice(0, splitAt),
-    rest: input.slice(splitAt + separatorLength)
+    rest: input.slice(splitAt + separatorLength),
   };
 }
 
@@ -206,30 +212,30 @@ export async function streamReactChat(
   request: ReactChatRequest,
   auth: AuthContext | undefined,
   onEvent: StreamHandler,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(resolveApi("/ai/react/chat/stream"), {
-    method: "POST",
+  const response = await fetch(resolveApi('/ai/react/chat/stream'), {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-      ...buildAuthHeaders(auth)
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      ...buildAuthHeaders(auth),
     },
     body: JSON.stringify(request),
-    signal
+    signal,
   });
 
   if (!response.ok) {
     const errPayload = await parseJsonSafely<{ msg?: string }>(response);
-    throw formatHttpError(response.status, errPayload?.msg ?? "stream init failed");
+    throw formatHttpError(response.status, errPayload?.msg ?? 'stream init failed');
   }
   if (!response.body) {
-    throw new Error("SSE stream body is empty");
+    throw new Error('SSE stream body is empty');
   }
 
   const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-  let buffer = "";
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
   let reading = true;
 
   while (reading) {
@@ -277,64 +283,83 @@ export async function listSessionStates(
     search?: string;
     workspace?: string;
     includeArchived?: boolean;
-  }
+  },
 ): Promise<PagedResult<SessionState>> {
-  const response = await fetch(resolveApi(withQuery("/ai/sessions", {
-    page: params?.page ?? 1,
-    pageSize: params?.pageSize ?? 50,
-    search: params?.search ?? "",
-    workspace: params?.workspace ?? "all",
-    includeArchived: params?.includeArchived ?? true
-  })), {
-    method: "GET",
-    headers: buildAuthHeaders(auth)
-  });
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ai/sessions', {
+        page: params?.page ?? 1,
+        pageSize: params?.pageSize ?? 50,
+        search: params?.search ?? '',
+        workspace: params?.workspace ?? 'all',
+        includeArchived: params?.includeArchived ?? true,
+      }),
+    ),
+    {
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
   const payload = await parseJsonSafely<PagedResult<SessionState>>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "list sessions failed");
+    throw formatHttpError(response.status, 'list sessions failed');
   }
   return payload;
 }
 
 export async function saveSessionState(
   session: SessionState,
-  auth?: AuthContext
+  auth?: AuthContext,
 ): Promise<SessionState> {
   const response = await fetch(resolveApi(`/ai/sessions/${encodeURIComponent(session.id)}`), {
-    method: "PUT",
+    method: 'PUT',
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders(auth)
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
     },
-    body: JSON.stringify(session)
+    body: JSON.stringify(session),
   });
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "save session failed");
+    throw formatHttpError(response.status, 'save session failed');
   }
   return payload;
 }
 
-export async function setSessionPinned(sessionId: string, value: boolean, auth?: AuthContext): Promise<SessionState> {
-  const response = await fetch(resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/pin`, { value })), {
-    method: "POST",
-    headers: buildAuthHeaders(auth)
-  });
+export async function setSessionPinned(
+  sessionId: string,
+  value: boolean,
+  auth?: AuthContext,
+): Promise<SessionState> {
+  const response = await fetch(
+    resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/pin`, { value })),
+    {
+      method: 'POST',
+      headers: buildAuthHeaders(auth),
+    },
+  );
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "set session pin failed");
+    throw formatHttpError(response.status, 'set session pin failed');
   }
   return payload;
 }
 
-export async function setSessionArchived(sessionId: string, value: boolean, auth?: AuthContext): Promise<SessionState> {
-  const response = await fetch(resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/archive`, { value })), {
-    method: "POST",
-    headers: buildAuthHeaders(auth)
-  });
+export async function setSessionArchived(
+  sessionId: string,
+  value: boolean,
+  auth?: AuthContext,
+): Promise<SessionState> {
+  const response = await fetch(
+    resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/archive`, { value })),
+    {
+      method: 'POST',
+      headers: buildAuthHeaders(auth),
+    },
+  );
   const payload = await parseJsonSafely<SessionState>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "set session archive failed");
+    throw formatHttpError(response.status, 'set session archive failed');
   }
   return payload;
 }
@@ -342,19 +367,22 @@ export async function setSessionArchived(sessionId: string, value: boolean, auth
 export async function compareSessionBranches(
   sessionId: string,
   request: BranchCompareRequest,
-  auth?: AuthContext
+  auth?: AuthContext,
 ): Promise<BranchCompareResult> {
-  const response = await fetch(resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/branches/compare`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders(auth)
+  const response = await fetch(
+    resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/branches/compare`),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildAuthHeaders(auth),
+      },
+      body: JSON.stringify(request),
     },
-    body: JSON.stringify(request)
-  });
+  );
   const payload = await parseJsonSafely<BranchCompareResult>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "compare branches failed");
+    throw formatHttpError(response.status, 'compare branches failed');
   }
   return payload;
 }
@@ -362,19 +390,22 @@ export async function compareSessionBranches(
 export async function mergeSessionBranches(
   sessionId: string,
   request: BranchMergeRequest,
-  auth?: AuthContext
+  auth?: AuthContext,
 ): Promise<BranchMergeResult> {
-  const response = await fetch(resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/branches/merge`), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders(auth)
+  const response = await fetch(
+    resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/branches/merge`),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildAuthHeaders(auth),
+      },
+      body: JSON.stringify(request),
     },
-    body: JSON.stringify(request)
-  });
+  );
   const payload = await parseJsonSafely<BranchMergeResult>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "merge branches failed");
+    throw formatHttpError(response.status, 'merge branches failed');
   }
   return payload;
 }
@@ -384,45 +415,51 @@ interface BasicResult {
   msg: string;
 }
 
-export async function submitAnswerFeedback(request: FeedbackRequest, auth?: AuthContext): Promise<void> {
-  const response = await fetch(resolveApi("/ai/feedback"), {
-    method: "POST",
+export async function submitAnswerFeedback(
+  request: FeedbackRequest,
+  auth?: AuthContext,
+): Promise<void> {
+  const response = await fetch(resolveApi('/ai/feedback'), {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders(auth)
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
     },
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
   });
   const payload = await parseJsonSafely<BasicResult>(response);
   if (!response.ok || !payload || payload.ok !== 1) {
-    throw formatHttpError(response.status, payload?.msg ?? "submit feedback failed");
+    throw formatHttpError(response.status, payload?.msg ?? 'submit feedback failed');
   }
 }
 
 export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCostSummary> {
-  const response = await fetch(resolveApi("/cost/summary"), {
-    method: "GET",
-    headers: buildAuthHeaders(auth)
+  const response = await fetch(resolveApi('/cost/summary'), {
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
   });
   const payload = await parseJsonSafely<TenantCostSummary>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "cost summary failed");
+    throw formatHttpError(response.status, 'cost summary failed');
   }
   return payload;
 }
 
-export async function updateTenantBudget(request: TenantBudgetUpdate, auth?: AuthContext): Promise<TenantCostSummary> {
-  const response = await fetch(resolveApi("/cost/budget"), {
-    method: "POST",
+export async function updateTenantBudget(
+  request: TenantBudgetUpdate,
+  auth?: AuthContext,
+): Promise<TenantCostSummary> {
+  const response = await fetch(resolveApi('/cost/budget'), {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders(auth)
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
     },
-    body: JSON.stringify(request)
+    body: JSON.stringify(request),
   });
   const payload = await parseJsonSafely<TenantCostSummary>(response);
   if (!response.ok || !payload) {
-    throw formatHttpError(response.status, "update budget failed");
+    throw formatHttpError(response.status, 'update budget failed');
   }
   return payload;
 }

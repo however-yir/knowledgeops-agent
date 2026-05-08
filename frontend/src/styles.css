@@ -30,7 +30,7 @@ body,
 }
 
 body {
-  font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', sans-serif;
   color: var(--ui-text);
   background:
     radial-gradient(circle at 6% -14%, rgba(14, 116, 144, 0.18), transparent 36%),

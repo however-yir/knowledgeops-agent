@@ -19,15 +19,7 @@ public class ReportWriterAgent {
     private final TenantCostService tenantCostService;
 
     public String writeReport(String topic, String findings, String tenantId, String modelProfile) {
-        String prompt = """
-                Write a comprehensive research report based on the findings below.
-                Structure: 1) Executive Summary 2) Key Findings 3) Detailed Analysis 4) Conclusions & Recommendations
-
-                Topic: %s
-
-                Research Findings:
-                %s
-                """.formatted(topic, findings);
+        String prompt = "Write a comprehensive research report based on the findings below.%nStructure: 1) Executive Summary 2) Key Findings 3) Detailed Analysis 4) Conclusions & Recommendations%n%nTopic: %s%n%nResearch Findings:%n%s%n".formatted(topic, findings);
 
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "research", tenantId, topic);
         long inputTokens = tenantCostService.estimateTokens(prompt);

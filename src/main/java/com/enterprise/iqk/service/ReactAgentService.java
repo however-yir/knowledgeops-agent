@@ -231,14 +231,14 @@ public class ReactAgentService {
         String planningPrompt = """
                 You are a ReAct planner for an education assistant.
                 You must choose exactly one action for the next step.
-
+                %n
                 Allowed actions:
                 - query_school
                 - query_course
                 - add_course_reservation
                 - rag_search
                 - finish
-
+                %n
                 Return JSON only:
                 {
                   "thought": "short reasoning",
@@ -246,16 +246,15 @@ public class ReactAgentService {
                   "action_input": {"key":"value"},
                   "answer": "only provide when action is finish"
                 }
-
+                %n
                 User question:
                 %s
-
+                %n
                 Rolling context:
                 %s
-
+                %n
                 Existing trace:
-                %s
-                """.formatted(
+                %s%n""".formatted(
                 request.getPrompt(),
                 emptyIfBlank(rollingContext),
                 toJson(trace)
@@ -270,7 +269,7 @@ public class ReactAgentService {
                     "react_planner"
             );
             return parseDecision(raw);
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             return fallbackDecision(request.getPrompt());
         }
     }
@@ -288,7 +287,7 @@ public class ReactAgentService {
                         "message", "unsupported action: " + safeAction
                 );
             };
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             return Map.of(
                     "status", "error",
                     "message", "action failed: " + ex.getMessage()
@@ -386,7 +385,7 @@ public class ReactAgentService {
             if (StringUtils.hasText(answer)) {
                 return answer;
             }
-        } catch (Exception ignored) {
+        } catch (RuntimeException ignored) {
             // fallback below
         }
         return "当前未能生成最终答案，请稍后重试。";
@@ -398,15 +397,15 @@ public class ReactAgentService {
         return """
                 用户问题:
                 %s
-
+                %n
                 ReAct轨迹:
                 %s
-
+                %n
                 观察上下文:
                 %s
-
+                %n
                 请输出最终中文答案，要求简洁、可执行、结构清晰。
-                """.formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
+                %n""".formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
     }
 
     private ModelRouter.ModelRouteDecision resolveRouteDecision(String requestedProfile,
@@ -496,7 +495,7 @@ public class ReactAgentService {
             }
 
             return new ReasonDecision(thought, action, actionInput, answer, List.of(), List.of());
-        } catch (Exception ex) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             return new ReasonDecision(
                     "JSON parse failed, fallback to finish.",
                     "finish",

@@ -106,10 +106,14 @@ public class IngestionController {
 
     private String currentTraceId() {
         Tracer tracer = tracerProvider.getIfAvailable();
-        if (tracer == null || tracer.currentSpan() == null) {
+        if (tracer == null) {
             return "";
         }
-        String traceId = tracer.currentSpan().context().traceId();
+        var span = tracer.currentSpan();
+        if (span == null) {
+            return "";
+        }
+        String traceId = span.context().traceId();
         return StringUtils.hasText(traceId) ? traceId : "";
     }
 

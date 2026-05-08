@@ -26,17 +26,7 @@ public class ResearchPlannerAgent {
     private final ObjectMapper objectMapper;
 
     public ResearchPlan plan(String topic, String tenantId, String modelProfile) {
-        String prompt = """
-                Decompose the following research topic into 3-5 sub-questions.
-                Return JSON only:
-                {
-                  "subQuestions": ["q1", "q2", ...],
-                  "keywords": ["kw1", "kw2", ...],
-                  "strategy": "breadth_first"
-                }
-
-                Topic: %s
-                """.formatted(topic);
+        String prompt = "Decompose the following research topic into 3-5 sub-questions.%nReturn JSON only:%n{%n  \"subQuestions\": [\"q1\", \"q2\", ...],%n  \"keywords\": [\"kw1\", \"kw2\", ...],%n  \"strategy\": \"breadth_first\"%n}%n%nTopic: %s%n".formatted(topic);
 
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "research", tenantId, topic);
         long inputTokens = tenantCostService.estimateTokens(prompt);
@@ -61,7 +51,7 @@ public class ResearchPlannerAgent {
             List<String> keywords = (List<String>) parsed.getOrDefault("keywords", List.of());
             String strategy = (String) parsed.getOrDefault("strategy", "breadth_first");
             return new ResearchPlan(subQuestions, keywords, strategy);
-        } catch (Exception e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return new ResearchPlan(List.of(topic), List.of(), "direct");
         }
     }

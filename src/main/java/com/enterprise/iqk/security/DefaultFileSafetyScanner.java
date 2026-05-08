@@ -15,7 +15,8 @@ public class DefaultFileSafetyScanner implements FileSafetyScanner {
 
     @Override
     public void scan(MultipartFile file) {
-        String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase(Locale.ROOT);
+        String originalName = file.getOriginalFilename();
+        String filename = originalName == null ? "" : originalName.toLowerCase(Locale.ROOT);
         if (!filename.endsWith(".pdf")) {
             throw new IllegalArgumentException("only pdf is allowed");
         }
@@ -35,6 +36,9 @@ public class DefaultFileSafetyScanner implements FileSafetyScanner {
 
     private byte[] readHead(MultipartFile file) throws IOException {
         try (InputStream inputStream = file.getInputStream()) {
+            if (inputStream == null) {
+                throw new IOException("input stream is null");
+            }
             return inputStream.readNBytes(SCAN_BYTES);
         }
     }

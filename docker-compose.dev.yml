@@ -1,0 +1,12 @@
+# docker-compose.dev.yml — safe defaults for local development.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+services:
+  app:
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-local-dev-placeholder}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-jwt-secret-not-for-production}
+
+  mysql:
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}

@@ -30,8 +30,21 @@
           />
         </div>
         <div class="cloud-row">
-          <el-button size="small" :loading="cloudSyncing" :disabled="!canUseRemoteSync" @click="loadSessionsFromCloud">云端拉取</el-button>
-          <el-button size="small" type="primary" :loading="cloudSyncing" :disabled="!canUseRemoteSync" @click="syncActiveSessionToCloud">保存到云端</el-button>
+          <el-button
+            size="small"
+            :loading="cloudSyncing"
+            :disabled="!canUseRemoteSync"
+            @click="loadSessionsFromCloud"
+            >云端拉取</el-button
+          >
+          <el-button
+            size="small"
+            type="primary"
+            :loading="cloudSyncing"
+            :disabled="!canUseRemoteSync"
+            @click="syncActiveSessionToCloud"
+            >保存到云端</el-button
+          >
         </div>
       </section>
 
@@ -54,15 +67,28 @@
             <div class="session-content">
               <div class="session-title-row">
                 <p class="session-title">{{ session.title }}</p>
-                <el-tag v-if="session.pinned" size="small" type="success" effect="plain">置顶</el-tag>
-                <el-tag v-if="session.archived" size="small" type="info" effect="plain">归档</el-tag>
+                <el-tag v-if="session.pinned" size="small" type="success" effect="plain"
+                  >置顶</el-tag
+                >
+                <el-tag v-if="session.archived" size="small" type="info" effect="plain"
+                  >归档</el-tag
+                >
               </div>
-              <p class="session-meta-row">{{ session.workspaceId }} · {{ formatTime(session.updatedAt) }} · {{ shortId(session.id) }}</p>
+              <p class="session-meta-row">
+                {{ session.workspaceId }} · {{ formatTime(session.updatedAt) }} ·
+                {{ shortId(session.id) }}
+              </p>
             </div>
             <div class="session-actions">
-              <button type="button" @click.stop="toggleSessionPin(session.id)">{{ session.pinned ? '取消置顶' : '置顶' }}</button>
-              <button type="button" @click.stop="toggleSessionArchive(session.id)">{{ session.archived ? '取消归档' : '归档' }}</button>
-              <button type="button" class="danger" @click.stop="removeSession(session.id)">删除</button>
+              <button type="button" @click.stop="toggleSessionPin(session.id)">
+                {{ session.pinned ? '取消置顶' : '置顶' }}
+              </button>
+              <button type="button" @click.stop="toggleSessionArchive(session.id)">
+                {{ session.archived ? '取消归档' : '归档' }}
+              </button>
+              <button type="button" class="danger" @click.stop="removeSession(session.id)">
+                删除
+              </button>
             </div>
           </div>
           <div v-if="filteredSessions.length === 0" class="session-empty">没有匹配会话</div>
@@ -75,8 +101,20 @@
           <div class="branch-head-actions">
             <span class="section-meta">{{ activeSession?.branches.length ?? 0 }} 条</span>
             <button type="button" @click="forkFromCurrent">从当前分叉</button>
-            <button type="button" :disabled="!activeBranch?.parentBranchId" @click="compareWithParent">对比父分支</button>
-            <button type="button" :disabled="!activeBranch?.parentBranchId" @click="mergeIntoParent">合并到父分支</button>
+            <button
+              type="button"
+              :disabled="!activeBranch?.parentBranchId"
+              @click="compareWithParent"
+            >
+              对比父分支
+            </button>
+            <button
+              type="button"
+              :disabled="!activeBranch?.parentBranchId"
+              @click="mergeIntoParent"
+            >
+              合并到父分支
+            </button>
           </div>
         </div>
         <div class="branch-list">
@@ -119,7 +157,14 @@
             <el-form-item label="Model Profile">
               <el-segmented
                 v-model="modelProfile"
-                :options="['economy', 'balanced', 'quality', 'ab_auto', 'quality_first', 'cost_first']"
+                :options="[
+                  'economy',
+                  'balanced',
+                  'quality',
+                  'ab_auto',
+                  'quality_first',
+                  'cost_first',
+                ]"
                 class="full-width"
               />
             </el-form-item>
@@ -128,8 +173,12 @@
             </el-form-item>
           </el-form>
           <div class="auth-buttons">
-            <el-button type="primary" :loading="authLoading" @click="handleLogin">换取 JWT</el-button>
-            <el-button :disabled="!refreshToken" :loading="refreshing" @click="handleRefresh">刷新</el-button>
+            <el-button type="primary" :loading="authLoading" @click="handleLogin"
+              >换取 JWT</el-button
+            >
+            <el-button :disabled="!refreshToken" :loading="refreshing" @click="handleRefresh"
+              >刷新</el-button
+            >
             <el-button @click="clearAuth">清空</el-button>
           </div>
         </div>
@@ -141,7 +190,9 @@
         <div>
           <p class="workspace-kicker">Active Session</p>
           <h2>{{ activeSession?.title || '新会话' }}</h2>
-          <p class="workspace-sub">{{ modelProfile }} · {{ streaming ? 'SSE 流式' : 'JSON 单次' }}</p>
+          <p class="workspace-sub">
+            {{ modelProfile }} · {{ streaming ? 'SSE 流式' : 'JSON 单次' }}
+          </p>
         </div>
         <div class="head-actions">
           <el-select v-model="activeWorkspaceId" size="small" class="workspace-select">
@@ -160,15 +211,14 @@
             @keydown.enter.prevent="createWorkspace"
           />
           <el-button size="small" @click="createWorkspace">创建并切换</el-button>
-          <el-switch
-            v-model="darkMode"
-            inline-prompt
-            active-text="Dark"
-            inactive-text="Light"
-          />
+          <el-switch v-model="darkMode" inline-prompt active-text="Dark" inactive-text="Light" />
           <el-tag :type="streamStatusTagType" effect="plain">{{ streamStatusLabel }}</el-tag>
           <span class="stream-detail">{{ streamStatusDetail }}</span>
-          <span v-if="costSummary" class="stream-detail">成本: 本月 ${{ costSummary.monthCostUsd.toFixed(4) }} / 预算 ${{ costSummary.monthlyBudgetUsd.toFixed(4) }}</span>
+          <span v-if="costSummary" class="stream-detail"
+            >成本: 本月 ${{ costSummary.monthCostUsd.toFixed(4) }} / 预算 ${{
+              costSummary.monthlyBudgetUsd.toFixed(4)
+            }}</span
+          >
           <el-button size="small" @click="clearConversation">清空会话</el-button>
         </div>
       </header>
@@ -192,7 +242,12 @@
             <h3>开始一个新问题</h3>
             <p>支持消息编辑后重发分支、流式轨迹、长会话虚拟渲染。</p>
             <div class="welcome-prompts">
-              <button v-for="sample in quickPrompts" :key="sample" type="button" @click="prompt = sample">
+              <button
+                v-for="sample in quickPrompts"
+                :key="sample"
+                type="button"
+                @click="prompt = sample"
+              >
                 {{ sample }}
               </button>
             </div>
@@ -219,7 +274,10 @@
 
               <div class="bubble">
                 <template v-if="entry.item.role === 'assistant'">
-                  <div v-if="entry.item.state === 'pending' && !entry.item.content" class="assistant-skeleton">
+                  <div
+                    v-if="entry.item.state === 'pending' && !entry.item.content"
+                    class="assistant-skeleton"
+                  >
                     <div></div>
                     <div></div>
                     <div></div>
@@ -244,23 +302,34 @@
                     <div v-if="entry.item.evidence?.length" class="evidence-panel">
                       <p class="citation-title">证据片段</p>
                       <ul>
-                        <li v-for="(snippet, snippetIndex) in entry.item.evidence" :key="`${entry.item.id}-ev-${snippetIndex}`">
+                        <li
+                          v-for="(snippet, snippetIndex) in entry.item.evidence"
+                          :key="`${entry.item.id}-ev-${snippetIndex}`"
+                        >
                           {{ snippet }}
                         </li>
                       </ul>
                     </div>
                     <!-- Agent Trace Timeline -->
-                    <div v-if="traceSteps.length && entry.index === virtualMessages.length - 1" class="trace-timeline-panel">
+                    <div
+                      v-if="traceSteps.length && entry.index === virtualMessages.length - 1"
+                      class="trace-timeline-panel"
+                    >
                       <div class="trace-timeline-header">
                         <span class="trace-timeline-title">Agent 执行轨迹</span>
-                        <span class="trace-timeline-meta">{{ traceSteps.length }} 步 · {{ traceDurationMs }}ms</span>
+                        <span class="trace-timeline-meta"
+                          >{{ traceSteps.length }} 步 · {{ traceDurationMs }}ms</span
+                        >
                       </div>
                       <div class="trace-timeline">
                         <div
                           v-for="(ts, tsIdx) in traceSteps"
                           :key="`trace-${tsIdx}`"
                           class="trace-timeline-step"
-                          :class="[`trace-action-${ts.action}`, { 'trace-last': tsIdx === traceSteps.length - 1 }]"
+                          :class="[
+                            `trace-action-${ts.action}`,
+                            { 'trace-last': tsIdx === traceSteps.length - 1 },
+                          ]"
                         >
                           <div class="trace-timeline-rail">
                             <div class="trace-node"></div>
@@ -269,29 +338,48 @@
                           <div class="trace-timeline-content">
                             <div class="trace-step-header">
                               <span class="trace-step-label">Step {{ ts.step }}</span>
-                              <span class="trace-action-badge" :class="`badge-${ts.action}`">{{ ts.action }}</span>
+                              <span class="trace-action-badge" :class="`badge-${ts.action}`">{{
+                                ts.action
+                              }}</span>
                             </div>
                             <div v-if="ts.thought" class="trace-thought-block">
                               <span class="trace-field-label">💭 Thought</span>
                               <p>{{ ts.thought }}</p>
                             </div>
-                            <div v-if="ts.actionInput && Object.keys(ts.actionInput).length" class="trace-input-block">
+                            <div
+                              v-if="ts.actionInput && Object.keys(ts.actionInput).length"
+                              class="trace-input-block"
+                            >
                               <span class="trace-field-label">🔧 Input</span>
                               <pre>{{ JSON.stringify(ts.actionInput, null, 2) }}</pre>
                             </div>
                             <details v-if="ts.observation" class="trace-obs-block">
-                              <summary><span class="trace-field-label">📋 Observation</span></summary>
+                              <summary>
+                                <span class="trace-field-label">📋 Observation</span>
+                              </summary>
                               <div class="trace-obs-content">
-                                <pre>{{ typeof ts.observation === 'string' ? ts.observation : JSON.stringify(ts.observation, null, 2) }}</pre>
+                                <pre>{{
+                                  typeof ts.observation === 'string'
+                                    ? ts.observation
+                                    : JSON.stringify(ts.observation, null, 2)
+                                }}</pre>
                               </div>
                             </details>
                             <div v-if="tsIdx === 0" class="trace-retrieval-lanes">
                               <span class="trace-field-label">检索四路召回</span>
                               <div class="retrieval-bar">
-                                <div class="retrieval-lane vector" style="width:40%"><span>Vector 40%</span></div>
-                                <div class="retrieval-lane keyword" style="width:25%"><span>Keyword 25%</span></div>
-                                <div class="retrieval-lane graph" style="width:20%"><span>Graph 20%</span></div>
-                                <div class="retrieval-lane web" style="width:15%"><span>Web 15%</span></div>
+                                <div class="retrieval-lane vector" style="width: 40%">
+                                  <span>Vector 40%</span>
+                                </div>
+                                <div class="retrieval-lane keyword" style="width: 25%">
+                                  <span>Keyword 25%</span>
+                                </div>
+                                <div class="retrieval-lane graph" style="width: 20%">
+                                  <span>Graph 20%</span>
+                                </div>
+                                <div class="retrieval-lane web" style="width: 15%">
+                                  <span>Web 15%</span>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -337,7 +425,10 @@
                 <button
                   v-if="entry.item.role === 'assistant'"
                   type="button"
-                  :disabled="Boolean(answerFeedbackMap[entry.item.id]) || Boolean(answerFeedbackLoading[entry.item.id])"
+                  :disabled="
+                    Boolean(answerFeedbackMap[entry.item.id]) ||
+                    Boolean(answerFeedbackLoading[entry.item.id])
+                  "
                   @click="rateAnswer(entry.index, entry.item, 5)"
                 >
                   👍有帮助
@@ -345,7 +436,10 @@
                 <button
                   v-if="entry.item.role === 'assistant'"
                   type="button"
-                  :disabled="Boolean(answerFeedbackMap[entry.item.id]) || Boolean(answerFeedbackLoading[entry.item.id])"
+                  :disabled="
+                    Boolean(answerFeedbackMap[entry.item.id]) ||
+                    Boolean(answerFeedbackLoading[entry.item.id])
+                  "
                   @click="rateAnswer(entry.index, entry.item, 1)"
                 >
                   👎待改进
@@ -393,7 +487,13 @@
             </div>
             <div class="composer-actions">
               <el-button :disabled="!sending" @click="stopGenerating">停止</el-button>
-              <el-button type="primary" :loading="sending" :disabled="!prompt.trim() || sending" @click="send">发送</el-button>
+              <el-button
+                type="primary"
+                :loading="sending"
+                :disabled="!prompt.trim() || sending"
+                @click="send"
+                >发送</el-button
+              >
             </div>
           </div>
         </div>
@@ -403,21 +503,21 @@
 </template>
 
 <script setup lang="ts">
-import DOMPurify from "dompurify";
-import hljs from "highlight.js/lib/core";
-import bashLang from "highlight.js/lib/languages/bash";
-import javaLang from "highlight.js/lib/languages/java";
-import javascriptLang from "highlight.js/lib/languages/javascript";
-import jsonLang from "highlight.js/lib/languages/json";
-import markdownLang from "highlight.js/lib/languages/markdown";
-import pythonLang from "highlight.js/lib/languages/python";
-import sqlLang from "highlight.js/lib/languages/sql";
-import typescriptLang from "highlight.js/lib/languages/typescript";
-import xmlLang from "highlight.js/lib/languages/xml";
-import yamlLang from "highlight.js/lib/languages/yaml";
-import { ElMessage } from "element-plus";
-import { marked } from "marked";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import DOMPurify from 'dompurify';
+import hljs from 'highlight.js/lib/core';
+import bashLang from 'highlight.js/lib/languages/bash';
+import javaLang from 'highlight.js/lib/languages/java';
+import javascriptLang from 'highlight.js/lib/languages/javascript';
+import jsonLang from 'highlight.js/lib/languages/json';
+import markdownLang from 'highlight.js/lib/languages/markdown';
+import pythonLang from 'highlight.js/lib/languages/python';
+import sqlLang from 'highlight.js/lib/languages/sql';
+import typescriptLang from 'highlight.js/lib/languages/typescript';
+import xmlLang from 'highlight.js/lib/languages/xml';
+import yamlLang from 'highlight.js/lib/languages/yaml';
+import { ElMessage } from 'element-plus';
+import { marked } from 'marked';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   compareSessionBranches,
   exchangeApiKey,
@@ -430,25 +530,25 @@ import {
   setSessionArchived,
   setSessionPinned,
   streamReactChat,
-  submitAnswerFeedback
-} from "./api/client";
+  submitAnswerFeedback,
+} from './api/client';
 import type {
   ReactChatResponse,
   ReactErrorEvent,
   ReactTokenEvent,
   ReactTraceStep,
   SessionState,
-  TenantCostSummary
-} from "./types/react";
+  TenantCostSummary,
+} from './types/react';
 
 interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   createdAt: number;
   citations?: string[];
   evidence?: string[];
-  state?: "pending" | "streaming" | "done" | "error" | "stopped";
+  state?: 'pending' | 'streaming' | 'done' | 'error' | 'stopped';
 }
 
 interface SessionBranch {
@@ -486,25 +586,26 @@ interface MessageMetric {
   height: number;
 }
 
-type StreamPhase = "idle" | "thinking" | "tool" | "streaming" | "done" | "error" | "stopped";
+type StreamPhase = 'idle' | 'thinking' | 'tool' | 'streaming' | 'done' | 'error' | 'stopped';
 
-const STORAGE_KEY = "knowledgeops-agent-react-console-v2";
-const LEGACY_STORAGE_KEY = "knowledgeops-agent-react-console";
-const DEFAULT_SYSTEM_MESSAGE = "欢迎使用 ReAct 控制台。你可以先输入 API Key 获取 JWT，然后发起带轨迹的问答。";
-const DEFAULT_WORKSPACE = "default";
+const STORAGE_KEY = 'knowledgeops-agent-react-console-v2';
+const LEGACY_STORAGE_KEY = 'knowledgeops-agent-react-console';
+const DEFAULT_SYSTEM_MESSAGE =
+  '欢迎使用 ReAct 控制台。你可以先输入 API Key 获取 JWT，然后发起带轨迹的问答。';
+const DEFAULT_WORKSPACE = 'default';
 const ESTIMATED_ROW_HEIGHT = 156;
 const OVERSCAN_COUNT = 8;
 
-hljs.registerLanguage("bash", bashLang);
-hljs.registerLanguage("java", javaLang);
-hljs.registerLanguage("javascript", javascriptLang);
-hljs.registerLanguage("json", jsonLang);
-hljs.registerLanguage("markdown", markdownLang);
-hljs.registerLanguage("python", pythonLang);
-hljs.registerLanguage("sql", sqlLang);
-hljs.registerLanguage("typescript", typescriptLang);
-hljs.registerLanguage("xml", xmlLang);
-hljs.registerLanguage("yaml", yamlLang);
+hljs.registerLanguage('bash', bashLang);
+hljs.registerLanguage('java', javaLang);
+hljs.registerLanguage('javascript', javascriptLang);
+hljs.registerLanguage('json', jsonLang);
+hljs.registerLanguage('markdown', markdownLang);
+hljs.registerLanguage('python', pythonLang);
+hljs.registerLanguage('sql', sqlLang);
+hljs.registerLanguage('typescript', typescriptLang);
+hljs.registerLanguage('xml', xmlLang);
+hljs.registerLanguage('yaml', yamlLang);
 
 function safeParse(raw: string | null): Record<string, unknown> {
   if (!raw) {
@@ -519,16 +620,16 @@ function safeParse(raw: string | null): Record<string, unknown> {
 
 function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function toBase64(value: string): string {
   const bytes = new TextEncoder().encode(value);
-  let binary = "";
+  let binary = '';
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte);
   });
@@ -543,20 +644,21 @@ function fromBase64(value: string): string {
 
 const renderer = new marked.Renderer();
 renderer.code = ((token: { text: string; lang?: string }) => {
-  const rawCode = token.text ?? "";
-  const lang = token.lang?.trim().toLowerCase().split(/\s+/)[0] ?? "plaintext";
-  const language = hljs.getLanguage(lang) ? lang : "plaintext";
-  const highlighted = language === "plaintext"
-    ? escapeHtml(rawCode)
-    : hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
+  const rawCode = token.text ?? '';
+  const lang = token.lang?.trim().toLowerCase().split(/\s+/)[0] ?? 'plaintext';
+  const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+  const highlighted =
+    language === 'plaintext'
+      ? escapeHtml(rawCode)
+      : hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
 
-  const lines = highlighted.split("\n");
+  const lines = highlighted.split('\n');
   const numbered = lines
     .map((line, index) => {
-      const content = line || "&nbsp;";
+      const content = line || '&nbsp;';
       return `<span class="code-line"><span class="line-no">${index + 1}</span><span class="line-content">${content}</span></span>`;
     })
-    .join("");
+    .join('');
 
   const payload = escapeHtml(toBase64(rawCode));
 
@@ -566,7 +668,7 @@ renderer.code = ((token: { text: string; lang?: string }) => {
 marked.use({
   gfm: true,
   breaks: true,
-  renderer
+  renderer,
 });
 
 function createChatId(): string {
@@ -579,38 +681,38 @@ function createBranchId(): string {
   return `branch-${Date.now()}-${suffix}`;
 }
 
-function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function createMessage(role: ChatMessage['role'], content: string): ChatMessage {
   return {
     id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     role,
     content,
     createdAt: Date.now(),
-    state: "done"
+    state: 'done',
   };
 }
 
 function normalizeMessage(raw: unknown): ChatMessage {
   const candidate = (raw ?? {}) as Partial<ChatMessage>;
-  const role = candidate.role === "assistant" ? "assistant" : "user";
+  const role = candidate.role === 'assistant' ? 'assistant' : 'user';
   return {
     id: candidate.id || `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     role,
-    content: typeof candidate.content === "string" ? candidate.content : "",
-    createdAt: typeof candidate.createdAt === "number" ? candidate.createdAt : Date.now(),
+    content: typeof candidate.content === 'string' ? candidate.content : '',
+    createdAt: typeof candidate.createdAt === 'number' ? candidate.createdAt : Date.now(),
     citations: Array.isArray(candidate.citations)
       ? candidate.citations.map((item) => String(item).trim()).filter(Boolean)
       : [],
     evidence: Array.isArray(candidate.evidence)
       ? candidate.evidence.map((item) => String(item).trim()).filter(Boolean)
       : [],
-    state: candidate.state || "done"
+    state: candidate.state || 'done',
   };
 }
 
 function deriveTitle(text: string): string {
-  const clean = text.trim().replace(/\s+/g, " ");
+  const clean = text.trim().replace(/\s+/g, ' ');
   if (!clean) {
-    return "新会话";
+    return '新会话';
   }
   return clean.length > 28 ? `${clean.slice(0, 28)}...` : clean;
 }
@@ -618,12 +720,12 @@ function deriveTitle(text: string): string {
 function createRootBranch(): SessionBranch {
   return {
     id: createBranchId(),
-    title: "主分支",
+    title: '主分支',
     parentBranchId: null,
     parentMessageId: null,
     updatedAt: Date.now(),
-    messages: [createMessage("assistant", DEFAULT_SYSTEM_MESSAGE)],
-    traceSteps: []
+    messages: [createMessage('assistant', DEFAULT_SYSTEM_MESSAGE)],
+    traceSteps: [],
   };
 }
 
@@ -631,16 +733,16 @@ function normalizeBranch(raw: unknown): SessionBranch {
   const candidate = (raw ?? {}) as Partial<SessionBranch>;
   const messages = Array.isArray(candidate.messages)
     ? candidate.messages.map(normalizeMessage)
-    : [createMessage("assistant", DEFAULT_SYSTEM_MESSAGE)];
+    : [createMessage('assistant', DEFAULT_SYSTEM_MESSAGE)];
 
   return {
     id: candidate.id || createBranchId(),
-    title: candidate.title || "分支",
+    title: candidate.title || '分支',
     parentBranchId: candidate.parentBranchId ?? null,
     parentMessageId: candidate.parentMessageId ?? null,
-    updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : Date.now(),
+    updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now(),
     messages,
-    traceSteps: Array.isArray(candidate.traceSteps) ? candidate.traceSteps : []
+    traceSteps: Array.isArray(candidate.traceSteps) ? candidate.traceSteps : [],
   };
 }
 
@@ -653,38 +755,38 @@ function normalizeSession(raw: unknown): SessionRecord {
   } else {
     const fallbackMessages = Array.isArray(candidate.messages)
       ? candidate.messages.map(normalizeMessage)
-      : [createMessage("assistant", DEFAULT_SYSTEM_MESSAGE)];
+      : [createMessage('assistant', DEFAULT_SYSTEM_MESSAGE)];
 
     branches = [
       {
         id: createBranchId(),
-        title: "主分支",
+        title: '主分支',
         parentBranchId: null,
         parentMessageId: null,
-        updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : Date.now(),
+        updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now(),
         messages: fallbackMessages,
         traceSteps: Array.isArray(candidate.traceSteps)
           ? (candidate.traceSteps as ReactTraceStep[])
-          : []
-      }
+          : [],
+      },
     ];
   }
 
-  const activeBranchId = typeof candidate.activeBranchId === "string"
-    ? candidate.activeBranchId
-    : branches[0].id;
+  const activeBranchId =
+    typeof candidate.activeBranchId === 'string' ? candidate.activeBranchId : branches[0].id;
 
   return {
-    id: typeof candidate.id === "string" ? candidate.id : createChatId(),
-    title: typeof candidate.title === "string" ? candidate.title : "新会话",
-    updatedAt: typeof candidate.updatedAt === "number" ? candidate.updatedAt : Date.now(),
-    modelProfile: typeof candidate.modelProfile === "string" ? candidate.modelProfile : "balanced",
+    id: typeof candidate.id === 'string' ? candidate.id : createChatId(),
+    title: typeof candidate.title === 'string' ? candidate.title : '新会话',
+    updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now(),
+    modelProfile: typeof candidate.modelProfile === 'string' ? candidate.modelProfile : 'balanced',
     streaming: Boolean(candidate.streaming ?? true),
     pinned: Boolean(candidate.pinned),
     archived: Boolean(candidate.archived),
-    workspaceId: typeof candidate.workspaceId === "string" ? candidate.workspaceId : DEFAULT_WORKSPACE,
+    workspaceId:
+      typeof candidate.workspaceId === 'string' ? candidate.workspaceId : DEFAULT_WORKSPACE,
     activeBranchId,
-    branches
+    branches,
   };
 }
 
@@ -694,22 +796,22 @@ function createSession(): SessionRecord {
 
   return {
     id,
-    title: "新会话",
+    title: '新会话',
     updatedAt: Date.now(),
-    modelProfile: "balanced",
+    modelProfile: 'balanced',
     streaming: true,
     pinned: false,
     archived: false,
     workspaceId: DEFAULT_WORKSPACE,
     activeBranchId: rootBranch.id,
-    branches: [rootBranch]
+    branches: [rootBranch],
   };
 }
 
 function formatTime(value: number): string {
-  return new Date(value).toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit"
+  return new Date(value).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -719,11 +821,11 @@ function shortId(id: string): string {
 
 function renderMarkdown(content: string): string {
   if (!content?.trim()) {
-    return "<p>等待模型输出...</p>";
+    return '<p>等待模型输出...</p>';
   }
   const html = marked.parse(content) as string;
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ["data-code"]
+    ADD_ATTR: ['data-code'],
   });
 }
 
@@ -732,21 +834,23 @@ const legacy = safeParse(localStorage.getItem(LEGACY_STORAGE_KEY));
 const bootstrap = Object.keys(cached).length > 0 ? cached : legacy;
 
 const darkMode = ref(Boolean(bootstrap.darkMode));
-const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? "");
-const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? "");
-const token = ref((bootstrap.token as string | undefined) ?? "");
-const refreshToken = ref((bootstrap.refreshToken as string | undefined) ?? "");
-const sessionSearch = ref((bootstrap.sessionSearch as string | undefined) ?? "");
-const workspaceFilter = ref((bootstrap.workspaceFilter as string | undefined) ?? "all");
+const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? '');
+const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? '');
+const token = ref((bootstrap.token as string | undefined) ?? '');
+const refreshToken = ref((bootstrap.refreshToken as string | undefined) ?? '');
+const sessionSearch = ref((bootstrap.sessionSearch as string | undefined) ?? '');
+const workspaceFilter = ref((bootstrap.workspaceFilter as string | undefined) ?? 'all');
 const showArchivedSessions = ref(Boolean(bootstrap.showArchivedSessions));
 
 const sessions = ref<SessionRecord[]>(
   Array.isArray(bootstrap.sessions) && bootstrap.sessions.length > 0
     ? (bootstrap.sessions as unknown[]).map((item) => normalizeSession(item))
-    : [createSession()]
+    : [createSession()],
 );
 
-const activeSessionId = ref((bootstrap.activeSessionId as string | undefined) ?? sessions.value[0].id);
+const activeSessionId = ref(
+  (bootstrap.activeSessionId as string | undefined) ?? sessions.value[0].id,
+);
 
 const activeSession = computed(() => {
   const found = sessions.value.find((item) => item.id === activeSessionId.value);
@@ -755,7 +859,9 @@ const activeSession = computed(() => {
 
 const activeBranch = computed(() => {
   const session = activeSession.value;
-  return session.branches.find((branch) => branch.id === session.activeBranchId) ?? session.branches[0];
+  return (
+    session.branches.find((branch) => branch.id === session.activeBranchId) ?? session.branches[0]
+  );
 });
 
 const chatId = ref(activeSession.value.id);
@@ -774,14 +880,14 @@ const refreshing = ref(false);
 const sending = ref(false);
 const isStreamingResponse = ref(false);
 const hydrating = ref(true);
-const prompt = ref("");
+const prompt = ref('');
 const messageContainer = ref<HTMLElement | null>(null);
 const currentAbortController = ref<AbortController | null>(null);
-const workspaceDraft = ref("");
+const workspaceDraft = ref('');
 const editingMessageId = ref<string | null>(null);
-const editingMessageDraft = ref("");
-const streamPhase = ref<StreamPhase>("idle");
-const streamStatusDetail = ref("");
+const editingMessageDraft = ref('');
+const streamPhase = ref<StreamPhase>('idle');
+const streamStatusDetail = ref('');
 const cloudSyncing = ref(false);
 const costSummary = ref<TenantCostSummary | null>(null);
 const answerFeedbackMap = ref<Record<string, number>>({});
@@ -795,9 +901,9 @@ let resizeObserver: ResizeObserver | null = null;
 let streamResetTimer: number | null = null;
 
 const quickPrompts = [
-  "先总结这个会话的关键结论，再列出 3 条行动项",
-  "帮我按课程类型推荐三门就业导向课程",
-  "先检索知识库，再给出本周学习计划"
+  '先总结这个会话的关键结论，再列出 3 条行动项',
+  '帮我按课程类型推荐三门就业导向课程',
+  '先检索知识库，再给出本周学习计划',
 ];
 
 const sessionCount = computed(() => sessions.value.length);
@@ -809,7 +915,7 @@ const workspaceOptions = computed(() => {
   sessions.value.forEach((session) => {
     options.add(session.workspaceId || DEFAULT_WORKSPACE);
   });
-  return [...options].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  return [...options].sort((a, b) => a.localeCompare(b, 'zh-CN'));
 });
 
 const activeWorkspaceId = computed({
@@ -817,7 +923,7 @@ const activeWorkspaceId = computed({
   set: (value: string) => {
     activeSession.value.workspaceId = value || DEFAULT_WORKSPACE;
     persistState();
-  }
+  },
 });
 
 const orderedSessions = computed(() =>
@@ -826,7 +932,7 @@ const orderedSessions = computed(() =>
       return Number(b.pinned) - Number(a.pinned);
     }
     return b.updatedAt - a.updatedAt;
-  })
+  }),
 );
 
 const filteredSessions = computed(() => {
@@ -836,7 +942,7 @@ const filteredSessions = computed(() => {
       return false;
     }
 
-    if (workspaceFilter.value !== "all" && session.workspaceId !== workspaceFilter.value) {
+    if (workspaceFilter.value !== 'all' && session.workspaceId !== workspaceFilter.value) {
       return false;
     }
 
@@ -844,7 +950,9 @@ const filteredSessions = computed(() => {
       return true;
     }
 
-    return session.title.toLowerCase().includes(keyword) || session.id.toLowerCase().includes(keyword);
+    return (
+      session.title.toLowerCase().includes(keyword) || session.id.toLowerCase().includes(keyword)
+    );
   });
 });
 
@@ -879,7 +987,7 @@ const branchTreeItems = computed<BranchTreeItem[]>(() => {
 });
 
 const isEmptyConversation = computed(() => {
-  const nonSystem = messages.value.filter((item) => item.role === "user");
+  const nonSystem = messages.value.filter((item) => item.role === 'user');
   return nonSystem.length === 0;
 });
 
@@ -891,7 +999,7 @@ const messageMetrics = computed<MessageMetric[]>(() => {
       item,
       index,
       offset,
-      height
+      height,
     };
     offset += height;
     return metric;
@@ -968,39 +1076,39 @@ const virtualBottomSpacer = computed(() => {
 
 const streamStatusLabel = computed(() => {
   switch (streamPhase.value) {
-    case "thinking":
-      return "思考中";
-    case "tool":
-      return "工具调用中";
-    case "streaming":
-      return "输出中";
-    case "done":
-      return "已完成";
-    case "error":
-      return "失败";
-    case "stopped":
-      return "已停止";
+    case 'thinking':
+      return '思考中';
+    case 'tool':
+      return '工具调用中';
+    case 'streaming':
+      return '输出中';
+    case 'done':
+      return '已完成';
+    case 'error':
+      return '失败';
+    case 'stopped':
+      return '已停止';
     default:
-      return "空闲";
+      return '空闲';
   }
 });
 
 const streamStatusTagType = computed(() => {
   switch (streamPhase.value) {
-    case "thinking":
-      return "warning";
-    case "tool":
-      return "success";
-    case "streaming":
-      return "primary";
-    case "done":
-      return "success";
-    case "error":
-      return "danger";
-    case "stopped":
-      return "info";
+    case 'thinking':
+      return 'warning';
+    case 'tool':
+      return 'success';
+    case 'streaming':
+      return 'primary';
+    case 'done':
+      return 'success';
+    case 'error':
+      return 'danger';
+    case 'stopped':
+      return 'info';
     default:
-      return "info";
+      return 'info';
   }
 });
 
@@ -1009,8 +1117,8 @@ function scheduleStreamReset(): void {
     window.clearTimeout(streamResetTimer);
   }
   streamResetTimer = window.setTimeout(() => {
-    streamPhase.value = "idle";
-    streamStatusDetail.value = "";
+    streamPhase.value = 'idle';
+    streamStatusDetail.value = '';
     streamResetTimer = null;
   }, 1800);
 }
@@ -1028,8 +1136,8 @@ function persistState(): void {
       sessionSearch: sessionSearch.value,
       workspaceFilter: workspaceFilter.value,
       showArchivedSessions: showArchivedSessions.value,
-      sessions: sessions.value
-    })
+      sessions: sessions.value,
+    }),
   );
 }
 
@@ -1037,7 +1145,7 @@ function authContext() {
   return {
     token: token.value || undefined,
     apiKey: apiKeyInput.value || undefined,
-    tenantId: tenantInput.value || undefined
+    tenantId: tenantInput.value || undefined,
   };
 }
 
@@ -1059,7 +1167,7 @@ function normalizeRemoteSession(raw: unknown): SessionRecord {
 
 async function loadSessionsFromCloud(): Promise<void> {
   if (!canUseRemoteSync.value) {
-    ElMessage.warning("请先完成鉴权后再同步");
+    ElMessage.warning('请先完成鉴权后再同步');
     return;
   }
   cloudSyncing.value = true;
@@ -1067,18 +1175,19 @@ async function loadSessionsFromCloud(): Promise<void> {
     const page = await listSessionStates(authContext(), {
       page: 1,
       pageSize: 200,
-      includeArchived: true
+      includeArchived: true,
     });
     if (Array.isArray(page.items) && page.items.length > 0) {
       sessions.value = page.items.map((item) => normalizeRemoteSession(item));
-      const current = sessions.value.find((item) => item.id === activeSessionId.value) ?? sessions.value[0];
+      const current =
+        sessions.value.find((item) => item.id === activeSessionId.value) ?? sessions.value[0];
       loadSession(current.id);
       persistState();
     }
     await refreshCostSummary();
-    ElMessage.success("已从云端加载会话");
+    ElMessage.success('已从云端加载会话');
   } catch (error) {
-    const message = error instanceof Error ? error.message : "云端拉取失败";
+    const message = error instanceof Error ? error.message : '云端拉取失败';
     ElMessage.error(message);
   } finally {
     cloudSyncing.value = false;
@@ -1087,13 +1196,16 @@ async function loadSessionsFromCloud(): Promise<void> {
 
 async function syncActiveSessionToCloud(): Promise<void> {
   if (!canUseRemoteSync.value) {
-    ElMessage.warning("请先完成鉴权后再同步");
+    ElMessage.warning('请先完成鉴权后再同步');
     return;
   }
   syncCurrentSessionBranch();
   cloudSyncing.value = true;
   try {
-    const saved = await saveSessionState(activeSession.value as unknown as SessionState, authContext());
+    const saved = await saveSessionState(
+      activeSession.value as unknown as SessionState,
+      authContext(),
+    );
     const normalized = normalizeRemoteSession(saved);
     const index = sessions.value.findIndex((item) => item.id === normalized.id);
     if (index >= 0) {
@@ -1104,9 +1216,9 @@ async function syncActiveSessionToCloud(): Promise<void> {
     loadSession(normalized.id);
     persistState();
     await refreshCostSummary();
-    ElMessage.success("当前会话已保存到云端");
+    ElMessage.success('当前会话已保存到云端');
   } catch (error) {
-    const message = error instanceof Error ? error.message : "云端保存失败";
+    const message = error instanceof Error ? error.message : '云端保存失败';
     ElMessage.error(message);
   } finally {
     cloudSyncing.value = false;
@@ -1139,7 +1251,7 @@ function syncCurrentSessionBranch(): void {
   branch.traceSteps = [...traceSteps.value];
   branch.updatedAt = Date.now();
 
-  const firstUser = branch.messages.find((item) => item.role === "user");
+  const firstUser = branch.messages.find((item) => item.role === 'user');
   if (firstUser?.content?.trim()) {
     branch.title = deriveTitle(firstUser.content);
     session.title = deriveTitle(firstUser.content);
@@ -1172,9 +1284,9 @@ function loadSession(sessionId: string): void {
   }
 
   messageHeights.value = {};
-  prompt.value = "";
+  prompt.value = '';
   editingMessageId.value = null;
-  editingMessageDraft.value = "";
+  editingMessageDraft.value = '';
   void scrollToBottom(true);
 }
 
@@ -1198,7 +1310,7 @@ function createAndSwitchSession(): void {
 
 function removeSession(sessionId: string): void {
   if (sessions.value.length <= 1) {
-    ElMessage.warning("至少保留一个会话");
+    ElMessage.warning('至少保留一个会话');
     return;
   }
 
@@ -1226,7 +1338,7 @@ async function toggleSessionPin(sessionId: string): Promise<void> {
     try {
       await setSessionPinned(sessionId, session.pinned, authContext());
     } catch (error) {
-      const message = error instanceof Error ? error.message : "会话置顶同步失败";
+      const message = error instanceof Error ? error.message : '会话置顶同步失败';
       ElMessage.error(message);
     }
   }
@@ -1242,9 +1354,10 @@ async function toggleSessionArchive(sessionId: string): Promise<void> {
   session.updatedAt = Date.now();
 
   if (session.archived && !showArchivedSessions.value && activeSessionId.value === sessionId) {
-    const next = sessions.value.find((item) => item.id !== sessionId && !item.archived)
-      ?? sessions.value.find((item) => item.id !== sessionId)
-      ?? createSession();
+    const next =
+      sessions.value.find((item) => item.id !== sessionId && !item.archived) ??
+      sessions.value.find((item) => item.id !== sessionId) ??
+      createSession();
 
     if (!sessions.value.find((item) => item.id === next.id)) {
       sessions.value.unshift(next);
@@ -1258,7 +1371,7 @@ async function toggleSessionArchive(sessionId: string): Promise<void> {
     try {
       await setSessionArchived(sessionId, session.archived, authContext());
     } catch (error) {
-      const message = error instanceof Error ? error.message : "会话归档同步失败";
+      const message = error instanceof Error ? error.message : '会话归档同步失败';
       ElMessage.error(message);
     }
   }
@@ -1272,7 +1385,7 @@ function createWorkspace(): void {
 
   activeWorkspaceId.value = value;
   workspaceFilter.value = value;
-  workspaceDraft.value = "";
+  workspaceDraft.value = '';
   persistState();
 }
 
@@ -1292,7 +1405,7 @@ function forkBranch(
   title: string,
   baseMessages: ChatMessage[],
   parentBranchId: string | null,
-  parentMessageId: string | null
+  parentMessageId: string | null,
 ): SessionBranch {
   return {
     id: createBranchId(),
@@ -1301,7 +1414,7 @@ function forkBranch(
     parentMessageId,
     updatedAt: Date.now(),
     messages: [...baseMessages],
-    traceSteps: []
+    traceSteps: [],
   };
 }
 
@@ -1309,28 +1422,23 @@ function forkFromCurrent(): void {
   const session = activeSession.value;
   const current = activeBranch.value;
 
-  const branch = forkBranch(
-    `${current.title} · fork`,
-    [...messages.value],
-    current.id,
-    null
-  );
+  const branch = forkBranch(`${current.title} · fork`, [...messages.value], current.id, null);
 
   session.branches.unshift(branch);
   session.activeBranchId = branch.id;
   loadSession(session.id);
   persistState();
-  ElMessage.success("已创建分支");
+  ElMessage.success('已创建分支');
 }
 
 async function compareWithParent(): Promise<void> {
   const current = activeBranch.value;
   if (!current?.parentBranchId) {
-    ElMessage.warning("当前分支没有父分支可对比");
+    ElMessage.warning('当前分支没有父分支可对比');
     return;
   }
   if (!canUseRemoteSync.value) {
-    ElMessage.warning("请先完成鉴权后再执行云端分支对比");
+    ElMessage.warning('请先完成鉴权后再执行云端分支对比');
     return;
   }
   syncCurrentSessionBranch();
@@ -1340,13 +1448,15 @@ async function compareWithParent(): Promise<void> {
       activeSession.value.id,
       {
         sourceBranchId: current.id,
-        targetBranchId: current.parentBranchId
+        targetBranchId: current.parentBranchId,
       },
-      authContext()
+      authContext(),
     );
-    ElMessage.success(`对比完成：公共 ${result.commonMessageCount}，当前独有 ${result.sourceOnlyCount}，父分支独有 ${result.targetOnlyCount}`);
+    ElMessage.success(
+      `对比完成：公共 ${result.commonMessageCount}，当前独有 ${result.sourceOnlyCount}，父分支独有 ${result.targetOnlyCount}`,
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "分支对比失败";
+    const message = error instanceof Error ? error.message : '分支对比失败';
     ElMessage.error(message);
   }
 }
@@ -1354,11 +1464,11 @@ async function compareWithParent(): Promise<void> {
 async function mergeIntoParent(): Promise<void> {
   const current = activeBranch.value;
   if (!current?.parentBranchId) {
-    ElMessage.warning("当前分支没有父分支可合并");
+    ElMessage.warning('当前分支没有父分支可合并');
     return;
   }
   if (!canUseRemoteSync.value) {
-    ElMessage.warning("请先完成鉴权后再执行云端分支合并");
+    ElMessage.warning('请先完成鉴权后再执行云端分支合并');
     return;
   }
   syncCurrentSessionBranch();
@@ -1369,9 +1479,9 @@ async function mergeIntoParent(): Promise<void> {
       {
         sourceBranchId: current.id,
         targetBranchId: current.parentBranchId,
-        title: `${current.title} -> ${current.parentBranchId} merge`
+        title: `${current.title} -> ${current.parentBranchId} merge`,
       },
-      authContext()
+      authContext(),
     );
     const normalized = normalizeRemoteSession(result.session);
     const index = sessions.value.findIndex((item) => item.id === normalized.id);
@@ -1384,13 +1494,13 @@ async function mergeIntoParent(): Promise<void> {
     persistState();
     ElMessage.success(`合并完成，分支消息数 ${result.mergedMessageCount}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "分支合并失败";
+    const message = error instanceof Error ? error.message : '分支合并失败';
     ElMessage.error(message);
   }
 }
 
 function startEditMessage(message: ChatMessage): void {
-  if (message.role !== "user") {
+  if (message.role !== 'user') {
     return;
   }
 
@@ -1400,7 +1510,7 @@ function startEditMessage(message: ChatMessage): void {
 
 function cancelEditMessage(): void {
   editingMessageId.value = null;
-  editingMessageDraft.value = "";
+  editingMessageDraft.value = '';
 }
 
 async function submitEditAndResend(messageIndex: number, messageId: string): Promise<void> {
@@ -1410,7 +1520,7 @@ async function submitEditAndResend(messageIndex: number, messageId: string): Pro
   }
 
   if (sending.value) {
-    ElMessage.warning("请等待当前请求完成");
+    ElMessage.warning('请等待当前请求完成');
     return;
   }
 
@@ -1465,7 +1575,7 @@ function syncMessageHeight(messageId: string, height: number): void {
 
   messageHeights.value = {
     ...messageHeights.value,
-    [messageId]: height
+    [messageId]: height,
   };
 }
 
@@ -1503,12 +1613,12 @@ async function scrollToBottom(force = false): Promise<void> {
 
 async function handleMarkdownClick(event: MouseEvent): Promise<void> {
   const target = event.target as HTMLElement | null;
-  const button = target?.closest(".copy-code-btn") as HTMLElement | null;
+  const button = target?.closest('.copy-code-btn') as HTMLElement | null;
   if (!button) {
     return;
   }
 
-  const payload = button.getAttribute("data-code");
+  const payload = button.getAttribute('data-code');
   if (!payload) {
     return;
   }
@@ -1516,18 +1626,18 @@ async function handleMarkdownClick(event: MouseEvent): Promise<void> {
   try {
     const raw = fromBase64(payload);
     await navigator.clipboard.writeText(raw);
-    ElMessage.success("代码已复制");
+    ElMessage.success('代码已复制');
   } catch {
-    ElMessage.error("代码复制失败");
+    ElMessage.error('代码复制失败');
   }
 }
 
 async function copyMessage(content: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(content);
-    ElMessage.success("已复制");
+    ElMessage.success('已复制');
   } catch {
-    ElMessage.error("复制失败");
+    ElMessage.error('复制失败');
   }
 }
 
@@ -1538,44 +1648,46 @@ function parseCitation(citation: string): { source: string; chunk: string } | nu
   }
   return {
     source: matched[1].trim(),
-    chunk: matched[2].trim()
+    chunk: matched[2].trim(),
   };
 }
 
 function openCitation(citation: string): void {
-  const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+  const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
   const target = parseCitation(citation);
-  const url = `${base}/ai/pdf/file/${encodeURIComponent(chatId.value)}${target
-    ? `?source=${encodeURIComponent(target.source)}&chunk=${encodeURIComponent(target.chunk)}`
-    : ""}`;
-  window.open(url, "_blank", "noopener,noreferrer");
+  const url = `${base}/ai/pdf/file/${encodeURIComponent(chatId.value)}${
+    target
+      ? `?source=${encodeURIComponent(target.source)}&chunk=${encodeURIComponent(target.chunk)}`
+      : ''
+  }`;
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function findPreviousUserQuestion(index: number): string {
   for (let i = index - 1; i >= 0; i -= 1) {
     const candidate = messages.value[i];
-    if (candidate.role === "user" && candidate.content.trim()) {
+    if (candidate.role === 'user' && candidate.content.trim()) {
       return candidate.content.trim();
     }
   }
-  return "";
+  return '';
 }
 
 async function rateAnswer(index: number, message: ChatMessage, rating: number): Promise<void> {
-  if (message.role !== "assistant") {
+  if (message.role !== 'assistant') {
     return;
   }
   if (!canUseRemoteSync.value) {
-    ElMessage.warning("请先完成鉴权后再提交反馈");
+    ElMessage.warning('请先完成鉴权后再提交反馈');
     return;
   }
   if (answerFeedbackMap.value[message.id]) {
-    ElMessage.info("该回答已评分");
+    ElMessage.info('该回答已评分');
     return;
   }
   answerFeedbackLoading.value = {
     ...answerFeedbackLoading.value,
-    [message.id]: true
+    [message.id]: true,
   };
   try {
     await submitAnswerFeedback(
@@ -1587,22 +1699,22 @@ async function rateAnswer(index: number, message: ChatMessage, rating: number): 
         rating,
         question: findPreviousUserQuestion(index),
         answer: message.content,
-        comment: rating >= 4 ? "回答有帮助" : "回答需要改进"
+        comment: rating >= 4 ? '回答有帮助' : '回答需要改进',
       },
-      authContext()
+      authContext(),
     );
     answerFeedbackMap.value = {
       ...answerFeedbackMap.value,
-      [message.id]: rating
+      [message.id]: rating,
     };
-    ElMessage.success("反馈已提交并回灌评测集");
+    ElMessage.success('反馈已提交并回灌评测集');
   } catch (error) {
-    const tip = error instanceof Error ? error.message : "反馈提交失败";
+    const tip = error instanceof Error ? error.message : '反馈提交失败';
     ElMessage.error(tip);
   } finally {
     answerFeedbackLoading.value = {
       ...answerFeedbackLoading.value,
-      [message.id]: false
+      [message.id]: false,
     };
   }
 }
@@ -1612,36 +1724,39 @@ function stopGenerating(): void {
 }
 
 function clearConversation(): void {
-  messages.value = [createMessage("assistant", "会话已重置。你可以继续发问。")];
+  messages.value = [createMessage('assistant', '会话已重置。你可以继续发问。')];
   traceSteps.value = [];
   answerFeedbackMap.value = {};
   answerFeedbackLoading.value = {};
-  prompt.value = "";
-  streamPhase.value = "idle";
-  streamStatusDetail.value = "";
+  prompt.value = '';
+  streamPhase.value = 'idle';
+  streamStatusDetail.value = '';
   syncCurrentSessionBranch();
   persistState();
 }
 
 async function handleLogin(): Promise<void> {
   if (!apiKeyInput.value.trim()) {
-    ElMessage.warning("请先输入 API Key");
+    ElMessage.warning('请先输入 API Key');
     return;
   }
 
   authLoading.value = true;
   try {
-    const auth = await exchangeApiKey(apiKeyInput.value.trim(), tenantInput.value.trim() || undefined);
-    token.value = auth.token ?? "";
-    refreshToken.value = auth.refreshToken ?? "";
+    const auth = await exchangeApiKey(
+      apiKeyInput.value.trim(),
+      tenantInput.value.trim() || undefined,
+    );
+    token.value = auth.token ?? '';
+    refreshToken.value = auth.refreshToken ?? '';
     if (auth.tenantId) {
       tenantInput.value = auth.tenantId;
     }
-    ElMessage.success("JWT 获取成功");
+    ElMessage.success('JWT 获取成功');
     persistState();
     await loadSessionsFromCloud();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "token exchange failed";
+    const message = error instanceof Error ? error.message : 'token exchange failed';
     ElMessage.error(message);
   } finally {
     authLoading.value = false;
@@ -1650,7 +1765,7 @@ async function handleLogin(): Promise<void> {
 
 async function handleRefresh(): Promise<void> {
   if (!refreshToken.value) {
-    ElMessage.warning("当前没有 refresh token");
+    ElMessage.warning('当前没有 refresh token');
     return;
   }
 
@@ -1662,11 +1777,11 @@ async function handleRefresh(): Promise<void> {
     if (auth.tenantId) {
       tenantInput.value = auth.tenantId;
     }
-    ElMessage.success("令牌已刷新");
+    ElMessage.success('令牌已刷新');
     persistState();
     await refreshCostSummary();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "refresh failed";
+    const message = error instanceof Error ? error.message : 'refresh failed';
     ElMessage.error(message);
   } finally {
     refreshing.value = false;
@@ -1674,17 +1789,20 @@ async function handleRefresh(): Promise<void> {
 }
 
 function clearAuth(): void {
-  token.value = "";
-  refreshToken.value = "";
+  token.value = '';
+  refreshToken.value = '';
   costSummary.value = null;
-  ElMessage.success("鉴权状态已清空");
+  ElMessage.success('鉴权状态已清空');
   persistState();
 }
 
 function sanitizeMessageStates(): void {
   messages.value = messages.value.map((message) => ({
     ...message,
-    state: message.state === "pending" || message.state === "streaming" ? "done" : (message.state || "done")
+    state:
+      message.state === 'pending' || message.state === 'streaming'
+        ? 'done'
+        : message.state || 'done',
   }));
 }
 
@@ -1696,14 +1814,14 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
   sanitizeMessageStates();
 
   const assistantMsg: ChatMessage = {
-    ...createMessage("assistant", ""),
+    ...createMessage('assistant', ''),
     citations: [],
     evidence: [],
-    state: "pending"
+    state: 'pending',
   };
 
   if (appendUser) {
-    messages.value.push(createMessage("user", question));
+    messages.value.push(createMessage('user', question));
   }
   messages.value.push(assistantMsg);
   const assistantIndex = messages.value.length - 1;
@@ -1711,9 +1829,9 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
   traceSteps.value = [];
   sending.value = true;
   isStreamingResponse.value = streaming.value;
-  prompt.value = "";
-  streamPhase.value = "thinking";
-  streamStatusDetail.value = "模型正在准备响应";
+  prompt.value = '';
+  streamPhase.value = 'thinking';
+  streamStatusDetail.value = '模型正在准备响应';
 
   syncCurrentSessionBranch();
   persistState();
@@ -1724,34 +1842,34 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
 
   try {
     if (streaming.value) {
-      let streamError = "";
+      let streamError = '';
       await streamReactChat(
         {
           prompt: question,
           chatId: chatId.value,
-          modelProfile: modelProfile.value
+          modelProfile: modelProfile.value,
         },
         authContext(),
         (event, payload) => {
-          if (event === "trace") {
+          if (event === 'trace') {
             const step = payload as ReactTraceStep;
             upsertTrace(step);
-            streamPhase.value = "tool";
+            streamPhase.value = 'tool';
             streamStatusDetail.value = `调用工具: ${step.action}`;
             return;
           }
 
-          if (event === "token") {
+          if (event === 'token') {
             const tokenEvent = payload as ReactTokenEvent;
-            messages.value[assistantIndex].state = "streaming";
-            messages.value[assistantIndex].content += tokenEvent.token ?? "";
-            streamPhase.value = "streaming";
-            streamStatusDetail.value = "正在生成文本";
+            messages.value[assistantIndex].state = 'streaming';
+            messages.value[assistantIndex].content += tokenEvent.token ?? '';
+            streamPhase.value = 'streaming';
+            streamStatusDetail.value = '正在生成文本';
             void scrollToBottom();
             return;
           }
 
-          if (event === "done") {
+          if (event === 'done') {
             const done = payload as ReactChatResponse;
             if (done.trace?.length) {
               traceSteps.value = done.trace;
@@ -1765,18 +1883,18 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
             messages.value[assistantIndex].evidence = Array.isArray(done.evidence)
               ? done.evidence.map((item) => String(item).trim()).filter(Boolean)
               : [];
-            messages.value[assistantIndex].state = "done";
-            streamPhase.value = "done";
-            streamStatusDetail.value = "响应已完成";
+            messages.value[assistantIndex].state = 'done';
+            streamPhase.value = 'done';
+            streamStatusDetail.value = '响应已完成';
             return;
           }
 
-          if (event === "error") {
+          if (event === 'error') {
             const err = payload as ReactErrorEvent;
-            streamError = err.message || "stream error";
+            streamError = err.message || 'stream error';
           }
         },
-        controller.signal
+        controller.signal,
       );
 
       if (streamError) {
@@ -1787,37 +1905,37 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
         {
           prompt: question,
           chatId: chatId.value,
-          modelProfile: modelProfile.value
+          modelProfile: modelProfile.value,
         },
         authContext(),
-        controller.signal
+        controller.signal,
       );
       traceSteps.value = result.trace ?? [];
-      messages.value[assistantIndex].content = result.answer || "模型没有返回内容";
+      messages.value[assistantIndex].content = result.answer || '模型没有返回内容';
       messages.value[assistantIndex].citations = Array.isArray(result.citations)
         ? result.citations.map((item) => String(item).trim()).filter(Boolean)
         : [];
       messages.value[assistantIndex].evidence = Array.isArray(result.evidence)
         ? result.evidence.map((item) => String(item).trim()).filter(Boolean)
         : [];
-      messages.value[assistantIndex].state = "done";
-      streamPhase.value = "done";
-      streamStatusDetail.value = "响应已完成";
+      messages.value[assistantIndex].state = 'done';
+      streamPhase.value = 'done';
+      streamStatusDetail.value = '响应已完成';
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      ElMessage.info("已停止输出");
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      ElMessage.info('已停止输出');
       if (!messages.value[assistantIndex].content.trim()) {
-        messages.value[assistantIndex].content = "输出已手动停止。";
+        messages.value[assistantIndex].content = '输出已手动停止。';
       }
-      messages.value[assistantIndex].state = "stopped";
-      streamPhase.value = "stopped";
-      streamStatusDetail.value = "你手动停止了本次输出";
+      messages.value[assistantIndex].state = 'stopped';
+      streamPhase.value = 'stopped';
+      streamStatusDetail.value = '你手动停止了本次输出';
     } else {
-      const message = error instanceof Error ? error.message : "request failed";
+      const message = error instanceof Error ? error.message : 'request failed';
       messages.value[assistantIndex].content = `请求失败：${message}`;
-      messages.value[assistantIndex].state = "error";
-      streamPhase.value = "error";
+      messages.value[assistantIndex].state = 'error';
+      streamPhase.value = 'error';
       streamStatusDetail.value = message;
       ElMessage.error(message);
     }
@@ -1830,7 +1948,11 @@ async function ask(question: string, appendUser: boolean): Promise<void> {
     persistState();
     await scrollToBottom(true);
 
-    if (streamPhase.value === "done" || streamPhase.value === "error" || streamPhase.value === "stopped") {
+    if (
+      streamPhase.value === 'done' ||
+      streamPhase.value === 'error' ||
+      streamPhase.value === 'stopped'
+    ) {
       scheduleStreamReset();
     }
   }
@@ -1844,12 +1966,17 @@ async function send(): Promise<void> {
 async function regenerateFrom(assistantIndex: number): Promise<void> {
   for (let i = assistantIndex - 1; i >= 0; i -= 1) {
     const candidate = messages.value[i];
-    if (candidate.role === "user" && candidate.content.trim()) {
+    if (candidate.role === 'user' && candidate.content.trim()) {
       syncCurrentSessionBranch();
       const session = activeSession.value;
       const current = activeBranch.value;
       const baseMessages = messages.value.slice(0, i);
-      const branch = forkBranch(`${deriveTitle(candidate.content)} · retry`, baseMessages, current.id, candidate.id);
+      const branch = forkBranch(
+        `${deriveTitle(candidate.content)} · retry`,
+        baseMessages,
+        current.id,
+        candidate.id,
+      );
       session.branches.unshift(branch);
       session.activeBranchId = branch.id;
       loadSession(session.id);
@@ -1859,16 +1986,16 @@ async function regenerateFrom(assistantIndex: number): Promise<void> {
     }
   }
 
-  ElMessage.warning("没有找到可重试的用户问题");
+  ElMessage.warning('没有找到可重试的用户问题');
 }
 
 watch(
   darkMode,
   () => {
-    document.documentElement.classList.toggle("dark", darkMode.value);
+    document.documentElement.classList.toggle('dark', darkMode.value);
     persistState();
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch([modelProfile, streaming, workspaceFilter, showArchivedSessions, sessionSearch], () => {
@@ -1882,7 +2009,7 @@ watch(
     syncCurrentSessionBranch();
     persistState();
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch([apiKeyInput, tenantInput, token, refreshToken], () => {
@@ -1907,14 +2034,14 @@ watch(
     messageHeights.value = filtered;
     void scrollToBottom();
   },
-  { deep: false }
+  { deep: false },
 );
 
 onMounted(() => {
   loadSession(activeSessionId.value);
   updateViewport();
 
-  if (typeof ResizeObserver !== "undefined") {
+  if (typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver((entries) => {
       entries.forEach((entry) => {
         const element = entry.target as HTMLElement;
@@ -1927,7 +2054,7 @@ onMounted(() => {
     });
   }
 
-  window.addEventListener("resize", updateViewport);
+  window.addEventListener('resize', updateViewport);
   window.setTimeout(() => {
     hydrating.value = false;
     void scrollToBottom(true);
@@ -1941,7 +2068,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("resize", updateViewport);
+  window.removeEventListener('resize', updateViewport);
 
   if (resizeObserver) {
     messageRowElements.forEach((element) => {
@@ -2010,7 +2137,9 @@ h1 {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .new-chat-btn:hover {
@@ -2317,7 +2446,12 @@ h2 {
 .skeleton-line,
 .skeleton-bubble {
   border-radius: 10px;
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.34), rgba(148, 163, 184, 0.18));
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.18),
+    rgba(148, 163, 184, 0.34),
+    rgba(148, 163, 184, 0.18)
+  );
   background-size: 220% 100%;
   animation: shimmer 1.3s linear infinite;
 }
@@ -2465,7 +2599,12 @@ h2 {
 .assistant-skeleton div {
   height: 12px;
   border-radius: 8px;
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0.3), rgba(148, 163, 184, 0.16));
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.16),
+    rgba(148, 163, 184, 0.3),
+    rgba(148, 163, 184, 0.16)
+  );
   background-size: 220% 100%;
   animation: shimmer 1.3s linear infinite;
 }
@@ -2590,9 +2729,18 @@ h2 {
   flex-shrink: 0;
   z-index: 1;
 }
-.trace-action-tool_call .trace-node { background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25); }
-.trace-action-finish .trace-node { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25); }
-.trace-action-error .trace-node { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25); }
+.trace-action-tool_call .trace-node {
+  background: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+}
+.trace-action-finish .trace-node {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+}
+.trace-action-error .trace-node {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+}
 .trace-connector {
   width: 2px;
   flex: 1;
@@ -2626,10 +2774,18 @@ h2 {
   color: #fff;
   background: #6366f1;
 }
-.badge-thought { background: #3b82f6; }
-.badge-tool_call { background: #8b5cf6; }
-.badge-finish { background: #10b981; }
-.badge-error { background: #f59e0b; }
+.badge-thought {
+  background: #3b82f6;
+}
+.badge-tool_call {
+  background: #8b5cf6;
+}
+.badge-finish {
+  background: #10b981;
+}
+.badge-error {
+  background: #f59e0b;
+}
 .trace-field-label {
   font-size: 10px;
   font-weight: 700;
@@ -2688,11 +2844,21 @@ h2 {
   padding: 0 4px;
   transition: filter 0.2s ease;
 }
-.retrieval-lane:hover { filter: brightness(1.15); }
-.retrieval-lane.vector { background: #6366f1; }
-.retrieval-lane.keyword { background: #0ea5e9; }
-.retrieval-lane.graph { background: #f59e0b; }
-.retrieval-lane.web { background: #10b981; }
+.retrieval-lane:hover {
+  filter: brightness(1.15);
+}
+.retrieval-lane.vector {
+  background: #6366f1;
+}
+.retrieval-lane.keyword {
+  background: #0ea5e9;
+}
+.retrieval-lane.graph {
+  background: #f59e0b;
+}
+.retrieval-lane.web {
+  background: #10b981;
+}
 
 .thinking {
   max-width: 930px;
@@ -2707,7 +2873,12 @@ h2 {
   bottom: 0;
   z-index: 6;
   padding: 0 16px 16px;
-  background: linear-gradient(180deg, transparent 0%, color-mix(in oklab, var(--ui-card) 65%, transparent) 32%, color-mix(in oklab, var(--ui-card) 92%, transparent) 100%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in oklab, var(--ui-card) 65%, transparent) 32%,
+    color-mix(in oklab, var(--ui-card) 92%, transparent) 100%
+  );
 }
 
 .composer {
@@ -2755,7 +2926,7 @@ h2 {
 }
 
 .markdown :deep(code:not(.hljs)) {
-  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   background: rgba(15, 23, 42, 0.1);
   border-radius: 4px;
   padding: 2px 5px;
@@ -2805,7 +2976,7 @@ h2 {
   display: block;
   padding: 10px 0;
   background: transparent;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.55;
 }

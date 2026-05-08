@@ -15,4 +15,20 @@
     <Match>
         <Bug code="EI, EI2"/>
     </Match>
+    <!-- Suppress VA_FORMAT_STRING_USES_NEWLINE in LLM prompt strings where \n is intentional -->
+    <Match>
+        <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+    </Match>
+    <!-- Suppress NP false positives: SpotBugs doesn't recognize Spring StringUtils.hasText as null guard -->
+    <Match>
+        <Bug pattern="NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE"/>
+    </Match>
+    <!-- Suppress BX_UNBOXING_IMMEDIATELY_REBOXED: benign boxing style issues -->
+    <Match>
+        <Bug pattern="BX_UNBOXING_IMMEDIATELY_REBOXED"/>
+    </Match>
+    <!-- Suppress RCN: redundant null check (e.g. on @NonNull return values) -->
+    <Match>
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+    </Match>
 </FindBugsFilter>

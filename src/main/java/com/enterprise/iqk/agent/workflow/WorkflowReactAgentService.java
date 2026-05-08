@@ -112,7 +112,7 @@ public class WorkflowReactAgentService {
             workflowEngine.recordTaskMetrics("REACT", "DONE", elapsedMs(startedNs));
             return success(request.getChatId(), answer, trace, routeDecision, task.getTaskId());
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             workflowEngine.failTask(task.getTaskId(), e.getMessage());
             workflowEngine.recordTaskMetrics("REACT", "FAILED", elapsedMs(startedNs));
             throw e;
@@ -217,40 +217,13 @@ public class WorkflowReactAgentService {
                                   List<ReactTraceStepVO> trace,
                                   ModelRouter.ModelRouteDecision routeDecision,
                                   String tenantId) {
-        String planningPrompt = """
-                You are a ReAct planner for an education assistant.
-                You must choose exactly one action for the next step.
-
-                Allowed actions:
-                - query_school
-                - query_course
-                - add_course_reservation
-                - rag_search
-                - finish
-
-                Return JSON only:
-                {
-                  "thought": "short reasoning",
-                  "action": "one action from list",
-                  "action_input": {"key":"value"},
-                  "answer": "only provide when action is finish"
-                }
-
-                User question:
-                %s
-
-                Rolling context:
-                %s
-
-                Existing trace:
-                %s
-                """.formatted(request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
+        String planningPrompt = "You are a ReAct planner for an education assistant.%nYou must choose exactly one action for the next step.%n%nAllowed actions:%n- query_school%n- query_course%n- add_course_reservation%n- rag_search%n- finish%n%nReturn JSON only:%n{%n  \"thought\": \"short reasoning\",%n  \"action\": \"one action from list\",%n  \"action_input\": {\"key\":\"value\"},%n  \"answer\": \"only provide when action is finish\"%n}%n%nUser question:%n%s%n%nRolling context:%n%s%n%nExisting trace:%n%s%n".formatted(request.getPrompt(), emptyIfBlank(rollingContext), toJson(trace));
 
         try {
             String raw = callModel("You are strict JSON ReAct planner. Return valid JSON only.",
                     planningPrompt, routeDecision, tenantId, "react_planner");
             return parseDecision(raw);
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             return fallbackDecision(request.getPrompt());
         }
     }
@@ -265,7 +238,7 @@ public class WorkflowReactAgentService {
                 case "rag_search" -> executeRagSearch(request, actionInput);
                 default -> Map.of("status", "error", "message", "unsupported action: " + safeAction);
             };
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             return Map.of("status", "error", "message", "action failed: " + ex.getMessage());
         }
     }
@@ -307,24 +280,13 @@ public class WorkflowReactAgentService {
             String answer = callModel("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
                     finalPrompt, routeDecision, tenantId, "react_final");
             if (StringUtils.hasText(answer)) return answer;
-        } catch (Exception ignored) {}
+        } catch (RuntimeException ignored) {}
         return "当前未能生成最终答案，请稍后重试。";
     }
 
     private String buildFinalPrompt(ReactChatRequestVO request,
                                      List<ReactTraceStepVO> trace, String rollingContext) {
-        return """
-                用户问题:
-                %s
-
-                ReAct轨迹:
-                %s
-
-                观察上下文:
-                %s
-
-                请输出最终中文答案，要求简洁、可执行、结构清晰。
-                """.formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
+        return "用户问题:%n%s%n%nReAct轨迹:%n%s%n%n观察上下文:%n%s%n%n请输出最终中文答案，要求简洁、可执行、结构清晰。%n".formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
     }
 
     // ── Helpers (delegated from original ReactAgentService) ──────
@@ -420,7 +382,7 @@ public class WorkflowReactAgentService {
                     .contains(action)) action = "finish";
             return new ReasonDecision(node.path("thought").asText(""),
                     action, input, node.path("answer").asText(""), List.of(), List.of());
-        } catch (Exception e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return new ReasonDecision("Parse failed.", "finish",
                     Collections.emptyMap(), emptyIfBlank(raw), List.of(), List.of());
         }

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -221,9 +222,9 @@ public class AgentSessionService {
         payload.setTitle(defaultText(record.getTitle(), payload.getTitle()));
         payload.setWorkspaceId(defaultText(record.getWorkspaceId(), payload.getWorkspaceId()));
         payload.setModelProfile(defaultText(record.getModelProfile(), payload.getModelProfile()));
-        payload.setStreaming(record.getStreaming() != null && record.getStreaming() == 1);
-        payload.setPinned(record.getPinned() != null && record.getPinned() == 1);
-        payload.setArchived(record.getArchived() != null && record.getArchived() == 1);
+        payload.setStreaming(Objects.equals(record.getStreaming(), 1));
+        payload.setPinned(Objects.equals(record.getPinned(), 1));
+        payload.setArchived(Objects.equals(record.getArchived(), 1));
         payload.setActiveBranchId(defaultText(record.getActiveBranchId(), payload.getActiveBranchId()));
         payload.setUpdatedAt(record.getUpdatedAt() == null ? System.currentTimeMillis() : record.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli());
         payload.setBranches(payload.getBranches() == null ? new ArrayList<>() : payload.getBranches());
@@ -350,7 +351,7 @@ public class AgentSessionService {
         }
         String id = message.getId();
         if (!StringUtils.hasText(id)) {
-            id = "merged-" + System.currentTimeMillis() + "-" + Math.abs(fingerprint(message).hashCode());
+            id = "merged-" + System.currentTimeMillis() + "-" + (fingerprint(message).hashCode() & Integer.MAX_VALUE);
             message.setId(id);
         }
         if (existingIds.contains(id)) {
@@ -361,7 +362,7 @@ public class AgentSessionService {
     }
 
     private String buildMergedBranchId() {
-        return "branch-merge-" + System.currentTimeMillis() + "-" + Math.abs((int) (Math.random() * 100000));
+        return "branch-merge-" + System.currentTimeMillis() + "-" + ThreadLocalRandom.current().nextInt(100000);
     }
 
     private int sizeOf(List<?> list) {

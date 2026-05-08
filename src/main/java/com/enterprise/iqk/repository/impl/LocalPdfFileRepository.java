@@ -13,11 +13,14 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
-import java.util.Objects;
 import java.util.Properties;
 
 @Slf4j
@@ -36,7 +39,11 @@ public class LocalPdfFileRepository implements FileRepository {
 
         // 2.保存到本地磁盘
         String filename = resource.getFilename();
-        File target = new File(Objects.requireNonNull(filename));
+        if (filename == null || filename.isBlank()) {
+            log.error("Resource filename is null or blank.");
+            return false;
+        }
+        File target = new File(filename);
         if (!target.exists()) {
             try {
                 Files.copy(resource.getInputStream(), target.toPath());
@@ -59,8 +66,8 @@ public class LocalPdfFileRepository implements FileRepository {
     private void init() {
         FileSystemResource pdfResource = new FileSystemResource("chat-pdf.properties");
         if (pdfResource.exists()) {
-            try {
-                chatFiles.load(new BufferedReader(new InputStreamReader(pdfResource.getInputStream(), StandardCharsets.UTF_8)));
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(pdfResource.getInputStream(), StandardCharsets.UTF_8))) {
+                chatFiles.load(reader);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -73,13 +80,15 @@ public class LocalPdfFileRepository implements FileRepository {
 
     @PreDestroy
     private void persistent() {
-        try {
-            chatFiles.store(new FileWriter("chat-pdf.properties"), LocalDateTime.now().toString());
+        try (OutputStreamWriter writer = new OutputStreamWriter(new java.io.FileOutputStream("chat-pdf.properties"), StandardCharsets.UTF_8)) {
+            chatFiles.store(writer, LocalDateTime.now().toString());
             if (vectorStore instanceof SimpleVectorStore simpleVectorStore) {
                 File target = new File(vectorStoreProperties.getSimpleStorePath());
                 File parent = target.getParentFile();
                 if (parent != null && !parent.exists()) {
-                    parent.mkdirs();
+                    if (!parent.mkdirs()) {
+                        log.warn("Failed to create parent directories for: {}", parent);
+                    }
                 }
                 simpleVectorStore.save(target);
             }

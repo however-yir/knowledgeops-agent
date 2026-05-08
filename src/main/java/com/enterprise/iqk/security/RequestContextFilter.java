@@ -1,5 +1,6 @@
 package com.enterprise.iqk.security;
 
+import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -62,9 +63,13 @@ public class RequestContextFilter extends OncePerRequestFilter {
 
     private String resolveTraceId() {
         Tracer tracer = tracerProvider.getIfAvailable();
-        if (tracer == null || tracer.currentSpan() == null) {
+        if (tracer == null) {
             return "";
         }
-        return tracer.currentSpan().context().traceId();
+        Span span = tracer.currentSpan();
+        if (span == null) {
+            return "";
+        }
+        return span.context().traceId();
     }
 }

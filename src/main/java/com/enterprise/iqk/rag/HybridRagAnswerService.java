@@ -85,13 +85,7 @@ public class HybridRagAnswerService {
             String answer = chatClient.prompt()
                     .options(ChatOptions.builder().model(decision.model()).build())
                     .system("你是一个企业级RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
-                    .user("""
-                            用户问题:
-                            %s
-
-                            上下文:
-                            %s
-                            """.formatted(prompt, context))
+                    .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
                     .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                     .call()
                     .content();

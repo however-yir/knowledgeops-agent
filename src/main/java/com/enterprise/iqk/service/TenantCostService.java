@@ -34,7 +34,8 @@ public class TenantCostService {
         BigDecimal estimatedCost = calculateCost(costTier, inputTokens + outputTokens);
         BigDecimal monthCost = monthCost(tenant, YearMonth.now());
         BigDecimal projected = monthCost.add(estimatedCost);
-        boolean hardLimit = budget.getHardLimitEnabled() != null && budget.getHardLimitEnabled() == 1;
+        Integer hardLimitVal = budget.getHardLimitEnabled();
+        boolean hardLimit = Integer.valueOf(1).equals(hardLimitVal);
         if (hardLimit && projected.compareTo(defaultDecimal(budget.getMonthlyBudgetUsd())) > 0) {
             throw new IllegalArgumentException("tenant budget exceeded, request blocked");
         }
@@ -86,7 +87,7 @@ public class TenantCostService {
                 .tenantId(tenant)
                 .month(now.toString())
                 .monthlyBudgetUsd(budgetLimit)
-                .hardLimitEnabled(budget.getHardLimitEnabled() != null && budget.getHardLimitEnabled() == 1)
+                .hardLimitEnabled(Integer.valueOf(1).equals(budget.getHardLimitEnabled()))
                 .monthCostUsd(scale(monthCost))
                 .monthRequestCount(monthRequestCount)
                 .monthInputTokens(monthInput)
