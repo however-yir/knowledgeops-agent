@@ -6,7 +6,7 @@ This repository is one part of a five-project AI engineering portfolio. The matr
 |---|---|---|---|
 | [knowledgeops-agent](https://github.com/however-yir/knowledgeops-agent) | Enterprise Spring AI RAG platform | Governed enterprise knowledge Q&A | Spring AI, RAG, JWT/RBAC, async ingestion, observability, regression evaluation |
 | [tianji-ai-agent](https://github.com/however-yir/tianji-ai-agent) | Business Agent engineering case | Course consulting, recommendation, and pre-order flow | Java, Spring AI, multi-agent routing, Tool Calling, MCP, SSE, multimodal entry points |
-| [nebula-kb](https://github.com/however-yir/nebula-kb) | Knowledge operations hub | Knowledge asset ingestion, governance, retrieval, and feedback | Django, PostgreSQL, Redis, lifecycle workflow, quality metrics |
+| [nebula-kb](https://github.com/however-yir/nebula-kb) | Local AI Knowledge Platform | Knowledge lifecycle + RAG engine (DeepDoc) + AI chat (Open WebUI) | Django, PostgreSQL, Redis, RAGFlow, Open WebUI, lifecycle workflow |
 | [forgepilot-studio](https://github.com/however-yir/forgepilot-studio) | AI engineering execution workspace | Auditable AI coding task execution for teams | Python, FastAPI, React, runtime sandbox, MCP governance, audit replay |
 | [however-microservices-lab](https://github.com/however-yir/however-microservices-lab) | Cloud-native microservices and AI lab | Multi-language microservices with AI assistant integration | Go, Python, Java, Node.js, C#, Kubernetes, gRPC, Ollama/Gemini |
 
