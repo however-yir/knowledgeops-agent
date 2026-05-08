@@ -237,10 +237,9 @@ jobs:
         with:
           image-ref: knowledgeops-agent:scan
           format: table
-          exit-code: 0
+          exit-code: 1
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-        continue-on-error: true
 
       - name: Run Trivy (frontend)
         uses: aquasecurity/trivy-action@master
@@ -248,12 +247,11 @@ jobs:
           scan-type: fs
           scan-ref: frontend/
           format: table
-          exit-code: 0
+          exit-code: 1
           severity: CRITICAL,HIGH
-        continue-on-error: true
 
   docker:
-    needs: [build, e2e-smoke, frontend]
+    needs: [build, e2e-smoke, frontend, trivy-scan]
     runs-on: ubuntu-latest
     permissions:
       contents: read
