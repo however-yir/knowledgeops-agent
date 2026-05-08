@@ -2,3 +2,7 @@
 # Staying on 4.1.x line for stability; epoll transport is Linux-only
 # and this project runs on Tomcat (NIO), not epoll.
 CVE-2026-42577
+
+# CVE-2026-40973 only fixed in Spring Boot 3.5.14+ / 4.0.6+.
+# Staying on 3.4.x for Spring AI 1.0.0-M6 compatibility.
+CVE-2026-40973
