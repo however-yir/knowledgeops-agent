@@ -32,7 +32,7 @@
     "prettier": "^3.4.0",
     "typescript": "^5.9.2",
     "vite": "^5.4.20",
-    "vue-eslint-parser": "^9.4.0",
+    "vue-eslint-parser": "^10.4.0",
     "vue-tsc": "^2.0.29"
   }
 }
