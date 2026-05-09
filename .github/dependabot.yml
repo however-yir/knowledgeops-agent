@@ -10,6 +10,9 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "deps(maven):"
+    ignore:
+      - dependency-name: "com.puppycrawl.tools:checkstyle"
+        versions: [">=11"]
 
   - package-ecosystem: "npm"
     directory: "/frontend"
@@ -22,6 +25,17 @@ updates:
       - "frontend"
     commit-message:
       prefix: "deps(npm):"
+    ignore:
+      - dependency-name: "vite"
+        versions: [">=6"]
+      - dependency-name: "eslint"
+        versions: [">=9"]
+      - dependency-name: "@vitejs/plugin-vue"
+        versions: [">=6"]
+      - dependency-name: "eslint-plugin-vue"
+        versions: [">=10"]
+      - dependency-name: "vue-eslint-parser"
+        versions: [">=10"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -43,3 +57,6 @@ updates:
       - "docker"
     commit-message:
       prefix: "deps(docker):"
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        versions: [">=18"]
