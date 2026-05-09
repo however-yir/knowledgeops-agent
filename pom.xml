@@ -26,7 +26,7 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <checkstyle-plugin.version>3.4.0</checkstyle-plugin.version>
         <checkstyle.version>10.20.1</checkstyle.version>
-        <pmd-plugin.version>3.25.0</pmd-plugin.version>
+        <pmd-plugin.version>3.28.0</pmd-plugin.version>
         <pmd.version>7.7.0</pmd.version>
         <spotbugs-plugin.version>4.8.6.6</spotbugs-plugin.version>
         <owasp.version>11.1.1</owasp.version>
