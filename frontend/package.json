@@ -17,7 +17,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "dompurify": "^3.2.7",
-    "element-plus": "^2.11.4",
+    "element-plus": "^2.14.0",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.1",
     "vue": "^3.5.17"
