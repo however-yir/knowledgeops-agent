@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     mkdir -p deps && \
     cp target/*.jar deps/app.jar
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 
 RUN groupadd --system appgroup && \
