@@ -19,19 +19,19 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-ai.version>1.0.0-M6</spring-ai.version>
         <bucket4j.version>8.10.1</bucket4j.version>
-        <jjwt.version>0.12.6</jjwt.version>
+        <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
-        <maven-failsafe-plugin.version>3.5.2</maven-failsafe-plugin.version>
+        <maven-failsafe-plugin.version>3.5.5</maven-failsafe-plugin.version>
         <resilience4j.version>2.2.0</resilience4j.version>
         <checkstyle-plugin.version>3.4.0</checkstyle-plugin.version>
-        <checkstyle.version>10.20.1</checkstyle.version>
-        <pmd-plugin.version>3.25.0</pmd-plugin.version>
-        <pmd.version>7.7.0</pmd.version>
+        <checkstyle.version>13.4.2</checkstyle.version>
+        <pmd-plugin.version>3.28.0</pmd-plugin.version>
+        <pmd.version>7.24.0</pmd.version>
         <spotbugs-plugin.version>4.8.6.6</spotbugs-plugin.version>
-        <owasp.version>11.1.1</owasp.version>
+        <owasp.version>12.2.2</owasp.version>
         <cyclonedx.version>2.9.1</cyclonedx.version>
-        <jacoco.version>0.8.12</jacoco.version>
+        <jacoco.version>0.8.14</jacoco.version>
         <!-- Override managed versions to fix CVEs (keep Spring Boot 3.4.x base) -->
         <netty.version>4.1.133.Final</netty.version>
         <tomcat.version>10.1.54</tomcat.version>
@@ -154,7 +154,7 @@
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
-            <version>5.8.28</version>
+            <version>5.8.44</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
@@ -163,7 +163,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.36</version>
+            <version>1.18.46</version>
         </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>
@@ -215,7 +215,7 @@
         <dependency>
             <groupId>com.github.spotbugs</groupId>
             <artifactId>spotbugs-annotations</artifactId>
-            <version>4.8.6</version>
+            <version>4.9.8</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
@@ -250,7 +250,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
-                            <version>1.18.36</version>
+                            <version>1.18.46</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
