@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/however-yir/knowledgeops-agent)](https://github.com/however-yir/knowledgeops-agent/releases)
-[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://however-yir.github.io/knowledgeops-agent/)
+[![Docs](https://img.shields.io/badge/docs-Portfolio-blue)](https://however-yir.github.io/projects/knowledgeops-agent/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
@@ -71,7 +71,7 @@ make demo-down
 
 ## Evidence Links
 
-- Documentation: [however-yir.github.io/knowledgeops-agent](https://however-yir.github.io/knowledgeops-agent/)
+- Documentation: [however-yir.github.io/projects/knowledgeops-agent](https://however-yir.github.io/projects/knowledgeops-agent/)
 - Evidence pack: [docs/evidence/README.md](docs/evidence/README.md)
 - Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
 - 3 条演示路径: [docs/demo-paths.md](docs/demo-paths.md)
@@ -513,6 +513,7 @@ docker compose -f docker-compose.observability.yml up -d
 - `/actuator/health`（含 Kubernetes liveness/readiness 探针）
 - `/actuator/prometheus`（HTTP 延迟、RAG 管线、JVM、HikariCP 等指标）
 - Grafana 预置仪表盘：Request Rate / P95 Latency / Error Rate / RAG Pipeline / Ingestion / JVM Heap / HikariCP Pool
+- 仪表盘文件：[`observability/grafana/dashboard.json`](observability/grafana/dashboard.json)，导入方式见 [docs/operations.md](docs/operations.md#2-grafana-dashboard-bundle)
 
 ### 日志
 
