@@ -29,7 +29,7 @@
         <pmd-plugin.version>3.25.0</pmd-plugin.version>
         <pmd.version>7.7.0</pmd.version>
         <spotbugs-plugin.version>4.8.6.6</spotbugs-plugin.version>
-        <owasp.version>11.1.1</owasp.version>
+        <owasp.version>12.2.2</owasp.version>
         <cyclonedx.version>2.9.1</cyclonedx.version>
         <jacoco.version>0.8.12</jacoco.version>
         <!-- Override managed versions to fix CVEs (keep Spring Boot 3.4.x base) -->
