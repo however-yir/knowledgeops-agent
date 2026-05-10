@@ -27,12 +27,12 @@
     "@typescript-eslint/parser": "^8.59.2",
     "@vitejs/plugin-vue": "^5.2.4",
     "eslint": "^8.57.0",
-    "eslint-config-prettier": "^9.1.0",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^9.28.0",
     "prettier": "^3.4.0",
     "typescript": "^5.9.2",
     "vite": "^5.4.21",
     "vue-eslint-parser": "^9.4.0",
-    "vue-tsc": "^2.0.29"
+    "vue-tsc": "^3.2.8"
   }
 }

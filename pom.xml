@@ -21,11 +21,11 @@
         <bucket4j.version>8.10.1</bucket4j.version>
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>
-        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.5.5</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.5.5</maven-failsafe-plugin.version>
-        <resilience4j.version>2.2.0</resilience4j.version>
-        <checkstyle-plugin.version>3.4.0</checkstyle-plugin.version>
-        <checkstyle.version>10.20.1</checkstyle.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
+        <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
+        <checkstyle.version>10.26.1</checkstyle.version>
         <pmd-plugin.version>3.28.0</pmd-plugin.version>
         <pmd.version>7.24.0</pmd.version>
         <spotbugs-plugin.version>4.8.6.6</spotbugs-plugin.version>
@@ -168,7 +168,7 @@
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-            <version>3.5.12</version>
+            <version>3.5.16</version>
         </dependency>
 
         <!-- Spring AI OpenAI 依赖 -->
