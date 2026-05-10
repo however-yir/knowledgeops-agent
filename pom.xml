@@ -20,7 +20,7 @@
         <spring-ai.version>1.0.0-M6</spring-ai.version>
         <bucket4j.version>8.10.1</bucket4j.version>
         <jjwt.version>0.13.0</jjwt.version>
-        <springdoc.version>2.6.0</springdoc.version>
+        <springdoc.version>3.0.3</springdoc.version>
         <maven-surefire-plugin.version>3.5.5</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.5.5</maven-failsafe-plugin.version>
         <resilience4j.version>2.4.0</resilience4j.version>
