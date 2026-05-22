@@ -7,6 +7,10 @@
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
+> **Matrix role:** `knowledgeops-agent` is the platform baseline: enterprise Spring AI RAG, agent workflow state, memory, evidence, tenant isolation, security, and observability. Business agents such as [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) build on this layer.
+>
+> **Spring AI baseline:** the code is intentionally pinned to `1.0.0-M6` as the verified implementation baseline; migration to the current `1.1.x` stable line is tracked in [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md).
+
 KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. It combines **Agent Workflow Engine**, **Hybrid Retrieval (vector + keyword + graph + web)**, **Knowledge Graph**, **Long/Short-term Memory**, **DeepResearch**, tenant-isolated RAG, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, and Prometheus/Loki/Tempo observability — a complete knowledge operations baseline that is deployable, observable, and verifiable.
 
 > 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的生产级 AI 平台工程基线。
@@ -194,8 +198,8 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 - Checkstyle / PMD 7.x / SpotBugs / OWASP Dependency-Check / CycloneDX SBOM
 - Maven 3.9+
 
-> **版本说明**：Spring AI 锁定在 `1.0.0-M6`（项目启动时最新的 feature-complete milestone）。
-> GA 升级计划已制定完成（含逐文件风险矩阵），详见 [spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
+> **版本说明**：Spring AI 当前锁定在 `1.0.0-M6`，这是本仓库已经完成编译、测试、演示和证据链校验的实现基线。
+> 迁移到当前 `1.1.x` 稳定线需要逐文件适配 breaking changes，计划与风险矩阵见 [spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md)。
 
 ---
 
