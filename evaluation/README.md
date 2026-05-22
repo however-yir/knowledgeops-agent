@@ -82,6 +82,21 @@ POST /ai/evaluation/runs/{runId}/baseline
 GET  /ai/evaluation/runs/{runId}/report
 ```
 
+## Evaluation Studio Summary
+
+After a regression run, generate a reviewer-facing scorecard with quality band,
+baseline deltas, gate checks, and risk queues:
+
+```bash
+python3 scripts/generate_eval_studio.py \
+  --current reports/regression/latest.json \
+  --output-json evaluation/reports/studio-summary.json \
+  --output-md evaluation/reports/studio-summary.md
+```
+
+Use `--baseline <path>` to compare the current run against a previously saved
+regression report.
+
 ## CI Integration
 
 - **ci.yml**: Runs regression gate on every push/PR to `main`
