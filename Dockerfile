@@ -28,7 +28,7 @@ COPY --from=builder --chown=appuser:appgroup /app/deps/app.jar app.jar
 VOLUME ["/app/data", "/app/logs"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget -qO- http://localhost:8080/actuator/health >/dev/null || exit 1
+    CMD wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null || exit 1
 
 EXPOSE 8080
 
