@@ -5,7 +5,7 @@ Usage:
     python3 scripts/generate_eval_report.py \
         --dataset evaluation/demo-paths-dataset.json \
         --predictions evaluation/predictions.demo-paths.json \
-        --output evaluation/reports/demo-paths-report.md
+        --output evaluation/reports/latest-evaluation-report.md
 """
 
 import json
@@ -135,7 +135,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate evaluation report for demo paths")
     parser.add_argument("--dataset", required=True, help="Path to dataset JSON")
     parser.add_argument("--predictions", required=True, help="Path to predictions JSON")
-    parser.add_argument("--output", default="evaluation/reports/demo-paths-report.md", help="Output markdown path")
+    parser.add_argument("--output", default="evaluation/reports/latest-evaluation-report.md", help="Output markdown path")
     parser.add_argument("--threshold", type=float, default=0.60, help="Pass rate threshold")
     parser.add_argument("--init", action="store_true", help="Initialize a sample predictions file")
     args = parser.parse_args()

@@ -28,6 +28,17 @@ The regression gate (`scripts/run_regression.py`) measures:
 | Failure Rate | % of cases with error status or empty answers |
 | First Token Latency P95 | 95th percentile first-token latency (ms) |
 
+The platform Evaluation Studio API persists and displays:
+
+| Metric | Description |
+|---|---|
+| Retrieval Hit Rate | % of cases where hybrid retrieval returned evidence or matched expected citations |
+| Citation Coverage | Coverage of expected citation tokens in returned citations |
+| Answer Faithfulness | Citation-marker support proxy for final answers |
+| Average Latency | Average end-to-end evaluation latency per case |
+| Failure Rate | % of failed cases in the run |
+| Run Score | Weighted score across retrieval, citation, keyword, and faithfulness metrics |
+
 ## How to Reproduce
 
 ```bash
@@ -48,6 +59,28 @@ python3 scripts/run_regression.py \
 ```
 
 Report is written to `reports/regression/latest.json` and `reports/regression/latest.md`.
+
+## Evaluation Studio API
+
+Start the stack, then generate a single latest report file:
+
+```bash
+make demo
+make eval-demo
+```
+
+The report is overwritten at `evaluation/reports/latest-evaluation-report.md`.
+
+API endpoints:
+
+```bash
+POST /ai/evaluation/datasets
+GET  /ai/evaluation/datasets
+POST /ai/evaluation/datasets/{datasetId}/runs
+GET  /ai/evaluation/datasets/{datasetId}/comparison
+POST /ai/evaluation/runs/{runId}/baseline
+GET  /ai/evaluation/runs/{runId}/report
+```
 
 ## CI Integration
 

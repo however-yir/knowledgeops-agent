@@ -15,12 +15,41 @@ This pack collects the shortest public proof path for reviewing the project as a
 ## Product And Architecture Evidence
 
 - Demo GIF: `docs/assets/screenshots/demo.gif`
+- RAG Evaluation Studio screenshot: `docs/assets/evaluation-report-studio.png`
 - RAG citations screenshot: `docs/assets/rag-answer-citations.png`
 - Architecture overview: `docs/assets/architecture-overview.svg`
 - Workflow architecture: `docs/architecture-agent-workflow.md`
 - Hybrid retrieval architecture: `docs/architecture-hybrid-retrieval.md`
 - Knowledge graph architecture: `docs/architecture-knowledge-graph.md`
 - Memory system architecture: `docs/architecture-memory-system.md`
+
+## RAG Evaluation Reproduction
+
+The Evaluation Studio path uses the platform API and the existing Hybrid RAG chain. It persists `eval_dataset`, `eval_case`, `eval_run`, and `eval_result`, then exports one latest report file.
+
+```bash
+# 1. Start the local stack
+make demo
+
+# 2. Generate the latest evaluation report
+make eval-demo
+
+# 3. Inspect the report
+open evaluation/reports/latest-evaluation-report.md
+```
+
+API path behind the demo:
+
+1. `POST /ai/evaluation/datasets`
+2. `POST /ai/evaluation/datasets/{datasetId}/runs`
+3. `GET /ai/evaluation/datasets/{datasetId}/comparison`
+4. `GET /ai/evaluation/runs/{runId}/report`
+
+Dashboard path:
+
+- Open `http://localhost:8088`
+- Switch to `Evaluation`
+- Compare baseline vs current metrics: retrieval hit rate, citation coverage, answer faithfulness, average latency, failure rate, run score.
 
 ## Cross-Repo Integration Evidence (KnowledgeOps → tianji)
 

@@ -147,3 +147,83 @@ export interface TenantBudgetUpdate {
   monthlyBudgetUsd?: number;
   hardLimitEnabled?: boolean;
 }
+
+export interface EvalCaseCreate {
+  caseId?: string;
+  category?: string;
+  chatId?: string;
+  question: string;
+  expectedCitations?: string[];
+  expectedKeywords?: string[];
+  forbiddenKeywords?: string[];
+}
+
+export interface EvalDatasetCreate {
+  name: string;
+  description?: string;
+  cases: EvalCaseCreate[];
+}
+
+export interface EvalDataset {
+  datasetId: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  baselineRunId?: string;
+  caseCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EvalRunRequest {
+  modelProfile?: string;
+  chatIdPrefix?: string;
+}
+
+export interface EvalMetricSummary {
+  totalCases: number;
+  passedCases: number;
+  runScore: number;
+  retrievalHitRate: number;
+  citationCoverageRate: number;
+  answerFaithfulnessScore: number;
+  avgLatencyMs: number;
+  failureRate: number;
+}
+
+export interface EvalResult {
+  resultId: string;
+  caseId: string;
+  status: string;
+  question: string;
+  answer: string;
+  citations: string[];
+  evidence: string[];
+  retrievalHit: number;
+  citationCoverage: number;
+  keywordScore: number;
+  answerFaithfulness: number;
+  score: number;
+  latencyMs: number;
+  errorMessage?: string;
+}
+
+export interface EvalRun {
+  runId: string;
+  datasetId: string;
+  tenantId: string;
+  status: string;
+  modelProfile: string;
+  metrics: EvalMetricSummary;
+  results: EvalResult[];
+  errorMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+}
+
+export interface EvalComparison {
+  dataset: EvalDataset;
+  baseline?: EvalRun | null;
+  current?: EvalRun | null;
+}
