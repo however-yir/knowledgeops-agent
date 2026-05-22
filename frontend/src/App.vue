@@ -9,6 +9,23 @@
 
       <button class="new-chat-btn" type="button" @click="createAndSwitchSession">+ 新建会话</button>
 
+      <div class="console-nav" role="tablist" aria-label="Console views">
+        <button
+          type="button"
+          :class="{ active: activeView === 'chat' }"
+          @click="activateView('chat')"
+        >
+          Chat
+        </button>
+        <button
+          type="button"
+          :class="{ active: activeView === 'evaluation' }"
+          @click="activateView('evaluation')"
+        >
+          Evaluation
+        </button>
+      </div>
+
       <section class="session-tools">
         <el-input v-model="sessionSearch" size="small" placeholder="搜索会话标题或 ID" clearable />
         <div class="tool-row">
@@ -187,14 +204,21 @@
 
     <main class="workspace">
       <header class="workspace-head">
-        <div>
+        <div v-if="activeView === 'chat'">
           <p class="workspace-kicker">Active Session</p>
           <h2>{{ activeSession?.title || '新会话' }}</h2>
           <p class="workspace-sub">
             {{ modelProfile }} · {{ streaming ? 'SSE 流式' : 'JSON 单次' }}
           </p>
         </div>
-        <div class="head-actions">
+        <div v-else>
+          <p class="workspace-kicker">RAG Evaluation</p>
+          <h2>{{ selectedEvalDataset?.name || 'Evaluation Studio' }}</h2>
+          <p class="workspace-sub">
+            {{ evalCurrentRun?.runId || 'no run' }} · {{ evalCurrentRun?.status || 'idle' }}
+          </p>
+        </div>
+        <div v-if="activeView === 'chat'" class="head-actions">
           <el-select v-model="activeWorkspaceId" size="small" class="workspace-select">
             <el-option
               v-for="workspace in workspaceOptions"
@@ -221,164 +245,190 @@
           >
           <el-button size="small" @click="clearConversation">清空会话</el-button>
         </div>
+        <div v-else class="head-actions">
+          <el-button size="small" :loading="evalLoading" @click="loadEvalDatasets">刷新</el-button>
+          <el-button
+            size="small"
+            type="primary"
+            :loading="evalRunning"
+            :disabled="!evalSelectedDatasetId"
+            @click="runSelectedEvalDataset"
+            >运行评测</el-button
+          >
+          <el-button
+            size="small"
+            :disabled="!evalCurrentRun"
+            :loading="evalReportExporting"
+            @click="downloadEvalReport"
+            >导出报告</el-button
+          >
+          <el-button size="small" :disabled="!evalCurrentRun" @click="markCurrentEvalRunBaseline"
+            >设为 Baseline</el-button
+          >
+        </div>
       </header>
 
-      <section
-        ref="messageContainer"
-        class="messages"
-        @scroll="onMessageScroll"
-        @click="handleMarkdownClick"
-      >
-        <div v-if="hydrating" class="hydration-skeleton">
-          <div class="skeleton-line lg"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line short"></div>
-          <div class="skeleton-bubble"></div>
-          <div class="skeleton-bubble alt"></div>
-        </div>
-
-        <template v-else>
-          <div v-if="isEmptyConversation" class="welcome-block">
-            <h3>开始一个新问题</h3>
-            <p>支持消息编辑后重发分支、流式轨迹、长会话虚拟渲染。</p>
-            <div class="welcome-prompts">
-              <button
-                v-for="sample in quickPrompts"
-                :key="sample"
-                type="button"
-                @click="prompt = sample"
-              >
-                {{ sample }}
-              </button>
-            </div>
+      <template v-if="activeView === 'chat'">
+        <section
+          ref="messageContainer"
+          class="messages"
+          @scroll="onMessageScroll"
+          @click="handleMarkdownClick"
+        >
+          <div v-if="hydrating" class="hydration-skeleton">
+            <div class="skeleton-line lg"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line short"></div>
+            <div class="skeleton-bubble"></div>
+            <div class="skeleton-bubble alt"></div>
           </div>
 
-          <div class="virtual-spacer" :style="{ height: `${virtualTopSpacer}px` }"></div>
-
-          <article
-            v-for="entry in virtualMessages"
-            :key="entry.item.id"
-            :ref="(el) => setMessageRowRef(entry.item.id, el as HTMLElement | null)"
-            :data-msg-id="entry.item.id"
-            class="message-row"
-            :class="[entry.item.role, entry.item.state || 'done']"
-          >
-            <div class="avatar">{{ entry.item.role === 'user' ? 'U' : 'AI' }}</div>
-            <div class="bubble-wrap">
-              <div class="bubble-meta">
-                <span>{{ entry.item.role === 'user' ? 'You' : 'Assistant' }}</span>
-                <span>{{ formatTime(entry.item.createdAt) }}</span>
-                <span v-if="entry.item.state === 'streaming'" class="status-dot">生成中</span>
-                <span v-if="entry.item.state === 'pending'" class="status-dot">思考中</span>
+          <template v-else>
+            <div v-if="isEmptyConversation" class="welcome-block">
+              <h3>开始一个新问题</h3>
+              <p>支持消息编辑后重发分支、流式轨迹、长会话虚拟渲染。</p>
+              <div class="welcome-prompts">
+                <button
+                  v-for="sample in quickPrompts"
+                  :key="sample"
+                  type="button"
+                  @click="prompt = sample"
+                >
+                  {{ sample }}
+                </button>
               </div>
+            </div>
 
-              <div class="bubble">
-                <template v-if="entry.item.role === 'assistant'">
-                  <div
-                    v-if="entry.item.state === 'pending' && !entry.item.content"
-                    class="assistant-skeleton"
-                  >
-                    <div></div>
-                    <div></div>
-                    <div></div>
-                  </div>
-                  <div v-else>
-                    <!-- eslint-disable-next-line vue/no-v-html -->
-                    <div class="markdown" v-html="renderMarkdown(entry.item.content)"></div>
-                    <div v-if="entry.item.citations?.length" class="citation-panel">
-                      <p class="citation-title">来源引用</p>
-                      <div class="citation-list">
-                        <button
-                          v-for="(citation, citationIndex) in entry.item.citations"
-                          :key="`${entry.item.id}-${citationIndex}`"
-                          type="button"
-                          class="citation-chip"
-                          @click="openCitation(citation)"
-                        >
-                          [{{ citationIndex + 1 }}] {{ citation }}
-                        </button>
-                      </div>
-                    </div>
-                    <div v-if="entry.item.evidence?.length" class="evidence-panel">
-                      <p class="citation-title">证据片段</p>
-                      <ul>
-                        <li
-                          v-for="(snippet, snippetIndex) in entry.item.evidence"
-                          :key="`${entry.item.id}-ev-${snippetIndex}`"
-                        >
-                          {{ snippet }}
-                        </li>
-                      </ul>
-                    </div>
-                    <!-- Agent Trace Timeline -->
+            <div class="virtual-spacer" :style="{ height: `${virtualTopSpacer}px` }"></div>
+
+            <article
+              v-for="entry in virtualMessages"
+              :key="entry.item.id"
+              :ref="(el) => setMessageRowRef(entry.item.id, el as HTMLElement | null)"
+              :data-msg-id="entry.item.id"
+              class="message-row"
+              :class="[entry.item.role, entry.item.state || 'done']"
+            >
+              <div class="avatar">{{ entry.item.role === 'user' ? 'U' : 'AI' }}</div>
+              <div class="bubble-wrap">
+                <div class="bubble-meta">
+                  <span>{{ entry.item.role === 'user' ? 'You' : 'Assistant' }}</span>
+                  <span>{{ formatTime(entry.item.createdAt) }}</span>
+                  <span v-if="entry.item.state === 'streaming'" class="status-dot">生成中</span>
+                  <span v-if="entry.item.state === 'pending'" class="status-dot">思考中</span>
+                </div>
+
+                <div class="bubble">
+                  <template v-if="entry.item.role === 'assistant'">
                     <div
-                      v-if="traceSteps.length && entry.index === virtualMessages.length - 1"
-                      class="trace-timeline-panel"
+                      v-if="entry.item.state === 'pending' && !entry.item.content"
+                      class="assistant-skeleton"
                     >
-                      <div class="trace-timeline-header">
-                        <span class="trace-timeline-title">Agent 执行轨迹</span>
-                        <span class="trace-timeline-meta"
-                          >{{ traceSteps.length }} 步 · {{ traceDurationMs }}ms</span
-                        >
+                      <div></div>
+                      <div></div>
+                      <div></div>
+                    </div>
+                    <div v-else>
+                      <!-- eslint-disable-next-line vue/no-v-html -->
+                      <div class="markdown" v-html="renderMarkdown(entry.item.content)"></div>
+                      <div v-if="entry.item.citations?.length" class="citation-panel">
+                        <p class="citation-title">来源引用</p>
+                        <div class="citation-list">
+                          <button
+                            v-for="(citation, citationIndex) in entry.item.citations"
+                            :key="`${entry.item.id}-${citationIndex}`"
+                            type="button"
+                            class="citation-chip"
+                            @click="openCitation(citation)"
+                          >
+                            [{{ citationIndex + 1 }}] {{ citation }}
+                          </button>
+                        </div>
                       </div>
-                      <div class="trace-timeline">
-                        <div
-                          v-for="(ts, tsIdx) in traceSteps"
-                          :key="`trace-${tsIdx}`"
-                          class="trace-timeline-step"
-                          :class="[
-                            `trace-action-${ts.action}`,
-                            { 'trace-last': tsIdx === traceSteps.length - 1 },
-                          ]"
-                        >
-                          <div class="trace-timeline-rail">
-                            <div class="trace-node"></div>
-                            <div v-if="tsIdx < traceSteps.length - 1" class="trace-connector"></div>
-                          </div>
-                          <div class="trace-timeline-content">
-                            <div class="trace-step-header">
-                              <span class="trace-step-label">Step {{ ts.step }}</span>
-                              <span class="trace-action-badge" :class="`badge-${ts.action}`">{{
-                                ts.action
-                              }}</span>
+                      <div v-if="entry.item.evidence?.length" class="evidence-panel">
+                        <p class="citation-title">证据片段</p>
+                        <ul>
+                          <li
+                            v-for="(snippet, snippetIndex) in entry.item.evidence"
+                            :key="`${entry.item.id}-ev-${snippetIndex}`"
+                          >
+                            {{ snippet }}
+                          </li>
+                        </ul>
+                      </div>
+                      <!-- Agent Trace Timeline -->
+                      <div
+                        v-if="traceSteps.length && entry.index === virtualMessages.length - 1"
+                        class="trace-timeline-panel"
+                      >
+                        <div class="trace-timeline-header">
+                          <span class="trace-timeline-title">Agent 执行轨迹</span>
+                          <span class="trace-timeline-meta"
+                            >{{ traceSteps.length }} 步 · {{ traceDurationMs }}ms</span
+                          >
+                        </div>
+                        <div class="trace-timeline">
+                          <div
+                            v-for="(ts, tsIdx) in traceSteps"
+                            :key="`trace-${tsIdx}`"
+                            class="trace-timeline-step"
+                            :class="[
+                              `trace-action-${ts.action}`,
+                              { 'trace-last': tsIdx === traceSteps.length - 1 },
+                            ]"
+                          >
+                            <div class="trace-timeline-rail">
+                              <div class="trace-node"></div>
+                              <div
+                                v-if="tsIdx < traceSteps.length - 1"
+                                class="trace-connector"
+                              ></div>
                             </div>
-                            <div v-if="ts.thought" class="trace-thought-block">
-                              <span class="trace-field-label">💭 Thought</span>
-                              <p>{{ ts.thought }}</p>
-                            </div>
-                            <div
-                              v-if="ts.actionInput && Object.keys(ts.actionInput).length"
-                              class="trace-input-block"
-                            >
-                              <span class="trace-field-label">🔧 Input</span>
-                              <pre>{{ JSON.stringify(ts.actionInput, null, 2) }}</pre>
-                            </div>
-                            <details v-if="ts.observation" class="trace-obs-block">
-                              <summary>
-                                <span class="trace-field-label">📋 Observation</span>
-                              </summary>
-                              <div class="trace-obs-content">
-                                <pre>{{
-                                  typeof ts.observation === 'string'
-                                    ? ts.observation
-                                    : JSON.stringify(ts.observation, null, 2)
-                                }}</pre>
+                            <div class="trace-timeline-content">
+                              <div class="trace-step-header">
+                                <span class="trace-step-label">Step {{ ts.step }}</span>
+                                <span class="trace-action-badge" :class="`badge-${ts.action}`">{{
+                                  ts.action
+                                }}</span>
                               </div>
-                            </details>
-                            <div v-if="tsIdx === 0" class="trace-retrieval-lanes">
-                              <span class="trace-field-label">检索四路召回</span>
-                              <div class="retrieval-bar">
-                                <div class="retrieval-lane vector" style="width: 40%">
-                                  <span>Vector 40%</span>
+                              <div v-if="ts.thought" class="trace-thought-block">
+                                <span class="trace-field-label">💭 Thought</span>
+                                <p>{{ ts.thought }}</p>
+                              </div>
+                              <div
+                                v-if="ts.actionInput && Object.keys(ts.actionInput).length"
+                                class="trace-input-block"
+                              >
+                                <span class="trace-field-label">🔧 Input</span>
+                                <pre>{{ JSON.stringify(ts.actionInput, null, 2) }}</pre>
+                              </div>
+                              <details v-if="ts.observation" class="trace-obs-block">
+                                <summary>
+                                  <span class="trace-field-label">📋 Observation</span>
+                                </summary>
+                                <div class="trace-obs-content">
+                                  <pre>{{
+                                    typeof ts.observation === 'string'
+                                      ? ts.observation
+                                      : JSON.stringify(ts.observation, null, 2)
+                                  }}</pre>
                                 </div>
-                                <div class="retrieval-lane keyword" style="width: 25%">
-                                  <span>Keyword 25%</span>
-                                </div>
-                                <div class="retrieval-lane graph" style="width: 20%">
-                                  <span>Graph 20%</span>
-                                </div>
-                                <div class="retrieval-lane web" style="width: 15%">
-                                  <span>Web 15%</span>
+                              </details>
+                              <div v-if="tsIdx === 0" class="trace-retrieval-lanes">
+                                <span class="trace-field-label">检索四路召回</span>
+                                <div class="retrieval-bar">
+                                  <div class="retrieval-lane vector" style="width: 40%">
+                                    <span>Vector 40%</span>
+                                  </div>
+                                  <div class="retrieval-lane keyword" style="width: 25%">
+                                    <span>Keyword 25%</span>
+                                  </div>
+                                  <div class="retrieval-lane graph" style="width: 20%">
+                                    <span>Graph 20%</span>
+                                  </div>
+                                  <div class="retrieval-lane web" style="width: 15%">
+                                    <span>Web 15%</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -386,118 +436,212 @@
                         </div>
                       </div>
                     </div>
-                  </div>
-                </template>
+                  </template>
 
-                <template v-else>
-                  <div v-if="editingMessageId === entry.item.id" class="edit-box">
-                    <el-input
-                      v-model="editingMessageDraft"
-                      type="textarea"
-                      :rows="3"
-                      resize="none"
-                    />
-                    <div class="edit-actions">
-                      <el-button size="small" @click="cancelEditMessage">取消</el-button>
-                      <el-button
-                        size="small"
-                        type="primary"
-                        :disabled="!editingMessageDraft.trim() || sending"
-                        @click="submitEditAndResend(entry.index, entry.item.id)"
-                      >
-                        编辑后重发分支
-                      </el-button>
+                  <template v-else>
+                    <div v-if="editingMessageId === entry.item.id" class="edit-box">
+                      <el-input
+                        v-model="editingMessageDraft"
+                        type="textarea"
+                        :rows="3"
+                        resize="none"
+                      />
+                      <div class="edit-actions">
+                        <el-button size="small" @click="cancelEditMessage">取消</el-button>
+                        <el-button
+                          size="small"
+                          type="primary"
+                          :disabled="!editingMessageDraft.trim() || sending"
+                          @click="submitEditAndResend(entry.index, entry.item.id)"
+                        >
+                          编辑后重发分支
+                        </el-button>
+                      </div>
                     </div>
-                  </div>
-                  <p v-else class="plain">{{ entry.item.content }}</p>
-                </template>
-              </div>
+                    <p v-else class="plain">{{ entry.item.content }}</p>
+                  </template>
+                </div>
 
-              <div class="message-actions">
-                <button type="button" @click="copyMessage(entry.item.content)">复制</button>
+                <div class="message-actions">
+                  <button type="button" @click="copyMessage(entry.item.content)">复制</button>
+                  <button
+                    v-if="entry.item.role === 'assistant'"
+                    type="button"
+                    @click="regenerateFrom(entry.index)"
+                  >
+                    重试分支
+                  </button>
+                  <button
+                    v-if="entry.item.role === 'assistant'"
+                    type="button"
+                    :disabled="
+                      Boolean(answerFeedbackMap[entry.item.id]) ||
+                      Boolean(answerFeedbackLoading[entry.item.id])
+                    "
+                    @click="rateAnswer(entry.index, entry.item, 5)"
+                  >
+                    👍有帮助
+                  </button>
+                  <button
+                    v-if="entry.item.role === 'assistant'"
+                    type="button"
+                    :disabled="
+                      Boolean(answerFeedbackMap[entry.item.id]) ||
+                      Boolean(answerFeedbackLoading[entry.item.id])
+                    "
+                    @click="rateAnswer(entry.index, entry.item, 1)"
+                  >
+                    👎待改进
+                  </button>
+                  <button
+                    v-if="entry.item.role === 'user'"
+                    type="button"
+                    @click="startEditMessage(entry.item)"
+                  >
+                    编辑后重发
+                  </button>
+                </div>
+              </div>
+            </article>
+
+            <div class="virtual-spacer" :style="{ height: `${virtualBottomSpacer}px` }"></div>
+
+            <div v-if="sending && isStreamingResponse" class="thinking">
+              {{ streamStatusLabel }} · {{ streamStatusDetail || '处理中...' }}
+            </div>
+          </template>
+        </section>
+
+        <footer class="composer-shell">
+          <div class="composer">
+            <el-input
+              v-model="prompt"
+              class="composer-input"
+              type="textarea"
+              :rows="3"
+              resize="none"
+              placeholder="输入问题，Enter 发送，Shift + Enter 换行"
+              @keydown.enter.exact.prevent="send"
+            />
+            <div class="composer-footer">
+              <div class="quick-prompts">
                 <button
-                  v-if="entry.item.role === 'assistant'"
+                  v-for="sample in quickPrompts"
+                  :key="sample"
                   type="button"
-                  @click="regenerateFrom(entry.index)"
+                  @click="prompt = sample"
                 >
-                  重试分支
+                  {{ sample }}
                 </button>
-                <button
-                  v-if="entry.item.role === 'assistant'"
-                  type="button"
-                  :disabled="
-                    Boolean(answerFeedbackMap[entry.item.id]) ||
-                    Boolean(answerFeedbackLoading[entry.item.id])
-                  "
-                  @click="rateAnswer(entry.index, entry.item, 5)"
+              </div>
+              <div class="composer-actions">
+                <el-button :disabled="!sending" @click="stopGenerating">停止</el-button>
+                <el-button
+                  type="primary"
+                  :loading="sending"
+                  :disabled="!prompt.trim() || sending"
+                  @click="send"
+                  >发送</el-button
                 >
-                  👍有帮助
-                </button>
-                <button
-                  v-if="entry.item.role === 'assistant'"
-                  type="button"
-                  :disabled="
-                    Boolean(answerFeedbackMap[entry.item.id]) ||
-                    Boolean(answerFeedbackLoading[entry.item.id])
-                  "
-                  @click="rateAnswer(entry.index, entry.item, 1)"
-                >
-                  👎待改进
-                </button>
-                <button
-                  v-if="entry.item.role === 'user'"
-                  type="button"
-                  @click="startEditMessage(entry.item)"
-                >
-                  编辑后重发
-                </button>
               </div>
             </div>
-          </article>
-
-          <div class="virtual-spacer" :style="{ height: `${virtualBottomSpacer}px` }"></div>
-
-          <div v-if="sending && isStreamingResponse" class="thinking">
-            {{ streamStatusLabel }} · {{ streamStatusDetail || '处理中...' }}
           </div>
-        </template>
+        </footer>
+      </template>
+
+      <section v-else class="evaluation-page">
+        <aside class="eval-side-panel">
+          <div class="eval-panel-head">
+            <div>
+              <p class="section-label">Datasets</p>
+              <strong>{{ evalDatasets.length }}</strong>
+            </div>
+          </div>
+
+          <div class="eval-dataset-list">
+            <button
+              v-for="dataset in evalDatasets"
+              :key="dataset.datasetId"
+              type="button"
+              :class="{ active: dataset.datasetId === evalSelectedDatasetId }"
+              @click="selectEvalDataset(dataset.datasetId)"
+            >
+              <span>{{ dataset.name }}</span>
+              <small>{{ dataset.caseCount }} cases · {{ shortId(dataset.datasetId) }}</small>
+            </button>
+            <div v-if="!evalDatasets.length" class="session-empty">暂无评测集</div>
+          </div>
+
+          <div class="eval-create-panel">
+            <p class="section-label">Create Dataset</p>
+            <el-input v-model="evalDatasetName" size="small" placeholder="Dataset name" />
+            <el-input v-model="evalDatasetDescription" size="small" placeholder="Description" />
+            <el-input
+              v-model="evalDatasetJson"
+              class="eval-json-input"
+              type="textarea"
+              :rows="11"
+              resize="none"
+              spellcheck="false"
+            />
+            <el-button
+              type="primary"
+              :loading="evalCreating"
+              :disabled="!evalDatasetName.trim() || !evalDatasetJson.trim()"
+              @click="createEvalDatasetFromJson"
+              >创建评测集</el-button
+            >
+          </div>
+        </aside>
+
+        <section class="eval-main-panel">
+          <div class="eval-score-strip">
+            <div v-for="metric in evalMetricCards" :key="metric.key" class="eval-metric-card">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.current }}</strong>
+              <small :class="metric.deltaClass">{{ metric.delta }}</small>
+            </div>
+          </div>
+
+          <div class="eval-run-grid">
+            <div class="eval-run-summary">
+              <p class="section-label">Baseline</p>
+              <strong>{{ evalBaselineRun?.runId || 'none' }}</strong>
+              <span>{{ formatRunScore(evalBaselineRun?.metrics.runScore) }}</span>
+            </div>
+            <div class="eval-run-summary current">
+              <p class="section-label">Current</p>
+              <strong>{{ evalCurrentRun?.runId || 'none' }}</strong>
+              <span>{{ formatRunScore(evalCurrentRun?.metrics.runScore) }}</span>
+            </div>
+          </div>
+
+          <el-table
+            :data="evalCurrentRun?.results ?? []"
+            class="eval-result-table"
+            height="100%"
+            empty-text="暂无评测结果"
+          >
+            <el-table-column prop="caseId" label="Case" min-width="120" />
+            <el-table-column prop="status" label="Status" width="110" />
+            <el-table-column label="Score" width="110">
+              <template #default="{ row }">{{ formatPercent(row.score) }}</template>
+            </el-table-column>
+            <el-table-column label="Citation" width="120">
+              <template #default="{ row }">{{ formatPercent(row.citationCoverage) }}</template>
+            </el-table-column>
+            <el-table-column label="Latency" width="120">
+              <template #default="{ row }">{{ row.latencyMs }}ms</template>
+            </el-table-column>
+            <el-table-column
+              prop="question"
+              label="Question"
+              min-width="280"
+              show-overflow-tooltip
+            />
+          </el-table>
+        </section>
       </section>
-
-      <footer class="composer-shell">
-        <div class="composer">
-          <el-input
-            v-model="prompt"
-            class="composer-input"
-            type="textarea"
-            :rows="3"
-            resize="none"
-            placeholder="输入问题，Enter 发送，Shift + Enter 换行"
-            @keydown.enter.exact.prevent="send"
-          />
-          <div class="composer-footer">
-            <div class="quick-prompts">
-              <button
-                v-for="sample in quickPrompts"
-                :key="sample"
-                type="button"
-                @click="prompt = sample"
-              >
-                {{ sample }}
-              </button>
-            </div>
-            <div class="composer-actions">
-              <el-button :disabled="!sending" @click="stopGenerating">停止</el-button>
-              <el-button
-                type="primary"
-                :loading="sending"
-                :disabled="!prompt.trim() || sending"
-                @click="send"
-                >发送</el-button
-              >
-            </div>
-          </div>
-        </div>
-      </footer>
     </main>
   </div>
 </template>
@@ -520,8 +664,13 @@ import { marked } from 'marked';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   compareSessionBranches,
+  createEvalDataset,
   exchangeApiKey,
+  exportEvalRunReport,
+  getEvalComparison,
   getTenantCostSummary,
+  listEvalDatasets,
+  markEvalRunBaseline,
   listSessionStates,
   mergeSessionBranches,
   reactChat,
@@ -531,8 +680,14 @@ import {
   setSessionPinned,
   streamReactChat,
   submitAnswerFeedback,
+  triggerEvalRun,
 } from './api/client';
 import type {
+  EvalCaseCreate,
+  EvalComparison,
+  EvalDataset,
+  EvalMetricSummary,
+  EvalRun,
   ReactChatResponse,
   ReactErrorEvent,
   ReactTokenEvent,
@@ -587,6 +742,15 @@ interface MessageMetric {
 }
 
 type StreamPhase = 'idle' | 'thinking' | 'tool' | 'streaming' | 'done' | 'error' | 'stopped';
+type ConsoleView = 'chat' | 'evaluation';
+
+interface EvalMetricCard {
+  key: keyof EvalMetricSummary;
+  label: string;
+  current: string;
+  delta: string;
+  deltaClass: string;
+}
 
 const STORAGE_KEY = 'knowledgeops-agent-react-console-v2';
 const LEGACY_STORAGE_KEY = 'knowledgeops-agent-react-console';
@@ -595,6 +759,32 @@ const DEFAULT_SYSTEM_MESSAGE =
 const DEFAULT_WORKSPACE = 'default';
 const ESTIMATED_ROW_HEIGHT = 156;
 const OVERSCAN_COUNT = 8;
+const DEFAULT_EVAL_DATASET = [
+  {
+    caseId: 'rag_001',
+    category: 'rag_recall',
+    chatId: 'eval-rag-a',
+    question: '根据知识库，课程预约需要哪些字段？',
+    expectedKeywords: ['课程', '姓名', '联系方式', '校区'],
+    forbiddenKeywords: ['我不知道', '无法回答'],
+  },
+  {
+    caseId: 'rag_002',
+    category: 'rag_precision',
+    chatId: 'eval-rag-b',
+    question: '请总结这个 PDF 里和高温健康风险相关的内容。',
+    expectedKeywords: ['高温', '风险'],
+    forbiddenKeywords: ['与问题无关', '瞎编'],
+  },
+  {
+    caseId: 'rag_003',
+    category: 'citation_coverage',
+    chatId: 'eval-rag-b',
+    question: '回答时列出引用来源，并说明高温风险处置建议。',
+    expectedKeywords: ['引用', '高温', '风险'],
+    expectedCitations: ['heat'],
+  },
+];
 
 hljs.registerLanguage('bash', bashLang);
 hljs.registerLanguage('java', javaLang);
@@ -834,6 +1024,7 @@ const legacy = safeParse(localStorage.getItem(LEGACY_STORAGE_KEY));
 const bootstrap = Object.keys(cached).length > 0 ? cached : legacy;
 
 const darkMode = ref(Boolean(bootstrap.darkMode));
+const activeView = ref<ConsoleView>(bootstrap.activeView === 'evaluation' ? 'evaluation' : 'chat');
 const apiKeyInput = ref((bootstrap.apiKey as string | undefined) ?? '');
 const tenantInput = ref((bootstrap.tenantId as string | undefined) ?? '');
 const token = ref((bootstrap.token as string | undefined) ?? '');
@@ -892,6 +1083,16 @@ const cloudSyncing = ref(false);
 const costSummary = ref<TenantCostSummary | null>(null);
 const answerFeedbackMap = ref<Record<string, number>>({});
 const answerFeedbackLoading = ref<Record<string, boolean>>({});
+const evalDatasets = ref<EvalDataset[]>([]);
+const evalSelectedDatasetId = ref((bootstrap.evalSelectedDatasetId as string | undefined) ?? '');
+const evalComparison = ref<EvalComparison | null>(null);
+const evalLoading = ref(false);
+const evalCreating = ref(false);
+const evalRunning = ref(false);
+const evalReportExporting = ref(false);
+const evalDatasetName = ref('RAG Evaluation Studio Demo');
+const evalDatasetDescription = ref('RAG baseline regression set');
+const evalDatasetJson = ref(JSON.stringify(DEFAULT_EVAL_DATASET, null, 2));
 
 const messageHeights = ref<Record<string, number>>({});
 const viewportHeight = ref(0);
@@ -909,6 +1110,27 @@ const quickPrompts = [
 const sessionCount = computed(() => sessions.value.length);
 
 const canUseRemoteSync = computed(() => Boolean(token.value || apiKeyInput.value.trim()));
+
+const selectedEvalDataset = computed(() =>
+  evalDatasets.value.find((dataset) => dataset.datasetId === evalSelectedDatasetId.value),
+);
+
+const evalCurrentRun = computed<EvalRun | null>(() => evalComparison.value?.current ?? null);
+
+const evalBaselineRun = computed<EvalRun | null>(() => evalComparison.value?.baseline ?? null);
+
+const evalMetricCards = computed<EvalMetricCard[]>(() => {
+  const current = evalCurrentRun.value?.metrics;
+  const baseline = evalBaselineRun.value?.metrics;
+  return [
+    metricCard('runScore', 'Run Score', current, baseline, 'percent'),
+    metricCard('retrievalHitRate', 'Retrieval Hit', current, baseline, 'percent'),
+    metricCard('citationCoverageRate', 'Citation Coverage', current, baseline, 'percent'),
+    metricCard('answerFaithfulnessScore', 'Faithfulness', current, baseline, 'percent'),
+    metricCard('avgLatencyMs', 'Avg Latency', current, baseline, 'ms', true),
+    metricCard('failureRate', 'Failure Rate', current, baseline, 'percent', true),
+  ];
+});
 
 const workspaceOptions = computed(() => {
   const options = new Set<string>([DEFAULT_WORKSPACE]);
@@ -1128,10 +1350,12 @@ function persistState(): void {
     STORAGE_KEY,
     JSON.stringify({
       darkMode: darkMode.value,
+      activeView: activeView.value,
       apiKey: apiKeyInput.value,
       tenantId: tenantInput.value,
       token: token.value,
       refreshToken: refreshToken.value,
+      evalSelectedDatasetId: evalSelectedDatasetId.value,
       activeSessionId: activeSessionId.value,
       sessionSearch: sessionSearch.value,
       workspaceFilter: workspaceFilter.value,
@@ -1147,6 +1371,241 @@ function authContext() {
     apiKey: apiKeyInput.value || undefined,
     tenantId: tenantInput.value || undefined,
   };
+}
+
+function activateView(view: ConsoleView): void {
+  activeView.value = view;
+  persistState();
+  if (view === 'evaluation' && evalDatasets.value.length === 0 && !evalLoading.value) {
+    void loadEvalDatasets();
+  }
+}
+
+function metricCard(
+  key: keyof EvalMetricSummary,
+  label: string,
+  current: EvalMetricSummary | undefined,
+  baseline: EvalMetricSummary | undefined,
+  unit: 'percent' | 'ms',
+  lowerIsBetter = false,
+): EvalMetricCard {
+  const currentValue = current?.[key];
+  const baselineValue = baseline?.[key];
+  const hasCurrent = typeof currentValue === 'number';
+  const hasBaseline = typeof baselineValue === 'number';
+  let delta = 'baseline -';
+  let deltaClass = 'neutral';
+  if (hasCurrent && hasBaseline) {
+    const diff = currentValue - baselineValue;
+    const good = lowerIsBetter ? diff <= 0 : diff >= 0;
+    delta = `${diff >= 0 ? '+' : ''}${formatMetricValue(diff, unit)}`;
+    deltaClass = good ? 'good' : 'bad';
+  }
+  return {
+    key,
+    label,
+    current: hasCurrent ? formatMetricValue(currentValue, unit) : '-',
+    delta,
+    deltaClass,
+  };
+}
+
+function formatMetricValue(value: number, unit: 'percent' | 'ms'): string {
+  if (unit === 'ms') {
+    return `${value.toFixed(0)}ms`;
+  }
+  return formatPercent(value);
+}
+
+function formatPercent(value: number | undefined): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return '-';
+  }
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatRunScore(value: number | undefined): string {
+  return typeof value === 'number' ? formatPercent(value) : '-';
+}
+
+function normalizeEvalCase(raw: Record<string, unknown>, index: number): EvalCaseCreate {
+  const expectedKeywords = raw.expectedKeywords ?? raw.expected_keywords;
+  const expectedCitations = raw.expectedCitations ?? raw.expected_citations;
+  const forbiddenKeywords = raw.forbiddenKeywords ?? raw.forbidden_keywords;
+  return {
+    caseId: String(raw.caseId ?? raw.id ?? `case-${index + 1}`).trim(),
+    category: String(raw.category ?? 'rag').trim(),
+    chatId: String(raw.chatId ?? raw.chat_id ?? '').trim(),
+    question: String(raw.question ?? '').trim(),
+    expectedKeywords: Array.isArray(expectedKeywords) ? expectedKeywords.map(String) : [],
+    expectedCitations: Array.isArray(expectedCitations) ? expectedCitations.map(String) : [],
+    forbiddenKeywords: Array.isArray(forbiddenKeywords) ? forbiddenKeywords.map(String) : [],
+  };
+}
+
+function parseEvalDatasetJson(): EvalCaseCreate[] {
+  const parsed = JSON.parse(evalDatasetJson.value) as unknown;
+  let rawCases: unknown[] = [];
+  if (Array.isArray(parsed)) {
+    rawCases = parsed;
+  } else if (parsed && typeof parsed === 'object') {
+    const objectValue = parsed as Record<string, unknown>;
+    if (Array.isArray(objectValue.cases)) {
+      rawCases = objectValue.cases;
+    } else if (objectValue.paths && typeof objectValue.paths === 'object') {
+      Object.values(objectValue.paths as Record<string, unknown>).forEach((pathValue) => {
+        if (pathValue && typeof pathValue === 'object') {
+          const cases = (pathValue as Record<string, unknown>).cases;
+          if (Array.isArray(cases)) {
+            rawCases.push(...cases);
+          }
+        }
+      });
+    }
+  }
+
+  const cases = rawCases
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    .map(normalizeEvalCase)
+    .filter((item) => item.question);
+  if (cases.length === 0) {
+    throw new Error('评测集 JSON 没有可用 case');
+  }
+  return cases;
+}
+
+async function loadEvalDatasets(): Promise<void> {
+  evalLoading.value = true;
+  try {
+    evalDatasets.value = await listEvalDatasets(authContext());
+    if (!evalSelectedDatasetId.value && evalDatasets.value.length > 0) {
+      evalSelectedDatasetId.value = evalDatasets.value[0].datasetId;
+    }
+    if (evalSelectedDatasetId.value) {
+      await loadEvalComparison(evalSelectedDatasetId.value);
+    }
+    persistState();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '评测集加载失败';
+    ElMessage.error(message);
+  } finally {
+    evalLoading.value = false;
+  }
+}
+
+async function loadEvalComparison(datasetId: string): Promise<void> {
+  try {
+    evalComparison.value = await getEvalComparison(datasetId, authContext());
+  } catch (error) {
+    evalComparison.value = null;
+    const message = error instanceof Error ? error.message : '评测结果加载失败';
+    ElMessage.error(message);
+  }
+}
+
+async function selectEvalDataset(datasetId: string): Promise<void> {
+  evalSelectedDatasetId.value = datasetId;
+  persistState();
+  await loadEvalComparison(datasetId);
+}
+
+async function createEvalDatasetFromJson(): Promise<void> {
+  evalCreating.value = true;
+  try {
+    const created = await createEvalDataset(
+      {
+        name: evalDatasetName.value.trim(),
+        description: evalDatasetDescription.value.trim(),
+        cases: parseEvalDatasetJson(),
+      },
+      authContext(),
+    );
+    evalDatasets.value = [created, ...evalDatasets.value];
+    evalSelectedDatasetId.value = created.datasetId;
+    await loadEvalComparison(created.datasetId);
+    persistState();
+    ElMessage.success('评测集已创建');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '评测集创建失败';
+    ElMessage.error(message);
+  } finally {
+    evalCreating.value = false;
+  }
+}
+
+async function runSelectedEvalDataset(): Promise<void> {
+  if (!evalSelectedDatasetId.value) {
+    return;
+  }
+  evalRunning.value = true;
+  try {
+    const run = await triggerEvalRun(
+      evalSelectedDatasetId.value,
+      {
+        modelProfile: modelProfile.value,
+        chatIdPrefix: 'eval-studio',
+      },
+      authContext(),
+    );
+    evalComparison.value = {
+      dataset: selectedEvalDataset.value ??
+        evalComparison.value?.dataset ?? {
+          datasetId: run.datasetId,
+          tenantId: run.tenantId,
+          name: run.datasetId,
+          caseCount: run.metrics.totalCases,
+          createdAt: run.createdAt,
+          updatedAt: run.createdAt,
+        },
+      baseline: evalComparison.value?.baseline ?? null,
+      current: run,
+    };
+    ElMessage.success('评测完成');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '评测运行失败';
+    ElMessage.error(message);
+  } finally {
+    evalRunning.value = false;
+  }
+}
+
+async function markCurrentEvalRunBaseline(): Promise<void> {
+  const run = evalCurrentRun.value;
+  if (!run) {
+    return;
+  }
+  try {
+    await markEvalRunBaseline(run.runId, authContext());
+    await loadEvalComparison(run.datasetId);
+    ElMessage.success('Baseline 已更新');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Baseline 更新失败';
+    ElMessage.error(message);
+  }
+}
+
+async function downloadEvalReport(): Promise<void> {
+  const run = evalCurrentRun.value;
+  if (!run) {
+    return;
+  }
+  evalReportExporting.value = true;
+  try {
+    const report = await exportEvalRunReport(run.runId, authContext());
+    const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rag-evaluation-${run.runId}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success('报告已导出');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '报告导出失败';
+    ElMessage.error(message);
+  } finally {
+    evalReportExporting.value = false;
+  }
 }
 
 async function refreshCostSummary(): Promise<void> {
@@ -2064,6 +2523,10 @@ onMounted(() => {
     void refreshCostSummary();
   }
 
+  if (activeView.value === 'evaluation') {
+    void loadEvalDatasets();
+  }
+
   void scrollToBottom(true);
 });
 
@@ -2145,6 +2608,33 @@ h1 {
 .new-chat-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 24px rgba(14, 116, 144, 0.18);
+}
+
+.console-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--ui-panel) 80%, transparent);
+}
+
+.console-nav button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--ui-muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.console-nav button.active {
+  color: var(--ui-text);
+  background: color-mix(in oklab, var(--ui-card) 94%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.22);
 }
 
 .session-tools {
@@ -2868,6 +3358,183 @@ h2 {
   font-size: 13px;
 }
 
+.evaluation-page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.eval-side-panel,
+.eval-main-panel {
+  min-height: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--ui-card) 88%, transparent);
+}
+
+.eval-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.eval-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.eval-panel-head strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 22px;
+}
+
+.eval-dataset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.eval-dataset-list button {
+  width: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  text-align: left;
+  color: var(--ui-text);
+  background: color-mix(in oklab, var(--ui-panel) 82%, transparent);
+  cursor: pointer;
+}
+
+.eval-dataset-list button.active {
+  border-color: rgba(15, 118, 110, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.28);
+}
+
+.eval-dataset-list span,
+.eval-dataset-list small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eval-dataset-list span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.eval-dataset-list small {
+  margin-top: 4px;
+  color: var(--ui-muted);
+}
+
+.eval-create-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.eval-json-input :deep(.el-textarea__inner) {
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.eval-main-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+
+.eval-score-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+.eval-metric-card {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--ui-panel) 80%, transparent);
+  min-width: 0;
+}
+
+.eval-metric-card span,
+.eval-metric-card small {
+  display: block;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.eval-metric-card strong {
+  display: block;
+  margin: 7px 0 4px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.eval-metric-card .good {
+  color: #047857;
+}
+
+.eval-metric-card .bad {
+  color: #dc2626;
+}
+
+.eval-metric-card .neutral {
+  color: var(--ui-muted);
+}
+
+.eval-run-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.eval-run-summary {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--ui-panel) 76%, transparent);
+}
+
+.eval-run-summary.current {
+  border-color: rgba(15, 118, 110, 0.45);
+}
+
+.eval-run-summary strong,
+.eval-run-summary span {
+  display: block;
+  margin-top: 6px;
+}
+
+.eval-run-summary strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eval-run-summary span {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.eval-result-table {
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
 .composer-shell {
   position: sticky;
   bottom: 0;
@@ -3052,6 +3719,10 @@ h2 {
   .app-shell {
     grid-template-columns: 300px minmax(0, 1fr);
   }
+
+  .eval-score-strip {
+    grid-template-columns: repeat(3, minmax(112px, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
@@ -3073,6 +3744,14 @@ h2 {
     position: static;
   }
 
+  .evaluation-page {
+    grid-template-columns: 1fr;
+  }
+
+  .eval-dataset-list {
+    max-height: 180px;
+  }
+
   .composer-shell {
     position: static;
   }
@@ -3091,6 +3770,15 @@ h2 {
   .workspace-select,
   .workspace-input {
     width: 120px;
+  }
+
+  .evaluation-page {
+    padding: 12px;
+  }
+
+  .eval-score-strip,
+  .eval-run-grid {
+    grid-template-columns: 1fr;
   }
 
   .welcome-block,

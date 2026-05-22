@@ -15,6 +15,8 @@ KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. I
 
 > 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的生产级 AI 平台工程基线。
 
+![RAG Evaluation Studio report](docs/assets/evaluation-report-studio.png)
+
 ![KnowledgeOps Agent demo](docs/assets/screenshots/demo.gif)
 
 ## Why It Is More Than a Demo
@@ -24,7 +26,7 @@ KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. I
 | Enterprise RAG | PDF upload, async ingestion jobs, tenant-scoped retrieval, answer citations, evidence snippets |
 | Tenant and permission boundary | API Key, JWT, refresh token lifecycle, RBAC permissions, tenant headers, audit logging |
 | Operations baseline | Docker Compose, Flyway migrations, structured logs, Prometheus metrics, Loki logs, Tempo traces, Alertmanager rules |
-| Quality evidence | Unit tests, Testcontainers integration tests, JaCoCo, regression evaluation, E2E smoke logs, Docker image build |
+| Quality evidence | RAG Evaluation Studio, Unit tests, Testcontainers integration tests, JaCoCo, regression evaluation, E2E smoke logs, Docker image build |
 | Extensible AI workflow | Spring AI chat, ReAct trace payloads, SSE token streaming, model routing, tool execution hooks |
 
 ## Product Surfaces
@@ -32,6 +34,7 @@ KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. I
 | Surface | What to inspect |
 |---|---|
 | Console workspace | Session branches, streaming mode, model profile, JWT/API key auth, tenant context |
+| Evaluation Studio | Eval datasets, baseline vs current runs, retrieval/citation/faithfulness metrics, Markdown report export |
 | RAG answer | Citation chips, evidence snippets, empty-result fallback policy |
 | API surface | Swagger UI, curl recipes, chat/RAG/ingestion/auth/audit endpoints |
 | Operations surface | Health, Prometheus metrics, E2E artifacts, regression reports, container image |
@@ -62,6 +65,7 @@ Prefer Make targets if you use `make`:
 ```bash
 make demo
 make demo-verify
+make eval-demo
 make demo-down
 ```
 
@@ -174,7 +178,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏（API Key / Email / 参数级） |
 | 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
 | 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail + Grafana 仪表盘 + OTel 可配置采样 |
-| 工程质量 | Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs 静态扫描、OWASP 依赖检查、CycloneDX SBOM、Trivy 容器扫描、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
+| 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs 静态扫描、OWASP 依赖检查、CycloneDX SBOM、Trivy 容器扫描、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
 | 容器化 | Docker 多阶段构建、安全加固、docker-compose 资源限制、命名卷持久化 |
 | 前端工程化 | Vue 3 + TypeScript + ESLint + Prettier + vue-tsc 类型检查 |
 

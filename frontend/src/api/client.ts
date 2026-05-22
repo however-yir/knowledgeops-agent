@@ -5,6 +5,11 @@ import type {
   BranchCompareResult,
   BranchMergeRequest,
   BranchMergeResult,
+  EvalComparison,
+  EvalDataset,
+  EvalDatasetCreate,
+  EvalRun,
+  EvalRunRequest,
   FeedbackRequest,
   ReactChatRequest,
   ReactChatResponse,
@@ -462,4 +467,106 @@ export async function updateTenantBudget(
     throw formatHttpError(response.status, 'update budget failed');
   }
   return payload;
+}
+
+export async function createEvalDataset(
+  request: EvalDatasetCreate,
+  auth?: AuthContext,
+): Promise<EvalDataset> {
+  const response = await fetch(resolveApi('/ai/evaluation/datasets'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...buildAuthHeaders(auth),
+    },
+    body: JSON.stringify(request),
+  });
+  const payload = await parseJsonSafely<EvalDataset>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'create evaluation dataset failed');
+  }
+  return payload;
+}
+
+export async function listEvalDatasets(auth?: AuthContext): Promise<EvalDataset[]> {
+  const response = await fetch(resolveApi('/ai/evaluation/datasets'), {
+    method: 'GET',
+    headers: buildAuthHeaders(auth),
+  });
+  const payload = await parseJsonSafely<EvalDataset[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list evaluation datasets failed');
+  }
+  return payload;
+}
+
+export async function triggerEvalRun(
+  datasetId: string,
+  request: EvalRunRequest,
+  auth?: AuthContext,
+): Promise<EvalRun> {
+  const response = await fetch(
+    resolveApi(`/ai/evaluation/datasets/${encodeURIComponent(datasetId)}/runs`),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildAuthHeaders(auth),
+      },
+      body: JSON.stringify(request),
+    },
+  );
+  const payload = await parseJsonSafely<EvalRun>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'trigger evaluation run failed');
+  }
+  return payload;
+}
+
+export async function getEvalComparison(
+  datasetId: string,
+  auth?: AuthContext,
+): Promise<EvalComparison> {
+  const response = await fetch(
+    resolveApi(`/ai/evaluation/datasets/${encodeURIComponent(datasetId)}/comparison`),
+    {
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<EvalComparison>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'load evaluation comparison failed');
+  }
+  return payload;
+}
+
+export async function markEvalRunBaseline(runId: string, auth?: AuthContext): Promise<EvalRun> {
+  const response = await fetch(
+    resolveApi(`/ai/evaluation/runs/${encodeURIComponent(runId)}/baseline`),
+    {
+      method: 'POST',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const payload = await parseJsonSafely<EvalRun>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'mark evaluation baseline failed');
+  }
+  return payload;
+}
+
+export async function exportEvalRunReport(runId: string, auth?: AuthContext): Promise<string> {
+  const response = await fetch(
+    resolveApi(`/ai/evaluation/runs/${encodeURIComponent(runId)}/report`),
+    {
+      method: 'GET',
+      headers: buildAuthHeaders(auth),
+    },
+  );
+  const text = await response.text();
+  if (!response.ok) {
+    throw formatHttpError(response.status, text || 'export evaluation report failed');
+  }
+  return text;
 }

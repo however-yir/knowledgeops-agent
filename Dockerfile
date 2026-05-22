@@ -11,11 +11,11 @@ RUN --mount=type=cache,target=/root/.m2 \
     mkdir -p deps && \
     cp target/*.jar deps/app.jar
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-RUN groupadd --system appgroup && \
-    useradd --system --gid appgroup appuser && \
+RUN addgroup -S appgroup && \
+    adduser -S -G appgroup appuser && \
     mkdir -p /app/data /app/logs && \
     chown -R appuser:appgroup /app && \
     chmod -R 750 /app
@@ -28,7 +28,7 @@ COPY --from=builder --chown=appuser:appgroup /app/deps/app.jar app.jar
 VOLUME ["/app/data", "/app/logs"]
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
+    CMD wget -qO- http://127.0.0.1:8080/actuator/health >/dev/null || exit 1
 
 EXPOSE 8080
 

@@ -6,3 +6,12 @@ CVE-2026-42577
 # CVE-2026-40973 only fixed in Spring Boot 3.5.14+ / 4.0.6+.
 # Staying on 3.4.x for Spring AI 1.0.0-M6 compatibility.
 CVE-2026-40973
+
+# CVE-2026-22731 is only fixed in Spring Boot 3.5.12+ / 4.0.4+.
+# The vulnerable health-group additional-path configuration is not enabled;
+# only /actuator/health and /actuator/info are public in SecurityConfiguration.
+CVE-2026-22731
+
+# CVE-2026-22733 is only fixed in Spring Boot 3.5.12+ / 4.0.4+.
+# Cloud Foundry actuator endpoints are not enabled or exposed by this service.
+CVE-2026-22733

@@ -11,6 +11,7 @@
     "lint:fix": "eslint . --ext .ts,.tsx,.vue --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,vue,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,vue,css}\"",
+    "type-check": "vue-tsc --noEmit",
     "typecheck": "vue-tsc --noEmit",
     "ci": "npm run lint && npm run format:check && npm run typecheck"
   },
