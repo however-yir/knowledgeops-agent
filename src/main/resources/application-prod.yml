@@ -45,6 +45,11 @@ app:
     capacity: ${APP_RATE_LIMIT_CAPACITY:100}
     refill-tokens: ${APP_RATE_LIMIT_REFILL_TOKENS:100}
     refill-seconds: ${APP_RATE_LIMIT_REFILL_SECONDS:60}
+  agent-harness:
+    trusted-runtime-enabled: ${APP_AGENT_HARNESS_TRUSTED_ENABLED:false}
+    workspace:
+      write-enabled: ${APP_AGENT_HARNESS_WORKSPACE_WRITE_ENABLED:false}
+      shell-enabled: ${APP_AGENT_HARNESS_WORKSPACE_SHELL_ENABLED:false}
 
 logging:
   level:

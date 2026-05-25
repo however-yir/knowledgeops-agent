@@ -11,7 +11,7 @@ KnowledgeOps Agent is an enterprise Spring AI RAG platform for tenant-isolated r
 | Run it locally | [Getting Started](getting-started.md) | Docker Compose startup, health checks, auth token flow, and teardown |
 | Walk through the demo | [Reproducible Demo Script](demo-script.md) | Demo data, PDF upload, async ingestion, RAG questions, tenant and permission checks |
 | Call the API | [API Recipes](api-recipes.md) | Copyable curl examples for chat, RAG, ingestion, ReAct, and observability |
-| Understand the system | [Enterprise Architecture](architecture-enterprise.md) | Service boundaries, data flow, security, and observability architecture |
+| Understand the system | [Enterprise Architecture](architecture-enterprise.md), [Agent Harness](architecture-agent-harness.md) | Service boundaries, agent tool execution, data flow, security, and observability architecture |
 | Deploy it | [Enterprise Deployment Guide](deployment-enterprise.md) | Production topology, release checks, environment variables, and rollout notes |
 | Operate it | [Operations Manual](operations.md) | Metrics, logs, traces, alerting, incident drills, and regression checks |
 | Track future work | [Roadmap](roadmap.md) | v1.1.0 focus areas and backlog |
@@ -38,7 +38,7 @@ KnowledgeOps Agent is an enterprise Spring AI RAG platform for tenant-isolated r
 |---|---|
 | Product overview | [Project README](https://github.com/however-yir/knowledgeops-agent#readme), [Roadmap](roadmap.md) |
 | Local evaluation | [Getting Started](getting-started.md), [Reproducible Demo Script](demo-script.md), [API Recipes](api-recipes.md) |
-| Architecture and deployment | [Enterprise Architecture](architecture-enterprise.md), [Enterprise Deployment Guide](deployment-enterprise.md) |
+| Architecture and deployment | [Enterprise Architecture](architecture-enterprise.md), [Agent Workflow](architecture-agent-workflow.md), [Agent Harness](architecture-agent-harness.md), [Enterprise Deployment Guide](deployment-enterprise.md) |
 | Operations | [Operations Manual](operations.md), [Distributed and Observability Drill](drills/distributed-and-observability-drill.md), [Runbook Template](drills/runbook_template.md) |
 | Technical talking points | [Evidence Checklist](talking-points/evidence-checklist.md) |
 
@@ -46,7 +46,7 @@ KnowledgeOps Agent is an enterprise Spring AI RAG platform for tenant-isolated r
 
 | Area | Coverage |
 |---|---|
-| AI workflows | Chat, PDF RAG, ReAct trace, tool calling, conversation history |
+| AI workflows | Chat, PDF RAG, ReAct trace, governed agent harness, MCP adapter runtime, trusted workspace runtime, tool calling, conversation history |
 | Ingestion | Redis Stream or RabbitMQ queues, retries, DLQ, idempotency, status tracking |
 | Security | API Key, JWT, refresh tokens, RBAC, tenant isolation, rate limiting, audit logs |
 | Operations | Docker Compose, Flyway, Prometheus, Loki, Tempo, Alertmanager, structured logs |

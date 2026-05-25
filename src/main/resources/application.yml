@@ -168,6 +168,16 @@ app:
     connect-timeout-ms: ${APP_WEB_SEARCH_CONNECT_TIMEOUT_MS:3000}
     read-timeout-ms: ${APP_WEB_SEARCH_READ_TIMEOUT_MS:8000}
     max-results: ${APP_WEB_SEARCH_MAX_RESULTS:5}
+  agent-harness:
+    trusted-runtime-enabled: ${APP_AGENT_HARNESS_TRUSTED_ENABLED:true}
+    workspace:
+      root: ${APP_AGENT_HARNESS_WORKSPACE_ROOT:.}
+      write-enabled: ${APP_AGENT_HARNESS_WORKSPACE_WRITE_ENABLED:true}
+      shell-enabled: ${APP_AGENT_HARNESS_WORKSPACE_SHELL_ENABLED:true}
+      command-timeout-seconds: ${APP_AGENT_HARNESS_COMMAND_TIMEOUT_SECONDS:10}
+      max-command-output-bytes: ${APP_AGENT_HARNESS_MAX_COMMAND_OUTPUT_BYTES:12000}
+      max-file-bytes: ${APP_AGENT_HARNESS_MAX_FILE_BYTES:20000}
+      max-search-files: ${APP_AGENT_HARNESS_MAX_SEARCH_FILES:1000}
   cost-governance:
     enabled: ${APP_COST_GOVERNANCE_ENABLED:true}
     default-monthly-budget-usd: ${APP_COST_DEFAULT_MONTHLY_BUDGET_USD:25.0000}

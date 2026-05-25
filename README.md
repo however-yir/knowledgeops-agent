@@ -176,6 +176,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | 安全体系 | API Key + JWT + Refresh Token + RBAC + 细粒度权限 + 安全响应头 + CORS 白名单 + 速率限制（Bucket4j Redis） |
 | 弹性与容错 | Resilience4j CircuitBreaker / Retry / TimeLimiter，模型调用自动降级 |
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏（API Key / Email / 参数级） |
+| Agent Harness | 模型输出→policy→runtime/tool→observation→审计闭环；支持配置化 MCP、trusted workspace、统一 diff 与人工确认 token |
 | 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
 | 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail + Grafana 仪表盘 + OTel 可配置采样 |
 | 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs 静态扫描、OWASP 依赖检查、CycloneDX SBOM、Trivy 容器扫描、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
@@ -637,6 +638,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - API 示例：[docs/api-recipes.md](docs/api-recipes.md)
 - 企业部署指南：[docs/deployment-enterprise.md](docs/deployment-enterprise.md)
 - 架构说明：[docs/architecture-enterprise.md](docs/architecture-enterprise.md)
+- Agent Harness：[docs/architecture-agent-harness.md](docs/architecture-agent-harness.md)
 - 分布式演练：[docs/drills/distributed-and-observability-drill.md](docs/drills/distributed-and-observability-drill.md)
 - 演练模板：[docs/drills/runbook_template.md](docs/drills/runbook_template.md)
 - 工程证据清单：[docs/career/resume-upgrade-checklist.md](docs/career/resume-upgrade-checklist.md)

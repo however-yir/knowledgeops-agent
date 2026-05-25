@@ -1,15 +1,13 @@
 package com.enterprise.iqk.agent.workflow;
 
-import com.enterprise.iqk.domain.query.CourseQuery;
+import com.enterprise.iqk.agent.harness.AgentAction;
+import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
-import com.enterprise.iqk.rag.RagAnswerService;
 import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.TenantCostService;
-import com.enterprise.iqk.tools.CourseTools;
-import com.enterprise.iqk.util.ConversationIdHelper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,10 +41,9 @@ public class WorkflowReactAgentService {
     private static final int MAX_STEPS = 6;
 
     private final AgentWorkflowEngine workflowEngine;
+    private final AgentHarnessService agentHarnessService;
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
-    private final CourseTools courseTools;
-    private final RagAnswerService ragAnswerService;
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
@@ -97,7 +94,8 @@ public class WorkflowReactAgentService {
                 workflowEngine.transitionStatus(task.getTaskId(),
                         mapToWorkflowState(stepNum), mapToWorkflowState(stepNum + 1));
 
-                Object observation = executeAction(request, decision.action(), decision.actionInput());
+                Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId,
+                        task.getTaskId(), stepRecord.getStepId());
                 trace.add(buildTraceStep(stepNum, decision, observation));
                 workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
                         null, observation,
@@ -159,7 +157,8 @@ public class WorkflowReactAgentService {
                     break;
                 }
 
-                Object observation = executeAction(request, decision.action(), decision.actionInput());
+                Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId,
+                        task.getTaskId(), stepRecord.getStepId());
                 trace.add(buildTraceStep(stepNum, decision, observation));
                 workflowEngine.completeStep(stepRecord.getStepId(), "COMPLETED",
                         null, observation,
@@ -228,48 +227,22 @@ public class WorkflowReactAgentService {
         }
     }
 
-    private Object executeAction(ReactChatRequestVO request, String action, Map<String, Object> actionInput) {
-        String safeAction = normalizeAction(action);
-        try {
-            return switch (safeAction) {
-                case "query_school" -> courseTools.querySchool();
-                case "query_course" -> courseTools.queryCourse(toCourseQuery(actionInput));
-                case "add_course_reservation" -> executeReservation(actionInput);
-                case "rag_search" -> executeRagSearch(request, actionInput);
-                default -> Map.of("status", "error", "message", "unsupported action: " + safeAction);
-            };
-        } catch (RuntimeException ex) {
-            return Map.of("status", "error", "message", "action failed: " + ex.getMessage());
-        }
-    }
-
-    private Map<String, Object> executeRagSearch(ReactChatRequestVO request, Map<String, Object> actionInput) {
-        String query = stringVal(actionInput, "query", request.getPrompt());
-        String conversationId = ConversationIdHelper.build("react", request.getChatId());
-        String tenantId = currentTenantId();
-        RagAnswerService.RagResult result = ragAnswerService.answer(
-                query, tenantId, sanitizeChatId(request.getChatId()),
-                conversationId, request.getModelProfile());
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("query", query);
-        payload.put("answer", result.getAnswer());
-        payload.put("citations", result.getCitations());
-        payload.put("evidence", result.getEvidence());
-        return payload;
-    }
-
-    private Map<String, Object> executeReservation(Map<String, Object> actionInput) {
-        String course = stringVal(actionInput, "course", "");
-        String studentName = stringVal(actionInput, "studentName", "");
-        String contactInfo = stringVal(actionInput, "contactInfo", "");
-        String school = stringVal(actionInput, "school", "");
-        String remark = stringVal(actionInput, "remark", "");
-        if (!StringUtils.hasText(course) || !StringUtils.hasText(studentName)
-                || !StringUtils.hasText(contactInfo) || !StringUtils.hasText(school)) {
-            return Map.of("status", "error", "message", "missing required fields for reservation");
-        }
-        String reservationId = courseTools.addCourseReservation(course, studentName, contactInfo, school, remark);
-        return Map.of("status", "created", "reservationId", reservationId);
+    private Map<String, Object> executeAction(ReactChatRequestVO request,
+                                              String action,
+                                              Map<String, Object> actionInput,
+                                              String tenantId,
+                                              String taskId,
+                                              String stepId) {
+        return agentHarnessService.execute(new AgentAction(
+                action,
+                actionInput,
+                request.getPrompt(),
+                tenantId,
+                request.getChatId(),
+                request.getModelProfile(),
+                taskId,
+                stepId
+        )).toMap();
     }
 
     private String summarizeAnswer(ReactChatRequestVO request, List<ReactTraceStepVO> trace,
@@ -425,27 +398,6 @@ public class WorkflowReactAgentService {
         return (start < 0 || end <= start) ? "" : raw.substring(start, end + 1);
     }
 
-    private CourseQuery toCourseQuery(Map<String, Object> input) {
-        CourseQuery q = new CourseQuery();
-        q.setType(stringVal(input, "type", null));
-        q.setEdu(intVal(input.get("edu")));
-        Object sorts = input.get("sorts");
-        if (sorts instanceof List<?> list && !list.isEmpty()) {
-            List<CourseQuery.Sort> result = new ArrayList<>();
-            for (Object item : list) {
-                if (!(item instanceof Map<?, ?> raw)) continue;
-                CourseQuery.Sort s = new CourseQuery.Sort();
-                Object fieldVal = raw.get("field");
-                Object isAscVal = raw.get("isAsc");
-                s.setField(fieldVal == null ? null : String.valueOf(fieldVal));
-                s.setIsAsc(isAscVal == null ? null : Boolean.parseBoolean(String.valueOf(isAscVal)));
-                result.add(s);
-            }
-            q.setSorts(result);
-        }
-        return q;
-    }
-
     private List<String> extractTraceStrings(List<ReactTraceStepVO> trace, String key) {
         if (trace == null || trace.isEmpty()) return List.of();
         Set<String> values = new LinkedHashSet<>();
@@ -508,15 +460,6 @@ public class WorkflowReactAgentService {
 
     private String normalizeAction(String a) {
         return (!StringUtils.hasText(a)) ? "finish" : a.trim().toLowerCase(Locale.ROOT);
-    }
-    private String sanitizeChatId(String v) { return StringUtils.hasText(v) ? v.replace("'", "") : ""; }
-    private String stringVal(Map<String, Object> m, String k, String fallback) {
-        Object raw = m.get(k);
-        return (raw != null && StringUtils.hasText(String.valueOf(raw))) ? String.valueOf(raw).trim() : fallback;
-    }
-    private Integer intVal(Object raw) {
-        if (raw == null) return null;
-        try { return Integer.parseInt(String.valueOf(raw)); } catch (Exception e) { return null; }
     }
     private long elapsedMs(long startedNs) { return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs); }
     private String emptyIfBlank(String v) { return StringUtils.hasText(v) ? v : ""; }

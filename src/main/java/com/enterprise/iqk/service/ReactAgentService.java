@@ -1,14 +1,12 @@
 package com.enterprise.iqk.service;
 
-import com.enterprise.iqk.domain.query.CourseQuery;
+import com.enterprise.iqk.agent.harness.AgentAction;
+import com.enterprise.iqk.agent.harness.AgentHarnessService;
 import com.enterprise.iqk.domain.vo.ReactChatRequestVO;
 import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
-import com.enterprise.iqk.rag.RagAnswerService;
 import com.enterprise.iqk.security.TenantContext;
-import com.enterprise.iqk.tools.CourseTools;
-import com.enterprise.iqk.util.ConversationIdHelper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,10 +38,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ReactAgentService {
     private static final int MAX_STEPS = 4;
 
+    private final AgentHarnessService agentHarnessService;
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
-    private final CourseTools courseTools;
-    private final RagAnswerService ragAnswerService;
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
@@ -86,7 +83,7 @@ public class ReactAgentService {
                 return success(request.getChatId(), answer, trace, routeDecision);
             }
 
-            Object observation = executeAction(request, decision.action(), decision.actionInput());
+            Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
             trace.add(ReactTraceStepVO.builder()
                     .step(step)
                     .thought(decision.thought())
@@ -143,7 +140,7 @@ public class ReactAgentService {
                             break;
                         }
 
-                        Object observation = executeAction(request, decision.action(), decision.actionInput());
+                        Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
                         trace.add(ReactTraceStepVO.builder()
                                 .step(step)
                                 .thought(decision.thought())
@@ -274,98 +271,20 @@ public class ReactAgentService {
         }
     }
 
-    private Object executeAction(ReactChatRequestVO request, String action, Map<String, Object> actionInput) {
-        String safeAction = normalizeAction(action);
-        try {
-            return switch (safeAction) {
-                case "query_school" -> courseTools.querySchool();
-                case "query_course" -> courseTools.queryCourse(toCourseQuery(actionInput));
-                case "add_course_reservation" -> executeReservation(actionInput);
-                case "rag_search" -> executeRagSearch(request, actionInput);
-                default -> Map.of(
-                        "status", "error",
-                        "message", "unsupported action: " + safeAction
-                );
-            };
-        } catch (RuntimeException ex) {
-            return Map.of(
-                    "status", "error",
-                    "message", "action failed: " + ex.getMessage()
-            );
-        }
-    }
-
-    private Map<String, Object> executeReservation(Map<String, Object> actionInput) {
-        String course = stringVal(actionInput, "course", "");
-        String studentName = stringVal(actionInput, "studentName", "");
-        String contactInfo = stringVal(actionInput, "contactInfo", "");
-        String school = stringVal(actionInput, "school", "");
-        String remark = stringVal(actionInput, "remark", "");
-
-        if (!StringUtils.hasText(course)
-                || !StringUtils.hasText(studentName)
-                || !StringUtils.hasText(contactInfo)
-                || !StringUtils.hasText(school)) {
-            return Map.of(
-                    "status", "error",
-                    "message", "missing required fields for reservation"
-            );
-        }
-
-        String reservationId = courseTools.addCourseReservation(
-                course,
-                studentName,
-                contactInfo,
-                school,
-                remark
-        );
-        return Map.of(
-                "status", "created",
-                "reservationId", reservationId
-        );
-    }
-
-    private Map<String, Object> executeRagSearch(ReactChatRequestVO request, Map<String, Object> actionInput) {
-        String query = stringVal(actionInput, "query", request.getPrompt());
-        String conversationId = ConversationIdHelper.build("react", request.getChatId());
-        String tenantId = currentTenantId();
-        RagAnswerService.RagResult result = ragAnswerService.answer(
-                query,
+    private Map<String, Object> executeAction(ReactChatRequestVO request,
+                                              String action,
+                                              Map<String, Object> actionInput,
+                                              String tenantId) {
+        return agentHarnessService.execute(new AgentAction(
+                action,
+                actionInput,
+                request.getPrompt(),
                 tenantId,
-                sanitizeChatId(request.getChatId()),
-                conversationId,
-                request.getModelProfile()
-        );
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("query", query);
-        payload.put("answer", result.getAnswer());
-        payload.put("citations", result.getCitations());
-        payload.put("evidence", result.getEvidence());
-        return payload;
-    }
-
-    private CourseQuery toCourseQuery(Map<String, Object> actionInput) {
-        CourseQuery query = new CourseQuery();
-        query.setType(stringVal(actionInput, "type", null));
-        query.setEdu(intVal(actionInput.get("edu")));
-
-        Object sortsObj = actionInput.get("sorts");
-        if (sortsObj instanceof List<?> list && !list.isEmpty()) {
-            List<CourseQuery.Sort> sorts = new ArrayList<>();
-            for (Object item : list) {
-                if (!(item instanceof Map<?, ?> rawSort)) {
-                    continue;
-                }
-                CourseQuery.Sort sort = new CourseQuery.Sort();
-                Object field = rawSort.get("field");
-                Object isAsc = rawSort.get("isAsc");
-                sort.setField(field == null ? null : String.valueOf(field));
-                sort.setIsAsc(isAsc == null ? null : Boolean.parseBoolean(String.valueOf(isAsc)));
-                sorts.add(sort);
-            }
-            query.setSorts(sorts);
-        }
-        return query;
+                request.getChatId(),
+                request.getModelProfile(),
+                "",
+                ""
+        )).toMap();
     }
 
     private String summarizeAnswer(ReactChatRequestVO request,
@@ -654,33 +573,6 @@ public class ReactAgentService {
             return "finish";
         }
         return action.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private String sanitizeChatId(String value) {
-        if (!StringUtils.hasText(value)) {
-            return "";
-        }
-        return value.replace("'", "");
-    }
-
-    private String stringVal(Map<String, Object> input, String key, String fallback) {
-        Object raw = input.get(key);
-        if (raw == null) {
-            return fallback;
-        }
-        String value = String.valueOf(raw).trim();
-        return StringUtils.hasText(value) ? value : fallback;
-    }
-
-    private Integer intVal(Object raw) {
-        if (raw == null) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(String.valueOf(raw));
-        } catch (Exception ignored) {
-            return null;
-        }
     }
 
     private String appendContext(String origin, String action, Object observation) {

@@ -79,16 +79,15 @@ public class AgentWorkflowEngine {
                 toJson(output), toJson(observation),
                 outputTokens, latencyMs, errorMessage);
 
-        if (StringUtils.hasText(thought)) {
-            AgentStepRecord step = stepMapper.findByStepId(stepId);
-            if (step != null) {
-                step.setThought(thought);
-                step.setAction(action);
-                step.setActionInputJson(toJson(actionInput));
-                stepMapper.updateById(step);
-            }
+        AgentStepRecord step = stepMapper.findByStepId(stepId);
+        if (StringUtils.hasText(thought) && step != null) {
+            step.setThought(thought);
+            step.setAction(action);
+            step.setActionInputJson(toJson(actionInput));
+            stepMapper.updateById(step);
         }
-        emitEvent(stepId.contains("-") ? stepId : "unknown", stepId, "STEP_COMPLETED",
+        String taskId = step == null ? "unknown" : step.getTaskId();
+        emitEvent(taskId, stepId, "STEP_COMPLETED",
                 Map.of("status", status, "latencyMs", latencyMs));
     }
 
