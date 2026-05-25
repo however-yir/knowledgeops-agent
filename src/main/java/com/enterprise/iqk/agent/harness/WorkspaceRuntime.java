@@ -1,6 +1,7 @@
 package com.enterprise.iqk.agent.harness;
 
 import com.enterprise.iqk.config.properties.AgentHarnessProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -34,6 +35,7 @@ public class WorkspaceRuntime implements AgentRuntime {
     private final UnifiedDiffService diffService;
     private final Path workspaceRoot;
 
+    @Autowired
     public WorkspaceRuntime(AgentHarnessProperties harnessProperties, UnifiedDiffService diffService) {
         this(harnessProperties, diffService, Path.of(harnessProperties.getWorkspace().getRoot()));
     }
