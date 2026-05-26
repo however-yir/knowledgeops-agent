@@ -60,6 +60,11 @@ public class MysqlChatMemory implements ChatMemory {
                 } else if (MessageType.SYSTEM.getValue().equals(r.getType())) {
                     message =  new SystemMessage(r.getMessage());
                 }
+                if (message == null) {
+                    log.warn("skip unsupported chat memory message type: conversationId={}, type={}",
+                            conversationId, r.getType());
+                    continue;
+                }
                 messageList.add(message);
             }
             Collections.reverse(messageList);

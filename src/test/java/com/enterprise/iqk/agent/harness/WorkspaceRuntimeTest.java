@@ -50,10 +50,13 @@ class WorkspaceRuntimeTest {
         WorkspaceRuntime runtime = new WorkspaceRuntime(workspace);
 
         AgentObservation denied = runtime.execute(action("workspace_run_shell", Map.of("command", "rm -rf .")));
+        AgentObservation deniedGitPush = runtime.execute(action("workspace_run_shell", Map.of("command", "git push")));
         AgentObservation allowed = runtime.execute(action("workspace_run_shell", Map.of("command", "pwd")));
 
         assertThat(denied.toMap()).containsEntry("status", "error");
+        assertThat(deniedGitPush.toMap()).containsEntry("status", "error");
         assertThat(allowed.toMap()).containsEntry("exitCode", 0);
+        assertThat((String) allowed.toMap().get("stdout")).contains(workspace.toString());
     }
 
     @Test

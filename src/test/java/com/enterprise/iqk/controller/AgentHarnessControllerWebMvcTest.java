@@ -1,5 +1,7 @@
 package com.enterprise.iqk.controller;
 
+import com.enterprise.iqk.agent.harness.ActionSchema;
+import com.enterprise.iqk.agent.harness.ActionSchemaRegistry;
 import com.enterprise.iqk.agent.harness.AgentObservation;
 import com.enterprise.iqk.agent.harness.TrustedActionPreviewResponse;
 import com.enterprise.iqk.agent.harness.TrustedActionService;
@@ -19,10 +21,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -41,6 +46,9 @@ class AgentHarnessControllerWebMvcTest {
 
     @MockBean
     private TrustedActionService trustedActionService;
+
+    @MockBean
+    private ActionSchemaRegistry actionSchemaRegistry;
 
     @Test
     void previewsAndExecutesTrustedAction() throws Exception {
@@ -70,5 +78,24 @@ class AgentHarnessControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("written"))
                 .andExpect(jsonPath("$.source").value("workspace"));
+    }
+
+    @Test
+    void listsRegisteredActions() throws Exception {
+        when(actionSchemaRegistry.list()).thenReturn(List.of(new ActionSchema(
+                "workspace_read_file",
+                "workspace",
+                Set.of("path"),
+                Set.of("maxBytes"),
+                Set.of(),
+                "read",
+                true
+        )));
+
+        mockMvc.perform(get("/ai/harness/actions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].action").value("workspace_read_file"))
+                .andExpect(jsonPath("$[0].riskLevel").value("read"))
+                .andExpect(jsonPath("$[0].trustedOnly").value(true));
     }
 }

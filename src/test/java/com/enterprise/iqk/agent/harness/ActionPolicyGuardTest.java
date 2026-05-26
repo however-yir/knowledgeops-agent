@@ -45,6 +45,7 @@ class ActionPolicyGuardTest {
 
         assertThat(decision.allowed()).isTrue();
         assertThat(decision.schema().runtime()).isEqualTo("mcp");
+        assertThat(decision.schema().riskLevel()).isEqualTo("external");
     }
 
     @Test

@@ -12,10 +12,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -32,25 +31,24 @@ public class HybridRetrievalService {
     private static final double KEYWORD_WEIGHT = 0.25;
     private static final double GRAPH_WEIGHT = 0.20;
     private static final double WEB_WEIGHT = 0.15;
+    private static final long SOURCE_TIMEOUT_SECONDS = 3;
 
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
-            // Parallel retrieval from all sources
-            List<ScoredDocument> allDocs = new ArrayList<>();
+            CompletableFuture<List<ScoredDocument>> vectorFuture = retrieveAsync("vector",
+                    () -> vectorRetriever.retrieve(query, tenantId, chatId), VECTOR_WEIGHT);
+            CompletableFuture<List<ScoredDocument>> keywordFuture = retrieveAsync("keyword",
+                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), KEYWORD_WEIGHT);
+            CompletableFuture<List<ScoredDocument>> graphFuture = retrieveAsync("graph",
+                    () -> graphRetriever.retrieve(query, tenantId, topK), GRAPH_WEIGHT);
+            CompletableFuture<List<ScoredDocument>> webFuture = retrieveAsync("web",
+                    () -> webRetriever.retrieve(query, topK), WEB_WEIGHT);
 
-            List<ScoredDocument> vectorDocs = vectorRetriever.retrieve(query, tenantId, chatId);
-            allDocs.addAll(applyWeight(vectorDocs, VECTOR_WEIGHT));
-
-            List<ScoredDocument> keywordDocs = keywordRetriever.retrieve(query, tenantId, chatId, topK);
-            allDocs.addAll(applyWeight(keywordDocs, KEYWORD_WEIGHT));
-
-            List<ScoredDocument> graphDocs = graphRetriever.retrieve(query, tenantId, topK);
-            allDocs.addAll(applyWeight(graphDocs, GRAPH_WEIGHT));
-
-            List<ScoredDocument> webDocs = webRetriever.retrieve(query, topK);
-            allDocs.addAll(applyWeight(webDocs, WEB_WEIGHT));
+            List<ScoredDocument> allDocs = Stream.of(vectorFuture, keywordFuture, graphFuture, webFuture)
+                    .flatMap(future -> future.join().stream())
+                    .toList();
 
             // Deduplicate by content fingerprint
             List<ScoredDocument> deduped = deduplicate(allDocs);
@@ -75,6 +73,19 @@ public class HybridRetrievalService {
             d.setFinalScore(d.getRetrievalScore() * weight);
         }
         return docs;
+    }
+
+    private CompletableFuture<List<ScoredDocument>> retrieveAsync(String source,
+                                                                  Supplier<List<ScoredDocument>> retrieval,
+                                                                  double weight) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return applyWeight(retrieval.get(), weight);
+            } catch (RuntimeException ex) {
+                log.warn("hybrid retrieval source failed: source={}, reason={}", source, ex.toString());
+                return List.<ScoredDocument>of();
+            }
+        }).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     private List<ScoredDocument> deduplicate(List<ScoredDocument> docs) {

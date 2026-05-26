@@ -53,6 +53,7 @@ public class SecurityConfiguration {
                     .requestMatchers(HttpMethod.GET, "/ai/chat", "/ai/service").hasAnyAuthority("PERM_CHAT_READ", "PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/chat", "/ai/service").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/react/chat", "/ai/react/chat/stream").hasAnyAuthority("PERM_CHAT_WRITE", "ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/ai/harness/**").hasAnyAuthority("PERM_AGENT_TRUSTED", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/ai/harness/**").hasAnyAuthority("PERM_AGENT_TRUSTED", "ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/ai/evaluation/**").hasAnyAuthority("PERM_EVAL_READ", "PERM_EVAL_WRITE", "ROLE_ADMIN", "ROLE_OPS")
                     .requestMatchers(HttpMethod.POST, "/ai/evaluation/**").hasAnyAuthority("PERM_EVAL_WRITE", "ROLE_ADMIN")

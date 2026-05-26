@@ -22,6 +22,7 @@ public class HarnessEventRecorder {
         emit(action, "ACTION_STARTED", Map.of(
                 "action", action.action(),
                 "source", source,
+                "riskLevel", schema == null ? "unknown" : schema.riskLevel(),
                 "actionInput", payloadSanitizer.sanitizeActionInput(action, schema)
         ));
     }

@@ -8,6 +8,7 @@ public record ActionSchema(
         Set<String> requiredFields,
         Set<String> optionalFields,
         Set<String> sensitiveFields,
+        String riskLevel,
         boolean trustedOnly
 ) {
     public boolean knowsField(String field) {

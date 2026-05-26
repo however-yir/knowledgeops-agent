@@ -7,16 +7,19 @@ import org.springframework.util.StringUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -208,18 +211,26 @@ public class WorkspaceRuntime implements AgentRuntime {
         int timeoutSeconds = Math.min(Math.max(intVal(input.get("timeoutSeconds"), defaultTimeout), 1), 30);
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workspaceRoot.toFile());
-        builder.redirectErrorStream(true);
         Process process = builder.start();
+        CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
+                () -> readProcessOutput(process.getInputStream()));
+        CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
+                () -> readProcessOutput(process.getErrorStream()));
         boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         if (!finished) {
             process.destroyForcibly();
             return Map.of("status", "error", "message", "command timed out");
         }
-        byte[] output = readProcessOutput(process);
+        ProcessOutput stdoutOutput = stdout.join();
+        ProcessOutput stderrOutput = stderr.join();
+        String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
+        String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
         return Map.of(
                 "exitCode", process.exitValue(),
-                "output", new String(output, StandardCharsets.UTF_8),
-                "truncated", output.length >= maxCommandOutputBytes()
+                "stdout", stdoutText,
+                "stderr", stderrText,
+                "output", stdoutText + stderrText,
+                "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
         );
     }
 
@@ -259,16 +270,19 @@ public class WorkspaceRuntime implements AgentRuntime {
         }
     }
 
-    private byte[] readProcessOutput(Process process) throws IOException {
-        try (var input = process.getInputStream()) {
+    private ProcessOutput readProcessOutput(InputStream stream) {
+        try (var input = stream) {
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             input.transferTo(buffer);
             byte[] raw = buffer.toByteArray();
             int maxOutputBytes = maxCommandOutputBytes();
             if (raw.length <= maxOutputBytes) {
-                return raw;
+                return new ProcessOutput(raw, false);
             }
-            return java.util.Arrays.copyOf(raw, maxOutputBytes);
+            return new ProcessOutput(Arrays.copyOf(raw, maxOutputBytes), true);
+        } catch (IOException ex) {
+            return new ProcessOutput(("failed to read process output: " + ex.getMessage())
+                    .getBytes(StandardCharsets.UTF_8), false);
         }
     }
 
@@ -339,5 +353,8 @@ public class WorkspaceRuntime implements AgentRuntime {
         AgentHarnessProperties properties = new AgentHarnessProperties();
         properties.getWorkspace().setRoot(workspaceRoot.toString());
         return properties;
+    }
+
+    private record ProcessOutput(byte[] bytes, boolean truncated) {
     }
 }
