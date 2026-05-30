@@ -8,7 +8,7 @@
     "parity": "node scripts/check-parity.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm --filter @knowledgeops/shared build && pnpm -r test"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",
