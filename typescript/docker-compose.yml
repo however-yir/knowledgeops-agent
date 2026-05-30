@@ -6,6 +6,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      APP_SECURITY_ENABLED: "true"
       APP_JWT_SECRET: replace_with_32_bytes_min_secret
       APP_DEMO_API_KEY: local-demo-api-key
       APP_CORS_ALLOWED_ORIGINS: http://localhost:8088,http://localhost:5173

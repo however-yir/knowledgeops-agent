@@ -1,11 +1,12 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 
 import { newId } from "../common/ids.js";
+import { RetrievalService } from "../ai/retrieval.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
 
 @Controller("ai/harness")
 export class HarnessController {
-  constructor(private readonly store: PlatformStore) {}
+  constructor(private readonly store: PlatformStore, private readonly retrievalService: RetrievalService) {}
 
   @Get("actions")
   actions() {
@@ -49,6 +50,18 @@ export class HarnessController {
       return { status: "not_found", source: "trusted-action" };
     }
     this.store.trustedActions.delete(token);
+    if (request.action === "rag_query") {
+      const input = request.actionInput as Record<string, unknown> | undefined;
+      const query = String(input?.query ?? "");
+      const tenantId = String(input?.tenantId ?? "public");
+      const chatId = String(input?.chatId ?? "");
+      return {
+        status: "executed",
+        source: "retrieval",
+        action: "rag_query",
+        observation: this.retrievalService.answer(query, tenantId, chatId)
+      };
+    }
     return {
       status: "executed",
       source: "trusted-action",

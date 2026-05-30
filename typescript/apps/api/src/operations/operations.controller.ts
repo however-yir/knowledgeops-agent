@@ -61,6 +61,7 @@ export class OperationsController {
   addMemory(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: Record<string, unknown>) {
     const item = { tenantId: normalizeTenant(tenantHeader), ...body, createdAt: nowIso() };
     this.store.memoryItems.push(item);
+    this.store.persist();
     return item;
   }
 
@@ -73,6 +74,7 @@ export class OperationsController {
   addGraphEntity(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: Record<string, unknown>) {
     const entity = { tenantId: normalizeTenant(tenantHeader), ...body, createdAt: nowIso() };
     this.store.graphEntities.push(entity);
+    this.store.persist();
     return entity;
   }
 }

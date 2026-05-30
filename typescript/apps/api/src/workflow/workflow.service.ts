@@ -30,6 +30,7 @@ export class WorkflowService {
         createdAt: nowIso()
       }
     ]);
+    this.store.persist();
     return task;
   }
 

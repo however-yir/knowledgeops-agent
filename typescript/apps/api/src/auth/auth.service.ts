@@ -19,19 +19,61 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 export class AuthService {
   constructor(private readonly store: PlatformStore) {}
 
-  exchangeApiKey(apiKey: string | undefined, tenantHeader: string | undefined): AuthTokenResponse {
+  authenticateApiKey(apiKey: string | undefined, tenantHeader?: string) {
     if (!apiKey) {
-      return { ok: 0, msg: "invalid api key" };
+      return undefined;
     }
-    const record = this.store.apiKeys.get(sha256Hex(apiKey));
+    const record = this.store.apiKeys.get(sha256Hex(apiKey.trim()));
     if (!record || !record.enabled) {
-      return { ok: 0, msg: "invalid api key" };
+      return undefined;
     }
     const tenantId = normalizeTenant(record.tenantId);
     if (tenantHeader && normalizeTenant(tenantHeader) !== tenantId) {
-      return { ok: 0, msg: "tenant mismatch for api key" };
+      return undefined;
     }
-    return this.issueTokens(record.keyName, [record.roleName], tenantId);
+    return {
+      principal: record.keyName,
+      roles: [record.roleName],
+      permissions: this.permissionsForRoles([record.roleName]),
+      tenantId,
+      source: "api_key" as const
+    };
+  }
+
+  parseJwt(token: string | undefined) {
+    if (!token) {
+      return undefined;
+    }
+    try {
+      const decoded = jwt.verify(token, env.APP_JWT_SECRET) as {
+        sub?: string;
+        roles?: string[];
+        permissions?: string[];
+        tenant_id?: string;
+        tenantId?: string;
+      };
+      if (!decoded.sub) {
+        return undefined;
+      }
+      const roles = decoded.roles?.length ? decoded.roles : ["USER"];
+      return {
+        principal: decoded.sub,
+        roles,
+        permissions: decoded.permissions ?? this.permissionsForRoles(roles),
+        tenantId: normalizeTenant(decoded.tenant_id ?? decoded.tenantId),
+        source: "jwt" as const
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  exchangeApiKey(apiKey: string | undefined, tenantHeader: string | undefined): AuthTokenResponse {
+    const identity = this.authenticateApiKey(apiKey, tenantHeader);
+    if (!identity) {
+      return { ok: 0, msg: apiKey ? "tenant mismatch for api key" : "invalid api key" };
+    }
+    return this.issueTokens(identity.principal, identity.roles, identity.tenantId);
   }
 
   refresh(refreshToken: string | undefined): AuthTokenResponse {
@@ -43,6 +85,7 @@ export class AuthService {
       return { ok: 0, msg: "invalid refresh token" };
     }
     this.store.refreshTokens.delete(refreshToken);
+    this.store.persist();
     return this.issueTokens(record.principal, record.roles, record.tenantId);
   }
 
@@ -57,6 +100,7 @@ export class AuthService {
       enabled: true,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     });
+    this.store.persist();
     return {
       ok: 1,
       msg: "ok",
@@ -86,12 +130,13 @@ export class AuthService {
         record.enabled = false;
       }
     }
+    this.store.persist();
     return { ok: 1, msg: "revoked", keyName, tenantId: normalizedTenant };
   }
 
   private issueTokens(principal: string, roles: string[], tenantId: string): AuthTokenResponse {
     const permissions = [...new Set(roles.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
-    const token = jwt.sign({ sub: principal, roles, permissions, tenantId }, env.APP_JWT_SECRET, {
+    const token = jwt.sign({ sub: principal, roles, permissions, tenant_id: tenantId }, env.APP_JWT_SECRET, {
       expiresIn: `${env.APP_JWT_EXPIRE_MINUTES}m`
     });
     const refreshToken = newId("refresh");
@@ -103,6 +148,7 @@ export class AuthService {
       tenantId,
       expiresAt: refreshExpiresAt
     });
+    this.store.persist();
     return {
       ok: 1,
       msg: "ok",
@@ -112,5 +158,9 @@ export class AuthService {
       expiresInSeconds: env.APP_JWT_EXPIRE_MINUTES * 60,
       refreshWillExpireSoon: Date.parse(refreshExpiresAt) < Date.now() + 2 * 24 * 60 * 60 * 1000
     };
+  }
+
+  private permissionsForRoles(roles: string[]): string[] {
+    return [...new Set(roles.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   }
 }

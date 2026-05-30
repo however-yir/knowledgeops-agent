@@ -21,6 +21,7 @@ export class SessionsService {
   upsert(sessionId: string, payload: SessionState): SessionState {
     const normalized = { ...payload, id: sessionId, updatedAt: Date.now() };
     this.store.sessions.set(sessionId, normalized);
+    this.store.persist();
     return normalized;
   }
 
@@ -51,6 +52,7 @@ export class SessionsService {
     const session = this.get(sessionId);
     session.pinned = value;
     session.updatedAt = Date.now();
+    this.store.persist();
     return session;
   }
 
@@ -58,6 +60,7 @@ export class SessionsService {
     const session = this.get(sessionId);
     session.archived = value;
     session.updatedAt = Date.now();
+    this.store.persist();
     return session;
   }
 
@@ -96,6 +99,7 @@ export class SessionsService {
     session.branches.push(mergedBranch);
     session.activeBranchId = mergedBranch.id;
     session.updatedAt = Date.now();
+    this.store.persist();
     return {
       session,
       mergedBranch,

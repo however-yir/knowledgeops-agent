@@ -2,33 +2,32 @@ import { Injectable } from "@nestjs/common";
 import type { ReactChatRequest, ReactChatResponse } from "@knowledgeops/shared";
 
 import { PlatformStore } from "../platform/platform.store.js";
+import { RetrievalService } from "./retrieval.service.js";
 
 @Injectable()
 export class AiService {
-  constructor(private readonly store: PlatformStore) {}
+  constructor(private readonly store: PlatformStore, private readonly retrievalService: RetrievalService) {}
 
-  reactChat(request: ReactChatRequest): ReactChatResponse {
+  reactChat(request: ReactChatRequest, tenantId = "public"): ReactChatResponse {
     const prompt = request.prompt || "";
-    const answer = prompt
-      ? `TS agent draft answer: ${prompt}`
-      : "TS agent draft answer is ready.";
+    const rag = this.retrievalService.answer(prompt, tenantId, request.chatId);
     return {
       ok: 1,
       msg: "ok",
       chatId: request.chatId,
-      answer,
-      citations: ["typescript://rag/in-memory"],
-      evidence: ["Contract-first TypeScript RAG scaffold response."],
+      answer: rag.answer,
+      citations: rag.citations,
+      evidence: rag.evidence,
       routeProfile: request.modelProfile ?? "balanced",
-      routeReason: "typescript scaffold route",
+      routeReason: "typescript local hybrid retrieval",
       routeCostTier: "low",
       trace: [
         {
           step: 1,
-          thought: "Route request through the TypeScript contract scaffold.",
-          action: "draft_answer",
-          actionInput: { prompt },
-          observation: { source: "in-memory" }
+          thought: "Retrieve tenant-scoped chunks and compose a grounded answer.",
+          action: "rag_retrieve",
+          actionInput: { prompt, chatId: request.chatId, tenantId },
+          observation: { citations: rag.citations.length, evidence: rag.evidence.length }
         }
       ]
     };
@@ -42,5 +41,6 @@ export class AiService {
 
   saveFeedback(tenantId: string, payload: Record<string, unknown>): void {
     this.store.feedback.push({ tenantId, ...payload, createdAt: new Date().toISOString() });
+    this.store.persist();
   }
 }

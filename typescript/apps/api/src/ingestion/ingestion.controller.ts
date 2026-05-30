@@ -1,5 +1,6 @@
 import { Controller, Get, Headers, NotFoundException, Param, Post, Query, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
+import { buffer } from "node:stream/consumers";
 
 import { normalizeTenant, TENANT_HEADER } from "../common/tenant.js";
 import { IngestionService } from "./ingestion.service.js";
@@ -12,8 +13,19 @@ export class IngestionController {
   async upload(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("chatId") chatId: string, @Req() request: FastifyRequest) {
     const maybeMultipart = request.isMultipart();
     const file = maybeMultipart ? await request.file() : undefined;
-    const job = this.ingestionService.createJob(normalizeTenant(tenantHeader), chatId, file?.filename ?? "document.pdf");
-    return { ok: 1, msg: "accepted", job };
+    const content = file ? await buffer(file.file) : Buffer.from("");
+    const idempotencyHeader = request.headers["x-idempotency-key"];
+    const idempotencyKey = Array.isArray(idempotencyHeader) ? idempotencyHeader[0] : idempotencyHeader;
+    const tenantId = normalizeTenant(tenantHeader);
+    const job = await this.ingestionService.createJob({
+      tenantId,
+      chatId,
+      sourceName: file?.filename ?? "document.txt",
+      content,
+      idempotencyKey
+    });
+    this.ingestionService.processOne(tenantId, job.jobId);
+    return { ok: 1, msg: "accepted", job: this.ingestionService.getJob(tenantId, job.jobId) ?? job };
   }
 
   @Get("ingestion/jobs/:jobId")

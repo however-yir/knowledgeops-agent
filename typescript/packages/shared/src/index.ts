@@ -31,7 +31,7 @@ export interface IngestionJob {
   jobId: string;
   chatId: string;
   sourceName: string;
-  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "DLQ";
+  status: "PENDING" | "QUEUED" | "RUNNING" | "PROCESSING" | "SUCCEEDED" | "COMPLETED" | "RETRY" | "FAILED" | "DLQ";
   attemptCount: number;
   maxRetries: number;
   errorMessage?: string;
@@ -73,6 +73,25 @@ export interface ReactChatResponse {
   routeReason?: string;
   routeCostTier?: string;
   trace: ReactTraceStep[];
+}
+
+export interface CitationItem {
+  source: string;
+  chunk: number;
+  score: number;
+}
+
+export interface EvidenceItem {
+  content: string;
+  source: string;
+  chunk: number;
+  score: number;
+}
+
+export interface RagAnswer {
+  answer: string;
+  citations: string[];
+  evidence: string[];
 }
 
 export interface PagedResult<T> {

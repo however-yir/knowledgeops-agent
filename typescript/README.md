@@ -67,6 +67,13 @@ The local TypeScript demo API key defaults to:
 local-demo-api-key
 ```
 
+State is persisted locally through `APP_STATE_FILE` so the TypeScript API can run without MySQL while the Prisma mapping is being completed. Docker enables `APP_SECURITY_ENABLED=true`, so protected routes require either:
+
+```text
+Authorization: Bearer <jwt>
+X-API-Key: local-demo-api-key
+```
+
 ## Migration Rule
 
 The Java implementation remains the source of truth until a TypeScript module has matching API contract tests and is marked complete in `MIGRATION.md`.
