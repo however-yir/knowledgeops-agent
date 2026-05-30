@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Post, Query, Req } from "@nestjs/common";
+import { All, Body, Controller, Header, Post, Query, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import type { ReactChatRequest } from "@knowledgeops/shared";
 
@@ -20,16 +20,43 @@ export class AiController {
     return this.aiService.textStream(this.aiService.reactChat(request, tenantFrom(req)));
   }
 
-  @Get("ai/chat")
+  @All("ai/chat")
   @Header("Content-Type", "text/html;charset=utf-8")
-  chat(@Query("prompt") prompt: string, @Query("chatId") chatId: string, @Query("modelProfile") modelProfile: string | undefined, @Req() req: FastifyRequest) {
-    return this.aiService.reactChat({ prompt, chatId, modelProfile }, tenantFrom(req)).answer;
+  chat(
+    @Query("prompt") prompt: string | undefined,
+    @Query("chatId") chatId: string | undefined,
+    @Query("modelProfile") modelProfile: string | undefined,
+    @Body() body: Partial<ReactChatRequest> | undefined,
+    @Req() req: FastifyRequest
+  ) {
+    const request = chatRequestFrom(prompt, chatId, modelProfile, body);
+    return this.aiService.reactChat(request, tenantFrom(req), "chat").answer;
   }
 
-  @Get("ai/pdf/chat")
+  @All("ai/service")
+  @Header("Content-Type", "text/html;charset=utf-8")
+  service(
+    @Query("prompt") prompt: string | undefined,
+    @Query("chatId") chatId: string | undefined,
+    @Query("modelProfile") modelProfile: string | undefined,
+    @Body() body: Partial<ReactChatRequest> | undefined,
+    @Req() req: FastifyRequest
+  ) {
+    const request = chatRequestFrom(prompt, chatId, modelProfile, body);
+    return this.aiService.reactChat(request, tenantFrom(req), "service").answer;
+  }
+
+  @All("ai/pdf/chat")
   @Header("Content-Type", "text/html;charset=UTF-8")
-  pdfChat(@Query("prompt") prompt: string, @Query("chatId") chatId: string, @Query("modelProfile") modelProfile: string | undefined, @Req() req: FastifyRequest) {
-    const result = this.aiService.reactChat({ prompt, chatId, modelProfile }, tenantFrom(req));
+  pdfChat(
+    @Query("prompt") prompt: string | undefined,
+    @Query("chatId") chatId: string | undefined,
+    @Query("modelProfile") modelProfile: string | undefined,
+    @Body() body: Partial<ReactChatRequest> | undefined,
+    @Req() req: FastifyRequest
+  ) {
+    const request = chatRequestFrom(prompt, chatId, modelProfile, body);
+    const result = this.aiService.reactChat(request, tenantFrom(req), "pdf");
     const citations = result.citations?.length
       ? result.citations.map((citation, index) => `[${index + 1}] ${citation}`).join("\n")
       : "";
@@ -45,4 +72,17 @@ export class AiController {
 
 function tenantFrom(req: FastifyRequest): string {
   return (req as RequestWithContext).context?.tenantId ?? "public";
+}
+
+function chatRequestFrom(
+  prompt: string | undefined,
+  chatId: string | undefined,
+  modelProfile: string | undefined,
+  body: Partial<ReactChatRequest> | undefined
+): ReactChatRequest {
+  return {
+    prompt: prompt ?? body?.prompt ?? "",
+    chatId: chatId ?? body?.chatId ?? "",
+    modelProfile: modelProfile ?? body?.modelProfile
+  };
 }

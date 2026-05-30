@@ -2112,7 +2112,10 @@ function parseCitation(citation: string): { source: string; chunk: string } | nu
 }
 
 function openCitation(citation: string): void {
-  const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
+  const base =
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+    (import.meta.env.VITE_API_BASE as string | undefined) ??
+    '/api';
   const target = parseCitation(citation);
   const url = `${base}/ai/pdf/file/${encodeURIComponent(chatId.value)}${
     target

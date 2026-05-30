@@ -102,6 +102,22 @@ export interface EvalRun {
   errorMessage?: string;
 }
 
+export interface HistorySessionRecord {
+  tenantId: string;
+  type: string;
+  chatId: string;
+  conversationId: string;
+  updatedAt: string;
+}
+
+export interface ConversationRecord {
+  tenantId: string;
+  conversationId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+}
+
 @Injectable()
 export class PlatformStore {
   readonly apiKeys = new Map<string, ApiKeyRecord>();
@@ -119,6 +135,8 @@ export class PlatformStore {
   readonly auditLogs: Array<Record<string, unknown>> = [];
   readonly memoryItems: Array<Record<string, unknown>> = [];
   readonly graphEntities: Array<Record<string, unknown>> = [];
+  readonly historySessions = new Map<string, HistorySessionRecord>();
+  readonly conversations: ConversationRecord[] = [];
 
   constructor() {
     this.load();
@@ -150,7 +168,9 @@ export class PlatformStore {
       feedback: this.feedback,
       auditLogs: this.auditLogs,
       memoryItems: this.memoryItems,
-      graphEntities: this.graphEntities
+      graphEntities: this.graphEntities,
+      historySessions: [...this.historySessions.values()],
+      conversations: this.conversations
     }, null, 2));
   }
 
@@ -176,6 +196,8 @@ export class PlatformStore {
       auditLogs?: Array<Record<string, unknown>>;
       memoryItems?: Array<Record<string, unknown>>;
       graphEntities?: Array<Record<string, unknown>>;
+      historySessions?: HistorySessionRecord[];
+      conversations?: ConversationRecord[];
     };
     raw.apiKeys?.forEach((record) => this.apiKeys.set(record.keyHash, record));
     raw.refreshTokens?.forEach((record) => this.refreshTokens.set(record.token, record));
@@ -191,9 +213,15 @@ export class PlatformStore {
     this.auditLogs.push(...(raw.auditLogs ?? []));
     this.memoryItems.push(...(raw.memoryItems ?? []));
     this.graphEntities.push(...(raw.graphEntities ?? []));
+    raw.historySessions?.forEach((session) => this.historySessions.set(historyKey(session.tenantId, session.type, session.chatId), session));
+    this.conversations.push(...(raw.conversations ?? []));
   }
 }
 
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+export function historyKey(tenantId: string, type: string, chatId: string): string {
+  return `${tenantId}:${type}:${chatId}`;
 }

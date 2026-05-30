@@ -80,6 +80,13 @@ export class IngestionService {
       .slice(0, Math.max(1, Math.min(limit, 100)));
   }
 
+  latestFileForChat(tenantId: string, chatId: string): { filePath: string; sourceName: string } | undefined {
+    const latest = [...this.store.ingestionJobs.values()]
+      .filter((job) => job.tenantId === tenantId && job.chatId === chatId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    return latest ? { filePath: latest.filePath, sourceName: latest.sourceName } : undefined;
+  }
+
   processOne(tenantId: string, jobId?: string): string {
     const candidates = [...this.store.ingestionJobs.entries()]
       .filter(([key, job]) => key.startsWith(`${tenantId}:`) && (!jobId || job.jobId === jobId) && ["PENDING", "QUEUED", "RETRY"].includes(job.status));

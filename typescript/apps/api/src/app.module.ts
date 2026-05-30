@@ -5,6 +5,7 @@ import { HarnessModule } from "./agent/harness.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { EvaluationModule } from "./evaluation/evaluation.module.js";
 import { HealthModule } from "./health/health.module.js";
+import { HistoryModule } from "./history/history.module.js";
 import { IngestionModule } from "./ingestion/ingestion.module.js";
 import { OperationsModule } from "./operations/operations.module.js";
 import { PlatformModule } from "./platform/platform.module.js";
@@ -16,6 +17,7 @@ import { WorkflowModule } from "./workflow/workflow.module.js";
     PlatformModule,
     HealthModule,
     AuthModule,
+    HistoryModule,
     AiModule,
     IngestionModule,
     HarnessModule,

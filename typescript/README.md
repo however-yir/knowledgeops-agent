@@ -17,6 +17,7 @@ prisma/             TypeScript-side database model mapping
 cd typescript
 pnpm install
 pnpm typecheck
+pnpm parity
 pnpm build
 pnpm --filter @knowledgeops/api dev
 ```
@@ -36,8 +37,12 @@ POST /auth/api-keys
 POST /ai/react/chat
 POST /ai/react/chat/stream
 GET  /ai/chat
+GET  /ai/service
 GET  /ai/pdf/chat
 POST /ai/pdf/upload/:chatId
+GET  /ai/pdf/file/:chatId
+GET  /ai/history/:type
+GET  /ai/history/:type/:chatId
 POST /ingestion/upload/:chatId
 GET  /ingestion/jobs
 GET  /ingestion/jobs/:jobId
@@ -72,6 +77,12 @@ State is persisted locally through `APP_STATE_FILE` so the TypeScript API can ru
 ```text
 Authorization: Bearer <jwt>
 X-API-Key: local-demo-api-key
+```
+
+With the API running, use the local performance smoke to guard the same p95/error-rate SLO shape as the Java k6 profile:
+
+```bash
+BASE_URL=http://localhost:3000 pnpm perf:smoke
 ```
 
 ## Migration Rule

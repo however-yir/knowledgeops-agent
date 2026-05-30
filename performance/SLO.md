@@ -12,3 +12,10 @@
 k6 run performance/k6/chat_ingestion_load.js -e BASE_URL=http://localhost:8080
 python3 performance/k6/generate_report.py --summary reports/performance/distributed-k6-summary.json
 ```
+
+## Run TypeScript Smoke
+
+```bash
+cd typescript
+BASE_URL=http://localhost:3000 pnpm perf:smoke
+```

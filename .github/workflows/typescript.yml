@@ -38,6 +38,10 @@ jobs:
         working-directory: typescript
         run: pnpm test
 
+      - name: Java parity contract
+        working-directory: typescript
+        run: pnpm parity
+
       - name: Build
         working-directory: typescript
         run: pnpm build

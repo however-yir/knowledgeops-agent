@@ -5,7 +5,7 @@ Java remains in place while the TypeScript implementation grows under `typescrip
 | Java area | TypeScript target | Status | Verification |
 |---|---|---|---|
 | `src/main/java/com/enterprise/iqk/config` | `apps/api/src/config` | Contract scaffold | `pnpm typecheck` |
-| `src/main/java/com/enterprise/iqk/controller` | `apps/api/src/*` controllers | Contract scaffold | Health + route smoke |
+| `src/main/java/com/enterprise/iqk/controller` | `apps/api/src/*` controllers | Local implementation | `pnpm parity` + smoke |
 | `src/main/java/com/enterprise/iqk/security` | `apps/api/src/auth` | Local implementation | API key/JWT test + optional guard |
 | `src/main/resources/db/migration` | `prisma/schema.prisma` + `PlatformStore` state file | Local implementation | Schema review + persisted state |
 | `src/main/java/com/enterprise/iqk/ingestion` | `apps/api/src/ingestion` | Local implementation | Idempotent upload/job/chunk tests |
@@ -16,8 +16,10 @@ Java remains in place while the TypeScript implementation grows under `typescrip
 | `src/main/java/com/enterprise/iqk/agent/harness` | `apps/api/src/agent` | Local implementation | Preview/execute + rag_query runtime |
 | `src/main/java/com/enterprise/iqk/agent/workflow` | `apps/api/src/workflow` | Local implementation | Task/event/research routes |
 | `src/main/java/com/enterprise/iqk/evaluation` | `apps/api/src/evaluation` | Local implementation | Dataset/run scoring |
-| `frontend/src/api/client.ts` | Existing frontend env switch | Started | `VITE_API_BASE_URL` |
-| `.github/workflows` | `.github/workflows/typescript.yml` | Started | CI runs TS checks |
+| `src/main/java/com/enterprise/iqk/repository/ChatHistoryRepository` | `apps/api/src/history` | Local implementation | History service test + route parity |
+| `performance/k6` | `scripts/perf-smoke.mjs` | Local implementation | `BASE_URL=... pnpm perf:smoke` |
+| `frontend/src/api/client.ts` | Existing frontend env switch | Local implementation | `VITE_API_BASE_URL` |
+| `.github/workflows` | `.github/workflows/typescript.yml` | Local implementation | CI runs TS checks + parity |
 
 ## First Milestone
 

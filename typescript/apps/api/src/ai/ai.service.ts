@@ -1,17 +1,22 @@
 import { Injectable } from "@nestjs/common";
 import type { ReactChatRequest, ReactChatResponse } from "@knowledgeops/shared";
 
+import { HistoryService } from "../history/history.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
 import { RetrievalService } from "./retrieval.service.js";
 
 @Injectable()
 export class AiService {
-  constructor(private readonly store: PlatformStore, private readonly retrievalService: RetrievalService) {}
+  constructor(
+    private readonly store: PlatformStore,
+    private readonly retrievalService: RetrievalService,
+    private readonly historyService: HistoryService
+  ) {}
 
-  reactChat(request: ReactChatRequest, tenantId = "public"): ReactChatResponse {
+  reactChat(request: ReactChatRequest, tenantId = "public", historyType = "react"): ReactChatResponse {
     const prompt = request.prompt || "";
     const rag = this.retrievalService.answer(prompt, tenantId, request.chatId);
-    return {
+    const response = {
       ok: 1,
       msg: "ok",
       chatId: request.chatId,
@@ -31,6 +36,10 @@ export class AiService {
         }
       ]
     };
+    if (request.chatId?.trim()) {
+      this.historyService.appendExchange(tenantId, historyType, request.chatId, prompt, rag.answer);
+    }
+    return response;
   }
 
   textStream(response: ReactChatResponse): string {
