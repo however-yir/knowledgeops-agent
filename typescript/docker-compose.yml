@@ -1,0 +1,35 @@
+services:
+  knowledgeops-agent-ts:
+    build:
+      context: .
+    container_name: knowledgeops-agent-ts
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_JWT_SECRET: replace_with_32_bytes_min_secret
+      APP_DEMO_API_KEY: local-demo-api-key
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:8088,http://localhost:5173
+    ports:
+      - "3000:3000"
+
+  mysql:
+    image: mysql:8.4
+    container_name: knowledgeops-agent-ts-mysql
+    environment:
+      MYSQL_DATABASE: knowledgeops_agent
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+
+  redis:
+    image: redis:7-alpine
+    container_name: knowledgeops-agent-ts-redis
+    ports:
+      - "6380:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: knowledgeops-agent-ts-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15673:15672"

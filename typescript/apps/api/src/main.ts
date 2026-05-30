@@ -1,5 +1,7 @@
 import "reflect-metadata";
 
+import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 
@@ -10,6 +12,13 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
     bufferLogs: true
   });
+
+  const origins = env.APP_CORS_ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean);
+  await app.register(cors, {
+    origin: origins,
+    credentials: true
+  });
+  await app.register(multipart);
 
   await app.listen({ host: "0.0.0.0", port: env.PORT });
 }

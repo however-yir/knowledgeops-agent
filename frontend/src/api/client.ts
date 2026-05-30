@@ -19,7 +19,10 @@ import type {
   TenantCostSummary,
 } from '../types/react';
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api';
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  (import.meta.env.VITE_API_BASE as string | undefined) ??
+  '/api';
 
 function resolveApi(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {

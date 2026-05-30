@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ApiKey {
+  id         BigInt    @id @default(autoincrement())
+  keyHash    String    @unique @map("key_hash") @db.VarChar(128)
+  keyName    String    @map("key_name") @db.VarChar(128)
+  roleName   String    @map("role_name") @db.VarChar(64)
+  tenantId   String    @default("public") @map("tenant_id") @db.VarChar(64)
+  enabled    Boolean   @default(true)
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @map("created_at")
+  updatedAt  DateTime  @map("updated_at")
+
+  @@map("api_keys")
+}
+
+model RefreshToken {
+  id          BigInt    @id @default(autoincrement())
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(128)
+  principal   String    @db.VarChar(128)
+  roleName    String    @map("role_name") @db.VarChar(64)
+  tenantId    String    @default("public") @map("tenant_id") @db.VarChar(64)
+  expiresAt   DateTime  @map("expires_at")
+  consumedAt  DateTime? @map("consumed_at")
+  createdAt   DateTime  @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+model Conversation {
+  id             BigInt   @id
+  tenantId       String   @default("public") @map("tenant_id") @db.VarChar(64)
+  conversationId String   @map("conversation_id") @db.VarChar(128)
+  message        String   @db.Text
+  type           String   @db.VarChar(32)
+  createTime     DateTime @map("create_time")
+
+  @@map("conversation")
+}
+
+model IngestionJob {
+  id             BigInt    @id @default(autoincrement())
+  jobId          String    @unique @map("job_id") @db.VarChar(64)
+  tenantId       String    @default("public") @map("tenant_id") @db.VarChar(64)
+  chatId         String    @map("chat_id") @db.VarChar(128)
+  sourceType     String    @map("source_type") @db.VarChar(32)
+  sourceName     String    @map("source_name") @db.VarChar(255)
+  filePath       String    @map("file_path") @db.VarChar(512)
+  idempotencyKey String    @unique @map("idempotency_key") @db.VarChar(128)
+  status         String    @db.VarChar(32)
+  traceId        String?   @map("trace_id") @db.VarChar(128)
+  attemptCount   Int       @default(0) @map("attempt_count")
+  maxRetries     Int       @default(3) @map("max_retries")
+  errorMessage   String?   @map("error_message") @db.VarChar(1024)
+  nextRetryAt    DateTime? @map("next_retry_at")
+  startedAt      DateTime? @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  createdAt      DateTime  @map("created_at")
+  updatedAt      DateTime  @map("updated_at")
+
+  @@map("ingestion_job")
+}
+
+model AgentSessionState {
+  id             BigInt   @id @default(autoincrement())
+  sessionId      String   @map("session_id") @db.VarChar(128)
+  tenantId       String   @map("tenant_id") @db.VarChar(64)
+  title          String   @db.VarChar(255)
+  workspaceId    String   @map("workspace_id") @db.VarChar(128)
+  activeBranchId String   @map("active_branch_id") @db.VarChar(128)
+  pinned         Boolean  @default(false)
+  archived       Boolean  @default(false)
+  stateJson      String   @map("state_json") @db.LongText
+  createdAt      DateTime @map("created_at")
+  updatedAt      DateTime @map("updated_at")
+
+  @@map("agent_session_state")
+}
+
+model AgentTask {
+  id           BigInt    @id @default(autoincrement())
+  taskId       String    @map("task_id") @db.VarChar(64)
+  tenantId     String    @map("tenant_id") @db.VarChar(64)
+  type         String    @db.VarChar(64)
+  status       String    @db.VarChar(32)
+  userInput    String    @map("user_input") @db.Text
+  finalOutput  String?   @map("final_output") @db.LongText
+  modelProfile String?   @map("model_profile") @db.VarChar(64)
+  chatId       String?   @map("chat_id") @db.VarChar(128)
+  sessionId    String?   @map("session_id") @db.VarChar(128)
+  metadataJson String?   @map("metadata_json") @db.Text
+  createdAt    DateTime  @map("created_at")
+  updatedAt    DateTime  @map("updated_at")
+
+  @@map("agent_task")
+}
+
+model MemoryItem {
+  id          BigInt    @id @default(autoincrement())
+  memoryId    String    @map("memory_id") @db.VarChar(64)
+  tenantId    String    @map("tenant_id") @db.VarChar(64)
+  subjectId   String    @map("subject_id") @db.VarChar(128)
+  memoryType  String    @map("memory_type") @db.VarChar(32)
+  content     String    @db.Text
+  metadataJson String?  @map("metadata_json") @db.Text
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @map("created_at")
+  updatedAt   DateTime  @map("updated_at")
+
+  @@map("memory_item")
+}
+
+model KgEntity {
+  id          BigInt   @id @default(autoincrement())
+  entityId    String   @map("entity_id") @db.VarChar(64)
+  tenantId    String   @map("tenant_id") @db.VarChar(64)
+  name        String   @db.VarChar(255)
+  type        String   @db.VarChar(64)
+  aliases     String?  @db.Text
+  description String?  @db.Text
+  createdAt   DateTime @map("created_at")
+  updatedAt   DateTime @map("updated_at")
+
+  @@map("kg_entity")
+}
+
+model EvalDataset {
+  id            BigInt   @id @default(autoincrement())
+  datasetId     String   @map("dataset_id") @db.VarChar(64)
+  tenantId      String   @map("tenant_id") @db.VarChar(64)
+  name          String   @db.VarChar(255)
+  description   String?  @db.Text
+  baselineRunId String?  @map("baseline_run_id") @db.VarChar(64)
+  createdAt     DateTime @map("created_at")
+  updatedAt     DateTime @map("updated_at")
+
+  @@map("eval_dataset")
+}
+
+model EvalRun {
+  id           BigInt    @id @default(autoincrement())
+  runId        String    @map("run_id") @db.VarChar(64)
+  datasetId    String    @map("dataset_id") @db.VarChar(64)
+  tenantId     String    @map("tenant_id") @db.VarChar(64)
+  status       String    @db.VarChar(32)
+  modelProfile String    @map("model_profile") @db.VarChar(64)
+  metricsJson  String?   @map("metrics_json") @db.Text
+  errorMessage String?   @map("error_message") @db.Text
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  createdAt    DateTime  @map("created_at")
+
+  @@map("eval_run")
+}

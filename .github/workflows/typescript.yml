@@ -1,0 +1,43 @@
+name: TypeScript Rewrite CI
+
+on:
+  push:
+    branches: [main, ts-rewrite]
+    paths:
+      - "typescript/**"
+      - ".github/workflows/typescript.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "typescript/**"
+      - ".github/workflows/typescript.yml"
+  workflow_dispatch:
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        working-directory: typescript
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: typescript
+        run: pnpm typecheck
+
+      - name: Test
+        working-directory: typescript
+        run: pnpm test
+
+      - name: Build
+        working-directory: typescript
+        run: pnpm build
