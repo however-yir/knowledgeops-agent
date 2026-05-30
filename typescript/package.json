@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "build": "pnpm -r build",
+    "db:validate": "node scripts/check-prisma-schema.mjs",
     "parity": "node scripts/check-parity.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "typecheck": "pnpm -r typecheck",
@@ -13,5 +14,11 @@
     "@types/node": "^24.10.2",
     "typescript": "^6.0.3",
     "vitest": "^4.0.15"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "esbuild"
+    ]
   }
 }

@@ -11,30 +11,43 @@ export class OperationsController {
   @Get("cost/summary")
   costSummary(@Headers(TENANT_HEADER) tenantHeader: string | undefined) {
     const tenantId = normalizeTenant(tenantHeader);
+    const budget = this.store.tenantBudgets.get(tenantId) ?? {
+      tenantId,
+      monthlyBudgetUsd: 25,
+      hardLimitEnabled: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    const monthCostUsd = 0;
     return {
       tenantId,
       month: new Date().toISOString().slice(0, 7),
-      monthlyBudgetUsd: 25,
-      hardLimitEnabled: false,
-      monthCostUsd: 0,
+      monthlyBudgetUsd: budget.monthlyBudgetUsd,
+      hardLimitEnabled: budget.hardLimitEnabled,
+      monthCostUsd,
       monthRequestCount: 0,
       monthInputTokens: 0,
       monthOutputTokens: 0,
       todayCostUsd: 0,
       todayRequestCount: 0,
-      budgetRemainingUsd: 25,
-      budgetExceeded: false
+      budgetRemainingUsd: Math.max(0, budget.monthlyBudgetUsd - monthCostUsd),
+      budgetExceeded: monthCostUsd >= budget.monthlyBudgetUsd
     };
   }
 
   @Post("cost/budget")
   updateBudget(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { tenantId?: string; monthlyBudgetUsd?: number; hardLimitEnabled?: boolean }) {
-    const summary = this.costSummary(body.tenantId ?? tenantHeader);
-    return {
-      ...summary,
-      monthlyBudgetUsd: body.monthlyBudgetUsd ?? summary.monthlyBudgetUsd,
-      hardLimitEnabled: body.hardLimitEnabled ?? summary.hardLimitEnabled
-    };
+    const tenantId = normalizeTenant(body.tenantId ?? tenantHeader);
+    const previous = this.store.tenantBudgets.get(tenantId);
+    this.store.tenantBudgets.set(tenantId, {
+      tenantId,
+      monthlyBudgetUsd: body.monthlyBudgetUsd ?? previous?.monthlyBudgetUsd ?? 25,
+      hardLimitEnabled: body.hardLimitEnabled ?? previous?.hardLimitEnabled ?? false,
+      createdAt: previous?.createdAt ?? nowIso(),
+      updatedAt: nowIso()
+    });
+    this.store.persist();
+    return this.costSummary(tenantId);
   }
 
   @Get("audit/logs")

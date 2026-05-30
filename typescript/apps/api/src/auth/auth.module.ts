@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
+import { AuditLogMiddleware } from "./audit.middleware.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthGuard } from "./auth.guard.js";
 import { AuthContextMiddleware } from "./auth.middleware.js";
@@ -11,6 +12,7 @@ import { AuthService } from "./auth.service.js";
   providers: [
     AuthService,
     AuthContextMiddleware,
+    AuditLogMiddleware,
     {
       provide: APP_GUARD,
       useClass: AuthGuard
@@ -19,6 +21,6 @@ import { AuthService } from "./auth.service.js";
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(AuthContextMiddleware).forRoutes("*");
+    consumer.apply(AuthContextMiddleware, AuditLogMiddleware).forRoutes("*");
   }
 }

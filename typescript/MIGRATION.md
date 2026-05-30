@@ -6,13 +6,13 @@ Java remains in place while the TypeScript implementation grows under `typescrip
 |---|---|---|---|
 | `src/main/java/com/enterprise/iqk/config` | `apps/api/src/config` | Contract scaffold | `pnpm typecheck` |
 | `src/main/java/com/enterprise/iqk/controller` | `apps/api/src/*` controllers | Local implementation | `pnpm parity` + smoke |
-| `src/main/java/com/enterprise/iqk/security` | `apps/api/src/auth` | Local implementation | API key/JWT test + optional guard |
-| `src/main/resources/db/migration` | `prisma/schema.prisma` + `PlatformStore` state file | Local implementation | Schema review + persisted state |
+| `src/main/java/com/enterprise/iqk/security` | `apps/api/src/auth` | Local implementation | API key/JWT test + route permission guard |
+| `src/main/resources/db/migration` | `prisma/schema.prisma` + `PlatformStore` state file | Local implementation | `pnpm db:validate` + persisted state |
 | `src/main/java/com/enterprise/iqk/ingestion` | `apps/api/src/ingestion` | Local implementation | Idempotent upload/job/chunk tests |
 | `src/main/java/com/enterprise/iqk/retrieval` | `apps/api/src/ai/retrieval.service.ts` | Local implementation | Token-overlap retrieval tests |
 | `src/main/java/com/enterprise/iqk/rag` | `apps/api/src/ai` | Local implementation | Upload then PDF chat smoke |
-| `src/main/java/com/enterprise/iqk/memory` | `apps/api/src/operations` | Contract scaffold | Memory item routes |
-| `src/main/java/com/enterprise/iqk/graph` | `apps/api/src/operations` | Contract scaffold | Graph entity routes |
+| `src/main/java/com/enterprise/iqk/memory` | `apps/api/src/operations` + `prisma/schema.prisma` | Local implementation | Memory item routes + table mapping |
+| `src/main/java/com/enterprise/iqk/graph` | `apps/api/src/operations` + `prisma/schema.prisma` | Local implementation | Graph entity routes + table mapping |
 | `src/main/java/com/enterprise/iqk/agent/harness` | `apps/api/src/agent` | Local implementation | Preview/execute + rag_query runtime |
 | `src/main/java/com/enterprise/iqk/agent/workflow` | `apps/api/src/workflow` | Local implementation | Task/event/research routes |
 | `src/main/java/com/enterprise/iqk/evaluation` | `apps/api/src/evaluation` | Local implementation | Dataset/run scoring |

@@ -118,6 +118,14 @@ export interface ConversationRecord {
   createdAt: string;
 }
 
+export interface TenantBudgetRecord {
+  tenantId: string;
+  monthlyBudgetUsd: number;
+  hardLimitEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 @Injectable()
 export class PlatformStore {
   readonly apiKeys = new Map<string, ApiKeyRecord>();
@@ -137,6 +145,7 @@ export class PlatformStore {
   readonly graphEntities: Array<Record<string, unknown>> = [];
   readonly historySessions = new Map<string, HistorySessionRecord>();
   readonly conversations: ConversationRecord[] = [];
+  readonly tenantBudgets = new Map<string, TenantBudgetRecord>();
 
   constructor() {
     this.load();
@@ -170,7 +179,8 @@ export class PlatformStore {
       memoryItems: this.memoryItems,
       graphEntities: this.graphEntities,
       historySessions: [...this.historySessions.values()],
-      conversations: this.conversations
+      conversations: this.conversations,
+      tenantBudgets: [...this.tenantBudgets.values()]
     }, null, 2));
   }
 
@@ -198,6 +208,7 @@ export class PlatformStore {
       graphEntities?: Array<Record<string, unknown>>;
       historySessions?: HistorySessionRecord[];
       conversations?: ConversationRecord[];
+      tenantBudgets?: TenantBudgetRecord[];
     };
     raw.apiKeys?.forEach((record) => this.apiKeys.set(record.keyHash, record));
     raw.refreshTokens?.forEach((record) => this.refreshTokens.set(record.token, record));
@@ -215,6 +226,7 @@ export class PlatformStore {
     this.graphEntities.push(...(raw.graphEntities ?? []));
     raw.historySessions?.forEach((session) => this.historySessions.set(historyKey(session.tenantId, session.type, session.chatId), session));
     this.conversations.push(...(raw.conversations ?? []));
+    raw.tenantBudgets?.forEach((budget) => this.tenantBudgets.set(budget.tenantId, budget));
   }
 }
 

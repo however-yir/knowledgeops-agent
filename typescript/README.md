@@ -18,6 +18,7 @@ cd typescript
 pnpm install
 pnpm typecheck
 pnpm parity
+pnpm db:validate
 pnpm build
 pnpm --filter @knowledgeops/api dev
 ```
@@ -78,6 +79,8 @@ State is persisted locally through `APP_STATE_FILE` so the TypeScript API can ru
 Authorization: Bearer <jwt>
 X-API-Key: local-demo-api-key
 ```
+
+When security is enabled, the TypeScript API applies the same route-level `PERM_*` authorization matrix used by the Java Spring Security configuration and writes non-actuator requests to the local audit log store.
 
 With the API running, use the local performance smoke to guard the same p95/error-rate SLO shape as the Java k6 profile:
 
