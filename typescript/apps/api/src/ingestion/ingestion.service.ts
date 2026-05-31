@@ -5,9 +5,9 @@ import { basename, join } from "node:path";
 import { Injectable } from "@nestjs/common";
 import type { IngestionJob } from "@knowledgeops/shared";
 
+import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
 import { env } from "../config/env.js";
-import { RetrievalService } from "../ai/retrieval.service.js";
 import { IngestionJobRecord, PlatformStore } from "../platform/platform.store.js";
 
 @Injectable()
@@ -28,6 +28,8 @@ export class IngestionService {
     if (!params.content.length) {
       throw new Error("file is required");
     }
+    const sourceName = sanitizeFilename(params.sourceName || "document.txt");
+    scanFile(sourceName, params.content);
     const contentHash = sha256Buffer(params.content);
     const idempotencyKey = params.idempotencyKey?.trim()
       ? `client:${params.idempotencyKey.trim()}`
@@ -41,9 +43,8 @@ export class IngestionService {
     }
 
     const jobId = newId("job");
-    const sourceName = sanitizeFilename(params.sourceName || "document.txt");
+    const now = nowIso();
     const filePath = await persistUpload(jobId, sourceName, params.content);
-    const rawText = extractText(params.content);
     const job: IngestionJobRecord = {
       jobId,
       tenantId: params.tenantId,
@@ -53,16 +54,18 @@ export class IngestionService {
       filePath,
       idempotencyKey,
       contentHash,
-      rawText,
+      rawText: extractText(sourceName, params.content),
       status: "PENDING",
       attemptCount: 0,
-      maxRetries: 3,
+      maxRetries: env.APP_INGESTION_MAX_RETRIES,
       traceId: params.traceId ?? "",
-      queueBackend: "in-memory",
-      createdAt: nowIso()
+      queueBackend: env.APP_INGESTION_QUEUE_BACKEND,
+      createdAt: now,
+      updatedAt: now
     };
     this.store.ingestionJobs.set(`${params.tenantId}:${job.jobId}`, job);
     this.store.idempotencyIndex.set(`${params.tenantId}:${idempotencyKey}`, job.jobId);
+    this.store.incrementMetric("ingestion_jobs_submitted_total", { source: job.sourceType, tenant: params.tenantId });
     this.store.persist();
     return toPublicJob(job);
   }
@@ -74,7 +77,7 @@ export class IngestionService {
 
   listByChatId(tenantId: string, chatId: string, limit: number): IngestionJob[] {
     return [...this.store.ingestionJobs.entries()]
-      .filter(([key, job]) => key.startsWith(`${tenantId}:`) && job.chatId === chatId)
+      .filter(([key, job]) => key.startsWith(`${tenantId}:`) && (!chatId || job.chatId === chatId))
       .map(([, job]) => toPublicJob(job))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, Math.max(1, Math.min(limit, 100)));
@@ -89,13 +92,15 @@ export class IngestionService {
 
   processOne(tenantId: string, jobId?: string): string {
     const candidates = [...this.store.ingestionJobs.entries()]
-      .filter(([key, job]) => key.startsWith(`${tenantId}:`) && (!jobId || job.jobId === jobId) && ["PENDING", "QUEUED", "RETRY"].includes(job.status));
+      .filter(([key, job]) => key.startsWith(`${tenantId}:`) && (!jobId || job.jobId === jobId) && isReady(job))
+      .sort(([, a], [, b]) => a.createdAt.localeCompare(b.createdAt));
     const [, job] = candidates[0] ?? [];
     if (!job) {
       return "empty";
     }
     job.status = "RUNNING";
     job.startedAt = job.startedAt ?? nowIso();
+    job.updatedAt = nowIso();
     try {
       this.retrievalService.addDocumentChunks({
         tenantId: job.tenantId,
@@ -108,14 +113,32 @@ export class IngestionService {
       job.status = "SUCCEEDED";
       job.finishedAt = nowIso();
       job.errorMessage = undefined;
+      this.store.incrementMetric("ingestion_jobs_finished_total", { status: "succeeded", tenant: tenantId });
     } catch (error) {
       job.attemptCount += 1;
-      job.errorMessage = error instanceof Error ? error.message : String(error);
+      job.errorMessage = truncateError(error instanceof Error ? error.message : String(error));
       job.status = job.attemptCount < job.maxRetries ? "RETRY" : "FAILED";
+      job.nextRetryAt = job.status === "RETRY"
+        ? new Date(Date.now() + env.APP_INGESTION_BASE_DELAY_SECONDS * Math.max(1, job.attemptCount) * 1000).toISOString()
+        : undefined;
       job.finishedAt = nowIso();
+      this.store.incrementMetric("ingestion_jobs_finished_total", { status: job.status.toLowerCase(), tenant: tenantId });
     }
+    job.updatedAt = nowIso();
     this.store.persist();
     return "processed";
+  }
+
+  enqueueReadyRetries(tenantId: string, limit = 50): number {
+    const ready = [...this.store.ingestionJobs.values()]
+      .filter((job) => job.tenantId === tenantId && job.status === "RETRY" && (!job.nextRetryAt || Date.parse(job.nextRetryAt) <= Date.now()))
+      .slice(0, Math.max(1, limit));
+    for (const job of ready) {
+      job.status = "QUEUED";
+      job.updatedAt = nowIso();
+    }
+    this.store.persist();
+    return ready.length;
   }
 }
 
@@ -143,10 +166,26 @@ async function persistUpload(jobId: string, sourceName: string, content: Buffer)
   return filePath;
 }
 
-function extractText(content: Buffer): string {
-  const text = content.toString("utf8").replace(/\u0000/g, "").trim();
-  if (text) {
-    return text;
+function scanFile(sourceName: string, content: Buffer): void {
+  const lower = sourceName.toLowerCase();
+  const head = content.subarray(0, 8192).toString("latin1");
+  if (head.includes("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")) {
+    throw new Error("file blocked by malware signature");
+  }
+  if (lower.endsWith(".pdf") && !head.startsWith("%PDF-")) {
+    throw new Error("invalid pdf header");
+  }
+}
+
+function extractText(sourceName: string, content: Buffer): string {
+  const lower = sourceName.toLowerCase();
+  const raw = content.toString(lower.endsWith(".pdf") ? "latin1" : "utf8").replace(/\u0000/g, " ");
+  const text = lower.endsWith(".pdf")
+    ? raw.replace(/%PDF-[^\n]+/g, "").replace(/[^\p{L}\p{N}\p{P}\p{Zs}\n]+/gu, " ")
+    : raw;
+  const normalized = text.replace(/[ \t]+/g, " ").trim();
+  if (normalized) {
+    return normalized;
   }
   return `Binary document (${content.length} bytes) uploaded.`;
 }
@@ -165,4 +204,13 @@ function sha256Buffer(content: Buffer): string {
 
 function sha256Text(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function isReady(job: IngestionJobRecord): boolean {
+  return ["PENDING", "QUEUED"].includes(job.status)
+    || (job.status === "RETRY" && (!job.nextRetryAt || Date.parse(job.nextRetryAt) <= Date.now()));
+}
+
+function truncateError(value: string): string {
+  return value.slice(0, 1024);
 }

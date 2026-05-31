@@ -6,6 +6,9 @@ import { AuthController } from "./auth.controller.js";
 import { AuthGuard } from "./auth.guard.js";
 import { AuthContextMiddleware } from "./auth.middleware.js";
 import { AuthService } from "./auth.service.js";
+import { HttpMetricsMiddleware } from "./http-metrics.middleware.js";
+import { RateLimitMiddleware } from "./rate-limit.middleware.js";
+import { SecurityHeadersMiddleware } from "./security-headers.middleware.js";
 
 @Module({
   controllers: [AuthController],
@@ -13,6 +16,9 @@ import { AuthService } from "./auth.service.js";
     AuthService,
     AuthContextMiddleware,
     AuditLogMiddleware,
+    HttpMetricsMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
     {
       provide: APP_GUARD,
       useClass: AuthGuard
@@ -21,6 +27,6 @@ import { AuthService } from "./auth.service.js";
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(AuthContextMiddleware, AuditLogMiddleware).forRoutes("*");
+    consumer.apply(SecurityHeadersMiddleware, AuthContextMiddleware, HttpMetricsMiddleware, RateLimitMiddleware, AuditLogMiddleware).forRoutes("*");
   }
 }

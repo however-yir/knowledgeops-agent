@@ -72,6 +72,9 @@ export interface ReactChatResponse {
   routeProfile?: string;
   routeReason?: string;
   routeCostTier?: string;
+  experimentKey?: string;
+  experimentVariant?: string;
+  experimentBucket?: number;
   trace: ReactTraceStep[];
 }
 

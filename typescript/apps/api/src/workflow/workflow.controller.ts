@@ -26,7 +26,7 @@ export class WorkflowController {
   @Post("ai/research/tasks")
   createResearch(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { topic?: string; prompt?: string; modelProfile?: string }) {
     const prompt = body.topic ?? body.prompt ?? "research";
-    const task = this.workflowService.createTask(tenantHeader, "deep_research", prompt, body.modelProfile);
+    const task = this.workflowService.executeResearch(tenantHeader, prompt, body.modelProfile);
     return {
       ok: 1,
       taskId: task.taskId,
@@ -52,15 +52,15 @@ export class WorkflowController {
   }
 
   @Post("ai/workflow/react/chat")
-  workflowReact(@Body() body: { prompt: string; chatId: string; modelProfile?: string }) {
-    this.workflowService.createTask(undefined, "react_chat", body.prompt, body.modelProfile);
-    return this.aiService.reactChat(body);
+  workflowReact(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
+    this.workflowService.startReactTask(tenantHeader, body.prompt, body.modelProfile, body.chatId, body.sessionId);
+    return this.aiService.reactChat(body, normalizeTenant(tenantHeader), "workflow_react");
   }
 
   @Post("ai/workflow/react/chat/stream")
   @Header("Content-Type", "text/event-stream")
-  workflowReactStream(@Body() body: { prompt: string; chatId: string; modelProfile?: string }) {
-    this.workflowService.createTask(undefined, "react_chat", body.prompt, body.modelProfile);
-    return this.aiService.textStream(this.aiService.reactChat(body));
+  workflowReactStream(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
+    this.workflowService.startReactTask(tenantHeader, body.prompt, body.modelProfile, body.chatId, body.sessionId);
+    return this.aiService.textStream(this.aiService.reactChat(body, normalizeTenant(tenantHeader), "workflow_react"));
   }
 }

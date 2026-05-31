@@ -122,6 +122,18 @@ function requiredAuthorities(method: string, path: string): string[] {
   if (method === "POST" && path === "/cost/budget") {
     return ["PERM_COST_WRITE", "ROLE_ADMIN"];
   }
+  if (method === "GET" && path.startsWith("/ai/memory/")) {
+    return ["PERM_SESSION_READ", "PERM_CHAT_READ", "ROLE_ADMIN", "ROLE_OPS"];
+  }
+  if ((method === "POST" || method === "DELETE") && path.startsWith("/ai/memory/")) {
+    return ["PERM_SESSION_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
+  }
+  if (method === "GET" && path.startsWith("/ai/graph/")) {
+    return ["PERM_RAG_READ", "PERM_CHAT_READ", "ROLE_ADMIN", "ROLE_OPS"];
+  }
+  if (method === "POST" && path.startsWith("/ai/graph/")) {
+    return ["PERM_INGESTION_WRITE", "ROLE_ADMIN"];
+  }
   if (method === "GET" && (path === "/ingestion/jobs" || path.startsWith("/ingestion/jobs/"))) {
     return ["PERM_INGESTION_READ", "PERM_INGESTION_WRITE", "ROLE_ADMIN", "ROLE_OPS"];
   }

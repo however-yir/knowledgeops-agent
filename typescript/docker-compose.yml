@@ -10,8 +10,15 @@ services:
       APP_JWT_SECRET: replace_with_32_bytes_min_secret
       APP_DEMO_API_KEY: local-demo-api-key
       APP_CORS_ALLOWED_ORIGINS: http://localhost:8088,http://localhost:5173
+      APP_INGESTION_QUEUE_BACKEND: in-memory
+      APP_RATE_LIMIT_ENABLED: "true"
+      APP_COST_ENABLED: "true"
+      APP_WORKSPACE_ROOT: /workspace
+      RAG_RETRIEVE_TOP_K: 8
     ports:
       - "3000:3000"
+    volumes:
+      - ..:/workspace:ro
 
   mysql:
     image: mysql:8.4

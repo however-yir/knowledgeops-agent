@@ -70,16 +70,20 @@ export class SessionsService {
     const target = session.branches.find((branch) => branch.id === targetBranchId);
     const sourceMessages = source?.messages ?? [];
     const targetMessages = target?.messages ?? [];
+    const targetIds = new Set(targetMessages.map((message) => message.id));
+    const sourceIds = new Set(sourceMessages.map((message) => message.id));
+    const sourceOnly = sourceMessages.filter((message) => !targetIds.has(message.id));
+    const targetOnly = targetMessages.filter((message) => !sourceIds.has(message.id));
     return {
       sourceBranchId,
       targetBranchId,
       sourceMessageCount: sourceMessages.length,
       targetMessageCount: targetMessages.length,
-      commonMessageCount: 0,
-      sourceOnlyCount: sourceMessages.length,
-      targetOnlyCount: targetMessages.length,
-      sourceOnlyPreview: sourceMessages.slice(0, 3).map((message) => message.content),
-      targetOnlyPreview: targetMessages.slice(0, 3).map((message) => message.content)
+      commonMessageCount: sourceMessages.filter((message) => targetIds.has(message.id)).length,
+      sourceOnlyCount: sourceOnly.length,
+      targetOnlyCount: targetOnly.length,
+      sourceOnlyPreview: sourceOnly.slice(0, 3).map((message) => message.content),
+      targetOnlyPreview: targetOnly.slice(0, 3).map((message) => message.content)
     };
   }
 
@@ -93,7 +97,7 @@ export class SessionsService {
       parentBranchId: target?.id ?? null,
       parentMessageId: null,
       updatedAt: Date.now(),
-      messages: [...(target?.messages ?? []), ...(source?.messages ?? [])],
+      messages: mergeMessages(target?.messages ?? [], source?.messages ?? []),
       traceSteps: [...(target?.traceSteps ?? []), ...(source?.traceSteps ?? [])]
     };
     session.branches.push(mergedBranch);
@@ -106,4 +110,9 @@ export class SessionsService {
       mergedMessageCount: mergedBranch.messages.length
     };
   }
+}
+
+function mergeMessages(target: SessionBranch["messages"], source: SessionBranch["messages"]): SessionBranch["messages"] {
+  const seen = new Set(target.map((message) => message.id));
+  return [...target, ...source.filter((message) => !seen.has(message.id))];
 }

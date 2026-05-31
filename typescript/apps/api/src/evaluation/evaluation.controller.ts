@@ -11,10 +11,16 @@ export class EvaluationController {
 
   @Post("datasets")
   createDataset(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { name: string; description?: string; cases?: Array<Record<string, unknown>> }) {
+    if (!body?.name?.trim()) {
+      return { ok: 0, msg: "dataset name is required" };
+    }
+    if (!body?.cases?.length) {
+      return { ok: 0, msg: "dataset cases are required" };
+    }
     const dataset = {
       datasetId: newId("ds"),
       tenantId: normalizeTenant(tenantHeader),
-      name: body.name,
+      name: body.name.trim(),
       description: body.description,
       cases: body.cases ?? [],
       caseCount: body.cases?.length ?? 0,
@@ -38,18 +44,36 @@ export class EvaluationController {
   triggerRun(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("datasetId") datasetId: string, @Body() body?: { modelProfile?: string }) {
     const tenantId = normalizeTenant(tenantHeader);
     const dataset = this.store.evalDatasets.get(datasetId);
+    if (!dataset) {
+      return { ok: 0, msg: "dataset not found" };
+    }
     const totalCases = dataset?.cases.length ?? 0;
+    if (totalCases === 0) {
+      return { ok: 0, msg: "dataset has no cases" };
+    }
     const results = (dataset?.cases ?? []).map((testCase, index) => {
       const question = String(testCase.question ?? "");
       const chatId = String(testCase.chatId ?? `eval-${datasetId}-${index}`);
       const answer = this.aiService.reactChat({ prompt: question, chatId, modelProfile: body?.modelProfile }, tenantId);
       const expectedKeywords = toStringArray(testCase.expectedKeywords);
+      const expectedCitations = toStringArray(testCase.expectedCitations);
       const forbiddenKeywords = toStringArray(testCase.forbiddenKeywords);
-      const keywordScore = expectedKeywords.length === 0
-        ? 1
-        : expectedKeywords.filter((keyword) => answer.answer.includes(keyword)).length / expectedKeywords.length;
-      const forbiddenPenalty = forbiddenKeywords.some((keyword) => answer.answer.includes(keyword)) ? 1 : 0;
-      const score = Math.max(0, keywordScore - forbiddenPenalty);
+      const answerPool = `${answer.answer}\n${(answer.evidence ?? []).join("\n")}`.toLowerCase();
+      const citationPool = (answer.citations ?? []).join("\n").toLowerCase();
+      let keywordScore = expectedKeywords.length === 0
+        ? (answer.answer.trim() ? 1 : 0)
+        : hitRate(expectedKeywords, answerPool);
+      const citationCoverage = expectedCitations.length === 0 ? 1 : hitRate(expectedCitations, citationPool);
+      const forbiddenHit = forbiddenKeywords.some((keyword) => answerPool.includes(keyword.toLowerCase()));
+      const retrievalHit = expectedCitations.length === 0
+        ? ((answer.evidence?.length ?? 0) > 0 || keywordScore > 0 ? 1 : 0)
+        : citationCoverage > 0 ? 1 : 0;
+      let answerFaithfulness = scoreFaithfulness(answer.answer, answer.citations ?? []);
+      if (forbiddenHit) {
+        keywordScore = 0;
+        answerFaithfulness = Math.min(answerFaithfulness, 0.2);
+      }
+      const score = round(0.30 * retrievalHit + 0.25 * citationCoverage + 0.25 * keywordScore + 0.20 * answerFaithfulness);
       return {
         resultId: newId("res"),
         caseId: String(testCase.caseId ?? `case-${index + 1}`),
@@ -58,10 +82,10 @@ export class EvaluationController {
         answer: answer.answer,
         citations: answer.citations ?? [],
         evidence: answer.evidence ?? [],
-        retrievalHit: (answer.evidence?.length ?? 0) > 0 ? 1 : 0,
-        citationCoverage: (answer.citations?.length ?? 0) > 0 ? 1 : 0,
+        retrievalHit,
+        citationCoverage,
         keywordScore,
-        answerFaithfulness: answer.answer === "没有在当前知识库中检索到可用内容。" ? 0 : 1,
+        answerFaithfulness,
         score,
         latencyMs: 0,
         errorMessage: score >= 0.7 ? undefined : "expected keywords not sufficiently covered"
@@ -99,7 +123,8 @@ export class EvaluationController {
   compare(@Param("datasetId") datasetId: string) {
     const dataset = this.store.evalDatasets.get(datasetId);
     const runs = [...this.store.evalRuns.values()].filter((run) => run.datasetId === datasetId);
-    return { dataset, baseline: null, current: runs.at(-1) ?? null };
+    const baseline = dataset?.baselineRunId ? this.store.evalRuns.get(dataset.baselineRunId) ?? null : runs.at(-2) ?? null;
+    return { dataset, baseline, current: runs.at(-1) ?? null };
   }
 
   @Get("runs/:runId")
@@ -121,7 +146,17 @@ export class EvaluationController {
   @Get("runs/:runId/report")
   report(@Param("runId") runId: string) {
     const run = this.store.evalRuns.get(runId);
-    return `# RAG Evaluation Report\n\n- Run: ${runId}\n- Status: ${run?.status ?? "not_found"}\n- Score: ${run?.metrics.runScore ?? 0}\n`;
+    return [
+      "# RAG Evaluation Report",
+      "",
+      `- Run: ${runId}`,
+      `- Status: ${run?.status ?? "not_found"}`,
+      `- Score: ${run?.metrics.runScore ?? 0}`,
+      `- Passed Cases: ${run?.metrics.passedCases ?? 0}/${run?.metrics.totalCases ?? 0}`,
+      `- Retrieval Hit Rate: ${run?.metrics.retrievalHitRate ?? 0}`,
+      `- Citation Coverage Rate: ${run?.metrics.citationCoverageRate ?? 0}`,
+      ""
+    ].join("\n");
   }
 }
 
@@ -131,4 +166,31 @@ function toStringArray(value: unknown): string[] {
 
 function avg(values: number[]): number {
   return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function hitRate(expected: string[], actualLower: string): number {
+  if (expected.length === 0) {
+    return 1;
+  }
+  return round(expected.filter((item) => actualLower.includes(item.toLowerCase())).length / expected.length);
+}
+
+function scoreFaithfulness(answer: string, citations: string[]): number {
+  if (!answer.trim()) {
+    return 0;
+  }
+  if (citations.length === 0) {
+    return 0.5;
+  }
+  let markers = 0;
+  for (let index = 1; index <= citations.length; index += 1) {
+    if (answer.includes(`[${index}]`)) {
+      markers += 1;
+    }
+  }
+  return round(Math.min(1, markers / citations.length));
+}
+
+function round(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }

@@ -1,10 +1,13 @@
 import { Global, Module } from "@nestjs/common";
 
+import { MetricsService } from "./metrics.service.js";
+import { ModelRouterService } from "./model-router.service.js";
 import { PlatformStore } from "./platform.store.js";
+import { TenantCostService } from "./tenant-cost.service.js";
 
 @Global()
 @Module({
-  providers: [PlatformStore],
-  exports: [PlatformStore]
+  providers: [PlatformStore, MetricsService, ModelRouterService, TenantCostService],
+  exports: [PlatformStore, MetricsService, ModelRouterService, TenantCostService]
 })
 export class PlatformModule {}

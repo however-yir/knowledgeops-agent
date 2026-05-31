@@ -63,13 +63,16 @@ export class AuthService {
       return undefined;
     }
     const record = this.store.apiKeys.get(sha256Hex(apiKey.trim()));
-    if (!record || !record.enabled) {
+    if (!record || !record.enabled || record.revokedAt || (record.expiresAt && Date.parse(record.expiresAt) <= Date.now())) {
       return undefined;
     }
     const tenantId = normalizeTenant(record.tenantId);
     if (tenantHeader && normalizeTenant(tenantHeader) !== tenantId) {
       return undefined;
     }
+    record.lastUsedAt = nowIso();
+    record.updatedAt = nowIso();
+    this.store.persist();
     return {
       principal: record.keyName,
       roles: [record.roleName],
@@ -120,7 +123,7 @@ export class AuthService {
       return { ok: 0, msg: "invalid refresh token" };
     }
     const record = this.store.refreshTokens.get(refreshToken);
-    if (!record || Date.parse(record.expiresAt) <= Date.now()) {
+    if (!record || record.revokedAt || Date.parse(record.expiresAt) <= Date.now()) {
       return { ok: 0, msg: "invalid refresh token" };
     }
     this.store.refreshTokens.delete(refreshToken);
@@ -137,7 +140,9 @@ export class AuthService {
       roleName: roleName || "USER",
       tenantId: normalizedTenant,
       enabled: true,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      createdAt: nowIso(),
+      updatedAt: nowIso()
     });
     this.store.persist();
     return {
@@ -151,13 +156,26 @@ export class AuthService {
   }
 
   rotateApiKey(keyName: string, roleName = "USER", tenantId?: string): ApiKeyIssueResponse {
+    let rotatedFromId: string | undefined;
     for (const record of this.store.apiKeys.values()) {
       if (record.keyName === keyName && record.tenantId === normalizeTenant(tenantId)) {
         record.enabled = false;
+        record.revokedAt = nowIso();
+        record.revokedReason = "rotated";
+        record.updatedAt = nowIso();
+        rotatedFromId = record.keyHash;
+      }
+    }
+    const issued = this.issueApiKey(keyName, roleName, tenantId);
+    if (issued.rawApiKey && rotatedFromId) {
+      const inserted = this.store.apiKeys.get(sha256Hex(issued.rawApiKey));
+      if (inserted) {
+        inserted.rotatedFromId = rotatedFromId;
+        this.store.persist();
       }
     }
     return {
-      ...this.issueApiKey(keyName, roleName, tenantId),
+      ...issued,
       msg: "rotated"
     };
   }
@@ -167,6 +185,9 @@ export class AuthService {
     for (const record of this.store.apiKeys.values()) {
       if (record.keyName === keyName && record.tenantId === normalizedTenant) {
         record.enabled = false;
+        record.revokedAt = nowIso();
+        record.revokedReason = "manual revoke";
+        record.updatedAt = nowIso();
       }
     }
     this.store.persist();
@@ -185,7 +206,8 @@ export class AuthService {
       principal,
       roles,
       tenantId,
-      expiresAt: refreshExpiresAt
+      expiresAt: refreshExpiresAt,
+      createdAt: nowIso()
     });
     this.store.persist();
     return {

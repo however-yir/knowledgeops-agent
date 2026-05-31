@@ -10,6 +10,11 @@
     "apps/api/src/evaluation/evaluation.controller.ts",
     "apps/api/src/operations/operations.controller.ts",
     "apps/api/src/sessions/sessions.controller.ts",
+    "apps/api/src/platform/model-router.service.ts",
+    "apps/api/src/platform/tenant-cost.service.ts",
+    "apps/api/src/platform/metrics.service.ts",
+    "apps/api/src/auth/rate-limit.middleware.ts",
+    "apps/api/src/auth/security-headers.middleware.ts",
     "prisma/schema.prisma",
     "Dockerfile",
     "docker-compose.yml"
@@ -64,9 +69,13 @@
     { "label": "GET /cost/summary", "tsFragments": ["Get(\"cost/summary\")"] },
     { "label": "POST /cost/budget", "tsFragments": ["Post(\"cost/budget\")"] },
     { "label": "GET /audit/logs", "tsFragments": ["Get(\"audit/logs\")"] },
+    { "label": "GET /actuator/prometheus", "tsFragments": ["Get(\"actuator/prometheus\")"] },
     { "label": "GET /ai/memory/items", "tsFragments": ["Get(\"ai/memory/items\")"] },
     { "label": "POST /ai/memory/items", "tsFragments": ["Post(\"ai/memory/items\")"] },
+    { "label": "DELETE /ai/memory/items/:memoryId", "tsFragments": ["Delete(\"ai/memory/items/:memoryId\")"] },
     { "label": "GET /ai/graph/entities", "tsFragments": ["Get(\"ai/graph/entities\")"] },
-    { "label": "POST /ai/graph/entities", "tsFragments": ["Post(\"ai/graph/entities\")"] }
+    { "label": "POST /ai/graph/entities", "tsFragments": ["Post(\"ai/graph/entities\")"] },
+    { "label": "POST /ai/graph/relations", "tsFragments": ["Post(\"ai/graph/relations\")"] },
+    { "label": "POST /ai/graph/facts", "tsFragments": ["Post(\"ai/graph/facts\")"] }
   ]
 }
