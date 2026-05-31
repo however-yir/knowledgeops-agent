@@ -89,7 +89,7 @@ jobs:
 
       - name: Load gate
         working-directory: typescript
-        run: LOAD_DURATION_SECONDS=10 LOAD_VUS=50 LOAD_P99_MS=30000 pnpm load:gate
+        run: BASE_URL=http://localhost:3010 LOAD_DURATION_SECONDS=10 LOAD_VUS=50 LOAD_P99_MS=30000 pnpm load:gate
 
       - name: SBOM
         working-directory: typescript
