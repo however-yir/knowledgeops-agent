@@ -13,8 +13,16 @@ services:
       APP_INGESTION_QUEUE_BACKEND: in-memory
       APP_REDIS_URL: redis://redis:6379
       APP_REDIS_STREAM_KEY: knowledgeops:ingestion
+      APP_REDIS_DLQ_STREAM_KEY: knowledgeops:ingestion:dlq
       APP_REDIS_CONSUMER_GROUP: knowledgeops-workers
       APP_REDIS_CONSUMER_NAME: worker-1
+      APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      APP_RABBITMQ_EXCHANGE: ingestion.exchange
+      APP_RABBITMQ_ROUTING_KEY: ingestion.jobs
+      APP_RABBITMQ_QUEUE: ingestion.jobs.queue
+      APP_RABBITMQ_DLQ_EXCHANGE: ingestion.dlx
+      APP_RABBITMQ_DLQ_ROUTING_KEY: ingestion.jobs.dlq
+      APP_RABBITMQ_DLQ_QUEUE: ingestion.jobs.dlq.queue
       APP_INGESTION_WORKER_ENABLED: "true"
       APP_INGESTION_WORKER_CONCURRENCY: 2
       APP_PRISMA_ENABLED: "false"
@@ -22,6 +30,8 @@ services:
       APP_VECTOR_BACKEND: local
       APP_PGVECTOR_ENDPOINT: ""
       APP_EMBEDDING_ENABLED: "false"
+      APP_WEB_SEARCH_BACKEND: searxng
+      APP_WEB_SEARCH_SEARXNG_URL: http://searxng:8080
       APP_RATE_LIMIT_ENABLED: "true"
       APP_DISTRIBUTED_RATE_LIMIT_ENABLED: "false"
       APP_COST_ENABLED: "true"
@@ -31,6 +41,8 @@ services:
       mysql:
         condition: service_started
       redis:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     ports:
       - "3000:3000"

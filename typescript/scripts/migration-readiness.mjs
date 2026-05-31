@@ -7,6 +7,9 @@ const schema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
 const migration = readFileSync(join(root, "MIGRATION.md"), "utf8");
 
 const requiredRuntimeTables = [
+  "course",
+  "school",
+  "course_reservation",
   "api_keys",
   "refresh_tokens",
   "audit_log",

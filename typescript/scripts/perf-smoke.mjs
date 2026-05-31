@@ -4,9 +4,10 @@ import { spawn, spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const baseUrl = process.env.BASE_URL ?? "http://localhost:3000";
+const baseUrl = process.env.BASE_URL ?? "http://localhost:3012";
 const iterations = Number(process.env.ITERATIONS ?? "40");
 const concurrency = Number(process.env.CONCURRENCY ?? "8");
 const p95LimitMs = Number(process.env.P95_MS ?? "1500");
@@ -84,6 +85,7 @@ async function ensureServer() {
       APP_LLM_ENABLED: "false",
       APP_WORKFLOW_ASYNC_ENABLED: "false",
       APP_INGESTION_WORKER_ENABLED: "false",
+      APP_STATE_FILE: process.env.APP_STATE_FILE ?? join(tmpdir(), `knowledgeops-perf-smoke-${new URL(baseUrl).port || "3012"}.json`),
       PORT: new URL(baseUrl).port || "3000"
     },
     stdio: ["ignore", "ignore", "inherit"]

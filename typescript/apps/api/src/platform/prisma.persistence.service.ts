@@ -50,6 +50,7 @@ export class PrismaPersistenceService implements OnModuleInit {
         ...this.evaluationActions(prisma),
         ...this.knowledgeChunkActions(prisma),
         ...this.harnessEventActions(prisma),
+        ...this.businessToolActions(prisma),
         ...this.appendOnlyActions(prisma)
       ];
       if (actions.length > 0) {
@@ -364,6 +365,29 @@ export class PrismaPersistenceService implements OnModuleInit {
     }));
   }
 
+  private businessToolActions(prisma: PrismaClientLike): Array<Promise<unknown>> {
+    if (!prisma.course || !prisma.school || !prisma.courseReservation) {
+      return [];
+    }
+    return [
+      ...this.store.courses.map((course) => prisma.course.upsert({
+        where: { id: course.id },
+        update: coursePayload(course),
+        create: coursePayload(course)
+      })),
+      ...this.store.schools.map((school) => prisma.school.upsert({
+        where: { id: school.id },
+        update: schoolPayload(school),
+        create: schoolPayload(school)
+      })),
+      ...this.store.courseReservations.map((reservation) => prisma.courseReservation.upsert({
+        where: { id: reservation.id },
+        update: reservationPayload(reservation),
+        create: reservationPayload(reservation)
+      }))
+    ];
+  }
+
   private appendOnlyActions(prisma: PrismaClientLike): Array<Promise<unknown>> {
     const auditLogs = this.store.auditLogs.slice(this.lastAuditIndex);
     const feedback = this.store.feedback.slice(this.lastFeedbackIndex);
@@ -609,6 +633,36 @@ function feedbackPayload(item: Record<string, unknown>) {
     questionText: item.question ? String(item.question) : undefined,
     answerText: item.answer ? String(item.answer) : undefined,
     createdAt: dateOrNow(String(item.createdAt ?? ""))
+  };
+}
+
+function coursePayload(course: any) {
+  return {
+    id: course.id,
+    name: course.name,
+    edu: course.edu,
+    type: course.type,
+    price: course.price === undefined ? undefined : BigInt(course.price),
+    duration: course.duration
+  };
+}
+
+function schoolPayload(school: any) {
+  return {
+    id: school.id,
+    name: school.name,
+    city: school.city
+  };
+}
+
+function reservationPayload(reservation: any) {
+  return {
+    id: reservation.id,
+    course: reservation.course,
+    studentName: reservation.studentName,
+    contactInfo: reservation.contactInfo,
+    school: reservation.school,
+    remark: reservation.remark
   };
 }
 

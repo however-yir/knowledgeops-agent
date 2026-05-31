@@ -6,6 +6,12 @@
     "expectStatus": 200
   },
   {
+    "label": "openapi docs",
+    "method": "GET",
+    "path": "/v3/api-docs",
+    "expectStatus": 200
+  },
+  {
     "label": "react chat",
     "method": "POST",
     "path": "/ai/react/chat",
@@ -42,6 +48,12 @@
     "label": "graph entities",
     "method": "GET",
     "path": "/ai/graph/entities",
+    "expectStatus": 200
+  },
+  {
+    "label": "harness actions",
+    "method": "GET",
+    "path": "/ai/harness/actions",
     "expectStatus": 200
   },
   {

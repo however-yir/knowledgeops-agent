@@ -4,6 +4,7 @@ import type { ReactChatRequest, ReactChatResponse } from "@knowledgeops/shared";
 import { HistoryService } from "../history/history.service.js";
 import { MetricsService } from "../platform/metrics.service.js";
 import { ModelRouterService } from "../platform/model-router.service.js";
+import { BusinessToolsService } from "../platform/business-tools.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
 import { TenantCostService } from "../platform/tenant-cost.service.js";
 import { newId } from "../common/ids.js";
@@ -19,24 +20,26 @@ export class AiService {
     private readonly modelRouter: ModelRouterService,
     private readonly costService: TenantCostService,
     private readonly metrics: MetricsService,
-    private readonly llmClient: OpenAiCompatibleClient
+    private readonly llmClient: OpenAiCompatibleClient,
+    private readonly businessTools: BusinessToolsService
   ) {}
 
   async reactChat(request: ReactChatRequest, tenantId = "public", historyType = "react"): Promise<ReactChatResponse> {
     const started = Date.now();
     const prompt = request.prompt || "";
     const route = this.modelRouter.resolve(request.modelProfile, historyType, tenantId, request.chatId);
+    const toolAnswer = await this.educationToolAnswer(prompt).catch(() => undefined);
     const rag = await this.retrievalService.answerAsync(prompt, tenantId, request.chatId);
     const memoryUsed = this.relevantMemory(tenantId, prompt);
-    const context = [prompt, ...rag.evidence, ...memoryUsed].join("\n");
+    const context = [prompt, ...(toolAnswer?.evidence ?? []), ...rag.evidence, ...memoryUsed].join("\n");
     const estimatedInputTokens = this.costService.estimateTokens(context);
-    const localAnswer = composeAnswer(rag.answer, memoryUsed);
+    const localAnswer = composeAnswer(toolAnswer?.answer ?? rag.answer, memoryUsed);
     const estimatedOutputTokens = this.costService.estimateTokens(localAnswer);
     this.costService.assertBudget(tenantId, route.costTier, estimatedInputTokens, estimatedOutputTokens);
     const llmResult = await this.generateWithFallback({
       prompt,
       route,
-      groundedContext: rag.evidence,
+      groundedContext: [...(toolAnswer?.evidence ?? []), ...rag.evidence],
       memoryContext: memoryUsed
     });
     const finalAnswer = llmResult?.answer ?? localAnswer;
@@ -52,8 +55,8 @@ export class AiService {
       msg: "ok",
       chatId: request.chatId,
       answer: finalAnswer,
-      citations: rag.citations,
-      evidence: rag.evidence,
+      citations: [...(toolAnswer?.citations ?? []), ...rag.citations],
+      evidence: [...(toolAnswer?.evidence ?? []), ...rag.evidence],
       routeProfile: route.profile,
       routeReason: route.reason,
       routeCostTier: route.costTier,
@@ -64,11 +67,11 @@ export class AiService {
         {
           step: 1,
           thought: "Resolve model profile, budget, memory, and hybrid retrieval context.",
-          action: "hybrid_retrieve",
+          action: toolAnswer ? toolAnswer.action : "hybrid_retrieve",
           actionInput: { prompt, chatId: request.chatId, tenantId, model: route.model },
           observation: {
-            citations: rag.citations.length,
-            evidence: rag.evidence.length,
+            citations: rag.citations.length + (toolAnswer?.citations.length ?? 0),
+            evidence: rag.evidence.length + (toolAnswer?.evidence.length ?? 0),
             memoryUsed: memoryUsed.length,
             retrievalStats: rag.retrievalStats
           }
@@ -107,21 +110,22 @@ export class AiService {
     const started = Date.now();
     const prompt = request.prompt || "";
     const route = this.modelRouter.resolve(request.modelProfile, historyType, tenantId, request.chatId);
+    const toolAnswer = await this.educationToolAnswer(prompt).catch(() => undefined);
     const rag = await this.retrievalService.answerAsync(prompt, tenantId, request.chatId);
     const memoryUsed = this.relevantMemory(tenantId, prompt);
-    const localAnswer = composeAnswer(rag.answer, memoryUsed);
-    const estimatedInputTokens = this.costService.estimateTokens([prompt, ...rag.evidence, ...memoryUsed].join("\n"));
+    const localAnswer = composeAnswer(toolAnswer?.answer ?? rag.answer, memoryUsed);
+    const estimatedInputTokens = this.costService.estimateTokens([prompt, ...(toolAnswer?.evidence ?? []), ...rag.evidence, ...memoryUsed].join("\n"));
     const estimatedOutputTokens = this.costService.estimateTokens(localAnswer);
     this.costService.assertBudget(tenantId, route.costTier, estimatedInputTokens, estimatedOutputTokens);
 
     const trace = {
       step: 1,
       thought: "Resolve route and stream provider tokens from grounded retrieval context.",
-      action: "llm_stream",
+      action: toolAnswer ? toolAnswer.action : "llm_stream",
       actionInput: { prompt, chatId: request.chatId, tenantId, model: route.model },
       observation: {
-        citations: rag.citations.length,
-        evidence: rag.evidence.length,
+        citations: rag.citations.length + (toolAnswer?.citations.length ?? 0),
+        evidence: rag.evidence.length + (toolAnswer?.evidence.length ?? 0),
         memoryUsed: memoryUsed.length,
         retrievalStats: rag.retrievalStats
       }
@@ -132,7 +136,7 @@ export class AiService {
       for await (const chunk of this.llmClient.streamComplete({
         prompt,
         route,
-        groundedContext: rag.evidence,
+        groundedContext: [...(toolAnswer?.evidence ?? []), ...rag.evidence],
         memoryContext: memoryUsed
       })) {
         answer += chunk.token;
@@ -156,8 +160,8 @@ export class AiService {
       msg: "ok",
       chatId: request.chatId,
       answer,
-      citations: rag.citations,
-      evidence: rag.evidence,
+      citations: [...(toolAnswer?.citations ?? []), ...rag.citations],
+      evidence: [...(toolAnswer?.evidence ?? []), ...rag.evidence],
       routeProfile: route.profile,
       routeReason: route.reason,
       routeCostTier: route.costTier,
@@ -187,10 +191,43 @@ export class AiService {
     this.store.persist();
   }
 
+  private async educationToolAnswer(prompt: string): Promise<{ action: string; answer: string; citations: string[]; evidence: string[] } | undefined> {
+    const normalized = prompt.toLowerCase();
+    if (containsAny(normalized, ["校区", "campus"])) {
+      const schools = await this.businessTools.querySchool();
+      return {
+        action: "query_school",
+        answer: `可以参考这些校区：\n${markdownTable(["校区", "城市"], schools.map((school) => [school.name, school.city ?? ""]))}`,
+        citations: ["source=builtin://query_school, chunk=1"],
+        evidence: schools.map((school) => `校区：${school.name}，城市：${school.city ?? "未知"}`)
+      };
+    }
+    if (containsAny(normalized, ["课程", "编程", "设计", "自媒体", "course"])) {
+      const courses = await this.businessTools.queryCourse({
+        type: inferCourseType(prompt),
+        edu: inferEducationLevel(prompt),
+        sorts: [{ field: "duration", isAsc: true }]
+      });
+      return {
+        action: "query_course",
+        answer: `可以参考这些课程：\n${markdownTable(["课程", "类型", "学历要求", "学习时长(天)"], courses.map((course) => [
+          course.name,
+          course.type ?? "",
+          educationLabel(course.edu),
+          String(course.duration ?? "")
+        ]))}`,
+        citations: ["source=builtin://query_course, chunk=1"],
+        evidence: courses.map((course) => `课程：${course.name}，类型：${course.type ?? "未分类"}，学历要求：${educationLabel(course.edu)}，学习时长：${course.duration ?? "未知"}天`)
+      };
+    }
+    return undefined;
+  }
+
   private relevantMemory(tenantId: string, prompt: string): string[] {
     const tokens = prompt.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     return this.store.memoryItems
       .filter((item) => item.tenantId === tenantId && (!item.expiresAt || Date.parse(item.expiresAt) > Date.now()))
+      .slice(-500)
       .map((item) => ({
         content: item.content,
         score: tokens.filter((token) => item.content.toLowerCase().includes(token)).length + item.confidence
@@ -217,11 +254,15 @@ export class AiService {
 
   private saveConversationSummary(tenantId: string, chatId: string, prompt: string, answer: string): void {
     const content = `chat=${chatId}; user=${prompt.slice(0, 180)}; assistant=${answer.slice(0, 220)}`;
-    const exists = this.store.memoryItems.some((item) => item.tenantId === tenantId && item.source === "chat_summary" && item.sourceTaskId === chatId && item.content === content);
-    if (exists) {
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const existing = this.store.memoryItems.find((item) => item.tenantId === tenantId && item.source === "chat_summary" && item.sourceTaskId === chatId);
+    if (existing) {
+      existing.content = content;
+      existing.updatedAt = now;
+      existing.expiresAt = expiresAt;
       return;
     }
-    const now = new Date().toISOString();
     this.store.memoryItems.push({
       memoryId: newId("mem"),
       tenantId,
@@ -231,12 +272,63 @@ export class AiService {
       source: "chat_summary",
       sourceTaskId: chatId,
       confidence: 0.6,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      expiresAt,
       createdAt: now,
       updatedAt: now
     });
     this.store.persist();
   }
+}
+
+function containsAny(value: string, needles: string[]): boolean {
+  return needles.some((needle) => value.includes(needle.toLowerCase()));
+}
+
+function inferCourseType(prompt: string): string | undefined {
+  if (prompt.includes("设计")) {
+    return "设计";
+  }
+  if (prompt.includes("自媒体") || prompt.includes("短视频")) {
+    return "自媒体";
+  }
+  if (prompt.includes("编程") || prompt.toLowerCase().includes("java") || prompt.toLowerCase().includes("python")) {
+    return "编程";
+  }
+  return undefined;
+}
+
+function inferEducationLevel(prompt: string): number | undefined {
+  if (prompt.includes("本科")) {
+    return 4;
+  }
+  if (prompt.includes("大专")) {
+    return 3;
+  }
+  if (prompt.includes("高中")) {
+    return 2;
+  }
+  if (prompt.includes("初中")) {
+    return 1;
+  }
+  if (prompt.includes("零基础") || prompt.includes("无学历")) {
+    return 0;
+  }
+  return undefined;
+}
+
+function educationLabel(value: number | undefined): string {
+  return ["无", "初中", "高中", "大专", "本科以上"][value ?? 0] ?? "未知";
+}
+
+function markdownTable(headers: string[], rows: string[][]): string {
+  if (rows.length === 0) {
+    return "暂无匹配结果。";
+  }
+  return [
+    `| ${headers.join(" | ")} |`,
+    `| ${headers.map(() => "---").join(" | ")} |`,
+    ...rows.map((row) => `| ${row.join(" | ")} |`)
+  ].join("\n");
 }
 
 function composeAnswer(ragAnswer: string, memoryUsed: string[]): string {

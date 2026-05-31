@@ -205,37 +205,37 @@ export class RetrievalService {
   }
 
   private webRetrieve(query: string, topK: number): ScoredChunk[] {
-    if (!env.APP_WEB_SEARCH_ENABLED || !env.APP_WEB_SEARCH_ENDPOINT) {
+    const request = buildWebSearchRequest(query, topK);
+    if (!request) {
       return [];
     }
-    const endpoint = `${env.APP_WEB_SEARCH_ENDPOINT.replace(/\/$/, "")}?q=${encodeURIComponent(query)}&format=json`;
     return [{
       ...syntheticChunk({
         tenantId: "public",
-        content: `Web search configured at ${endpoint}. External retrieval is enabled for production runtime.`,
+        content: `Web search configured for ${request.backend} at ${request.url}. External retrieval is enabled for production runtime.`,
         chunkId: "web-configured",
         fileName: "web-search",
         score: 0.5,
         source: "web"
       }),
-      url: endpoint
+      url: request.url
     }].slice(0, topK);
   }
 
   private async webRetrieveAsync(query: string, topK: number): Promise<ScoredChunk[]> {
-    if (!env.APP_WEB_SEARCH_ENABLED || !env.APP_WEB_SEARCH_ENDPOINT) {
+    const request = buildWebSearchRequest(query, topK);
+    if (!request) {
       return [];
     }
-    const endpoint = `${env.APP_WEB_SEARCH_ENDPOINT.replace(/\/$/, "")}?q=${encodeURIComponent(query)}&format=json`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), env.APP_WEB_SEARCH_TIMEOUT_MS);
     try {
-      const response = await fetch(endpoint, { signal: controller.signal });
+      const response = await fetch(request.url, { signal: controller.signal, headers: request.headers });
       if (!response.ok) {
         return this.webRetrieve(query, topK);
       }
       const payload = await response.json().catch(() => undefined);
-      const items = normalizeWebResults(payload, topK);
+      const items = normalizeWebResults(payload, topK, request.backend);
       return items.map((item, index) => ({
         ...syntheticChunk({
           tenantId: "public",
@@ -385,8 +385,46 @@ function bm25Score(query: string, chunk: KnowledgeChunk, corpus: KnowledgeChunk[
   return Math.min(1, score / Math.max(1, queryTokens.length));
 }
 
-function normalizeWebResults(payload: unknown, topK: number): Array<{ title: string; snippet: string; url: string; score: number }> {
-  const rawItems = Array.isArray(payload)
+function buildWebSearchRequest(query: string, topK: number): { url: string; headers: Record<string, string>; backend: "generic" | "searxng" | "bing" } | undefined {
+  if (!env.APP_WEB_SEARCH_ENABLED) {
+    return undefined;
+  }
+  const count = Math.min(topK, env.APP_WEB_SEARCH_MAX_RESULTS);
+  if (env.APP_WEB_SEARCH_BACKEND === "searxng") {
+    const baseUrl = env.APP_WEB_SEARCH_SEARXNG_URL || env.APP_WEB_SEARCH_ENDPOINT;
+    if (!baseUrl) {
+      return undefined;
+    }
+    return {
+      backend: "searxng",
+      url: `${baseUrl.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}&format=json&categories=general&pageno=1`,
+      headers: {}
+    };
+  }
+  if (env.APP_WEB_SEARCH_BACKEND === "bing") {
+    if (!env.APP_WEB_SEARCH_BING_API_KEY) {
+      return undefined;
+    }
+    return {
+      backend: "bing",
+      url: `${env.APP_WEB_SEARCH_BING_ENDPOINT.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}&count=${count}&responseFilter=Webpages`,
+      headers: { "Ocp-Apim-Subscription-Key": env.APP_WEB_SEARCH_BING_API_KEY }
+    };
+  }
+  if (!env.APP_WEB_SEARCH_ENDPOINT) {
+    return undefined;
+  }
+  return {
+    backend: "generic",
+    url: `${env.APP_WEB_SEARCH_ENDPOINT.replace(/\/$/, "")}?q=${encodeURIComponent(query)}&format=json`,
+    headers: {}
+  };
+}
+
+function normalizeWebResults(payload: unknown, topK: number, backend: "generic" | "searxng" | "bing"): Array<{ title: string; snippet: string; url: string; score: number }> {
+  const rawItems = backend === "bing"
+    ? ((payload as { webPages?: { value?: unknown[] } } | undefined)?.webPages?.value ?? [])
+    : Array.isArray(payload)
     ? payload
     : Array.isArray((payload as { results?: unknown[] } | undefined)?.results)
       ? (payload as { results: unknown[] }).results

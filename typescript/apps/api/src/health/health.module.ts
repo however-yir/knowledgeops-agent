@@ -1,8 +1,9 @@
 import { Module } from "@nestjs/common";
 
 import { HealthController } from "./health.controller.js";
+import { OpenApiController } from "./openapi.controller.js";
 
 @Module({
-  controllers: [HealthController]
+  controllers: [HealthController, OpenApiController]
 })
 export class HealthModule {}

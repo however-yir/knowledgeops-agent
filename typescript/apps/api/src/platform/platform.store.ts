@@ -250,6 +250,30 @@ export interface HarnessEventRecord {
   createdAt: string;
 }
 
+export interface CourseRecord {
+  id: number;
+  name: string;
+  edu?: number;
+  type?: string;
+  price?: number;
+  duration?: number;
+}
+
+export interface SchoolRecord {
+  id: number;
+  name: string;
+  city?: string;
+}
+
+export interface CourseReservationRecord {
+  id: number;
+  course: string;
+  studentName: string;
+  contactInfo: string;
+  school: string;
+  remark?: string;
+}
+
 interface PersistedState {
   apiKeys?: ApiKeyRecord[];
   refreshTokens?: RefreshTokenRecord[];
@@ -276,6 +300,9 @@ interface PersistedState {
   tenantUsageDaily?: TenantUsageDailyRecord[];
   modelExposures?: ModelAbExposureRecord[];
   harnessEvents?: HarnessEventRecord[];
+  courses?: CourseRecord[];
+  schools?: SchoolRecord[];
+  courseReservations?: CourseReservationRecord[];
   metrics?: Record<string, number>;
 }
 
@@ -308,6 +335,9 @@ export class PlatformStore {
   readonly tenantUsageDaily = new Map<string, TenantUsageDailyRecord>();
   readonly modelExposures: ModelAbExposureRecord[] = [];
   readonly harnessEvents: HarnessEventRecord[] = [];
+  readonly courses: CourseRecord[] = [];
+  readonly schools: SchoolRecord[] = [];
+  readonly courseReservations: CourseReservationRecord[] = [];
   readonly metrics = new Map<string, number>();
 
   constructor() {
@@ -322,6 +352,7 @@ export class PlatformStore {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
+    this.seedBusinessCatalog();
   }
 
   persist(): void {
@@ -355,6 +386,9 @@ export class PlatformStore {
       tenantUsageDaily: [...this.tenantUsageDaily.values()],
       modelExposures: this.modelExposures,
       harnessEvents: this.harnessEvents,
+      courses: this.courses,
+      schools: this.schools,
+      courseReservations: this.courseReservations,
       metrics: Object.fromEntries(this.metrics.entries())
     } satisfies PersistedState, null, 2));
     for (const sink of this.persistenceSinks) {
@@ -409,7 +443,28 @@ export class PlatformStore {
     raw.tenantUsageDaily?.forEach((usage) => this.tenantUsageDaily.set(tenantUsageKey(usage.tenantId, usage.usageDate), usage));
     this.modelExposures.push(...(raw.modelExposures ?? []));
     this.harnessEvents.push(...(raw.harnessEvents ?? []));
+    this.courses.push(...(raw.courses ?? []));
+    this.schools.push(...(raw.schools ?? []));
+    this.courseReservations.push(...(raw.courseReservations ?? []));
     Object.entries(raw.metrics ?? {}).forEach(([key, value]) => this.metrics.set(key, value));
+  }
+
+  private seedBusinessCatalog(): void {
+    if (this.courses.length === 0) {
+      this.courses.push(
+        { id: 1, name: "Java编程实战", edu: 0, type: "编程", price: 699900, duration: 90 },
+        { id: 2, name: "Python数据分析", edu: 2, type: "编程", price: 799900, duration: 75 },
+        { id: 3, name: "UI设计全链路", edu: 2, type: "设计", price: 599900, duration: 60 },
+        { id: 4, name: "短视频运营", edu: 0, type: "自媒体", price: 399900, duration: 45 }
+      );
+    }
+    if (this.schools.length === 0) {
+      this.schools.push(
+        { id: 1, name: "北京校区", city: "北京" },
+        { id: 2, name: "上海校区", city: "上海" },
+        { id: 3, name: "深圳校区", city: "深圳" }
+      );
+    }
   }
 }
 

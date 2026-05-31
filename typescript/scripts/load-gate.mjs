@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -63,7 +64,15 @@ async function ensureServer() {
   }
   const child = spawn("pnpm", ["--filter", "@knowledgeops/api", "start"], {
     cwd: root,
-    env: { ...process.env, NODE_ENV: "development", APP_SECURITY_ENABLED: "false", APP_RATE_LIMIT_ENABLED: "false", APP_LLM_ENABLED: "false", PORT: new URL(baseUrl).port || "3000" },
+    env: {
+      ...process.env,
+      NODE_ENV: "development",
+      APP_SECURITY_ENABLED: "false",
+      APP_RATE_LIMIT_ENABLED: "false",
+      APP_LLM_ENABLED: "false",
+      APP_STATE_FILE: process.env.APP_STATE_FILE ?? join(tmpdir(), `knowledgeops-load-gate-${new URL(baseUrl).port || "3000"}.json`),
+      PORT: new URL(baseUrl).port || "3000"
+    },
     stdio: ["ignore", "ignore", "inherit"]
   });
   for (let attempt = 0; attempt < 80; attempt += 1) {

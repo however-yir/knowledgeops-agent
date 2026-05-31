@@ -74,7 +74,7 @@ export class IngestionService {
     this.store.persist();
     void this.queue?.enqueue(job).catch(() => {
       job.status = "RETRY";
-      job.errorMessage = "failed to enqueue redis stream job";
+      job.errorMessage = `failed to enqueue ${env.APP_INGESTION_QUEUE_BACKEND} job`;
       this.store.persist();
     });
     return toPublicJob(job);
@@ -133,6 +133,9 @@ export class IngestionService {
         : undefined;
       job.finishedAt = nowIso();
       this.store.incrementMetric("ingestion_jobs_finished_total", { status: job.status.toLowerCase(), tenant: tenantId });
+      if (job.status === "DLQ") {
+        void this.queue?.publishDlq(job, job.errorMessage ?? "max retries exceeded").catch(() => undefined);
+      }
     }
     job.updatedAt = nowIso();
     this.store.persist();

@@ -1,25 +1,83 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { promisify } from "node:util";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
 import { env } from "../config/env.js";
+import { BusinessToolsService } from "../platform/business-tools.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
+
+const execFileAsync = promisify(execFile);
 
 @Controller("ai/harness")
 export class HarnessController {
-  constructor(private readonly store: PlatformStore, private readonly retrievalService: RetrievalService) {}
+  constructor(
+    private readonly store: PlatformStore,
+    private readonly retrievalService: RetrievalService,
+    private readonly businessTools: BusinessToolsService
+  ) {}
 
   @Get("actions")
   actions() {
     return [
       {
+        action: "query_school",
+        runtime: "builtin",
+        requiredKeys: [],
+        optionalKeys: [],
+        riskLevel: "read",
+        trustedOnly: false
+      },
+      {
+        action: "query_course",
+        runtime: "builtin",
+        requiredKeys: [],
+        optionalKeys: ["type", "edu", "sorts"],
+        riskLevel: "read",
+        trustedOnly: false
+      },
+      {
+        action: "add_course_reservation",
+        runtime: "builtin",
+        requiredKeys: ["course", "studentName", "contactInfo", "school"],
+        optionalKeys: ["remark"],
+        riskLevel: "write",
+        trustedOnly: false,
+        sensitiveKeys: ["contactInfo"]
+      },
+      {
+        action: "rag_search",
+        runtime: "builtin",
+        requiredKeys: [],
+        optionalKeys: ["query", "tenantId", "chatId"],
+        riskLevel: "read",
+        trustedOnly: false
+      },
+      {
+        action: "workspace_list_files",
+        runtime: "workspace",
+        requiredKeys: [],
+        optionalKeys: ["path", "maxDepth"],
+        riskLevel: "read",
+        trustedOnly: true
+      },
+      {
         action: "workspace_read_file",
         runtime: "workspace",
         requiredKeys: ["path"],
         optionalKeys: ["maxBytes"],
+        riskLevel: "read",
+        trustedOnly: true
+      },
+      {
+        action: "workspace_search_text",
+        runtime: "workspace",
+        requiredKeys: ["query"],
+        optionalKeys: ["path", "maxMatches"],
         riskLevel: "read",
         trustedOnly: true
       },
@@ -32,18 +90,42 @@ export class HarnessController {
         trustedOnly: true
       },
       {
+        action: "workspace_propose_patch",
+        runtime: "workspace",
+        requiredKeys: ["path"],
+        optionalKeys: ["content", "patch", "summary"],
+        riskLevel: "write_preview",
+        trustedOnly: true
+      },
+      {
         action: "workspace_apply_patch",
         runtime: "workspace",
         requiredKeys: ["path", "content"],
-        optionalKeys: ["expectedSha256"],
+        optionalKeys: ["expectedSha256", "patch", "summary"],
         riskLevel: "write",
+        trustedOnly: true
+      },
+      {
+        action: "workspace_run_shell",
+        runtime: "workspace",
+        requiredKeys: ["command"],
+        optionalKeys: ["timeoutSeconds"],
+        riskLevel: "shell",
+        trustedOnly: true
+      },
+      {
+        action: "mcp_call",
+        runtime: "mcp",
+        requiredKeys: ["server", "tool", "arguments"],
+        optionalKeys: ["url"],
+        riskLevel: "external_call",
         trustedOnly: true
       },
       {
         action: "mcp_http_call",
         runtime: "mcp",
         requiredKeys: ["url", "tool"],
-        optionalKeys: ["arguments"],
+        optionalKeys: ["arguments", "server"],
         riskLevel: "external_call",
         trustedOnly: true
       },
@@ -119,25 +201,92 @@ export class HarnessController {
 
   private async executeAction(request: Record<string, unknown>) {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
-    if (request.action === "rag_query") {
-      const query = String(input.query ?? "");
+    if (request.action === "query_school") {
+      return {
+        source: "builtin",
+        action: "query_school",
+        observation: { status: "success", source: "builtin", data: await this.businessTools.querySchool() }
+      };
+    }
+    if (request.action === "query_course") {
+      return {
+        source: "builtin",
+        action: "query_course",
+        observation: { status: "success", source: "builtin", data: await this.businessTools.queryCourse(input) }
+      };
+    }
+    if (request.action === "add_course_reservation") {
+      try {
+        const result = await this.businessTools.addCourseReservation({
+          course: String(input.course ?? ""),
+          studentName: String(input.studentName ?? ""),
+          contactInfo: String(input.contactInfo ?? ""),
+          school: String(input.school ?? ""),
+          remark: String(input.remark ?? "")
+        });
+        return {
+          source: "builtin",
+          action: "add_course_reservation",
+          observation: { source: "builtin", ...result }
+        };
+      } catch (error) {
+        return {
+          source: "builtin",
+          action: "add_course_reservation",
+          observation: {
+            status: "error",
+            source: "builtin",
+            message: error instanceof Error ? error.message : String(error)
+          }
+        };
+      }
+    }
+    if (request.action === "rag_query" || request.action === "rag_search") {
+      const query = String(input.query ?? request.prompt ?? "");
       const tenantId = String(input.tenantId ?? "public");
       const chatId = String(input.chatId ?? "");
       return {
-        source: "retrieval",
-        action: "rag_query",
+        source: request.action === "rag_search" ? "builtin" : "retrieval",
+        action: request.action,
         observation: this.retrievalService.answer(query, tenantId, chatId)
+      };
+    }
+    if (request.action === "workspace_list_files") {
+      const path = resolveWorkspacePath(String(input.path ?? "."));
+      const maxDepth = Math.max(0, Math.min(Number(input.maxDepth ?? 2), 5));
+      return {
+        source: "workspace",
+        action: "workspace_list_files",
+        observation: {
+          root: relative(resolve(env.APP_WORKSPACE_ROOT), path) || ".",
+          files: listFiles(path, maxDepth)
+        }
       };
     }
     if (request.action === "workspace_read_file") {
       const path = resolveWorkspacePath(String(input.path ?? ""));
       const maxBytes = Math.max(1, Math.min(Number(input.maxBytes ?? 20_000), 200_000));
+      const content = readFileSync(path, "utf8");
       return {
         source: "workspace",
         action: "workspace_read_file",
         observation: {
           path: relative(resolve(env.APP_WORKSPACE_ROOT), path),
-          content: readFileSync(path, "utf8").slice(0, maxBytes)
+          content: content.slice(0, maxBytes),
+          truncated: content.length > maxBytes
+        }
+      };
+    }
+    if (request.action === "workspace_search_text") {
+      const root = resolveWorkspacePath(String(input.path ?? "."));
+      const query = String(input.query ?? "");
+      const maxMatches = Math.max(1, Math.min(Number(input.maxMatches ?? 50), 100));
+      return {
+        source: "workspace",
+        action: "workspace_search_text",
+        observation: {
+          query,
+          matches: searchText(root, query, maxMatches)
         }
       };
     }
@@ -153,6 +302,24 @@ export class HarnessController {
           currentSha256: sha256(current),
           proposedSha256: sha256(proposed),
           diff: lineDiff(current, proposed)
+        }
+      };
+    }
+    if (request.action === "workspace_propose_patch") {
+      const path = resolveWorkspacePath(String(input.path ?? ""));
+      const current = existsSync(path) ? readFileSync(path, "utf8") : "";
+      const proposed = String(input.content ?? "");
+      const patch = String(input.patch ?? "");
+      return {
+        source: "workspace",
+        action: "workspace_propose_patch",
+        observation: {
+          path: relative(resolve(env.APP_WORKSPACE_ROOT), path),
+          summary: String(input.summary ?? ""),
+          contentBytes: Buffer.byteLength(proposed),
+          patch: patch || lineDiff(current, proposed),
+          wouldCreate: !existsSync(path),
+          applyAction: "workspace_apply_patch"
         }
       };
     }
@@ -176,7 +343,14 @@ export class HarnessController {
         }
       };
     }
-    if (request.action === "mcp_http_call") {
+    if (request.action === "workspace_run_shell") {
+      return {
+        source: "workspace",
+        action: "workspace_run_shell",
+        observation: await runShell(String(input.command ?? ""), Number(input.timeoutSeconds ?? env.APP_WORKSPACE_COMMAND_TIMEOUT_SECONDS))
+      };
+    }
+    if (request.action === "mcp_call" || request.action === "mcp_http_call") {
       const url = String(input.url ?? "");
       assertMcpAllowed(url);
       const response = await fetch(url, {
@@ -187,8 +361,10 @@ export class HarnessController {
       const payload = await response.text();
       return {
         source: "mcp",
-        action: "mcp_http_call",
+        action: request.action,
         observation: {
+          server: input.server,
+          tool: input.tool,
           statusCode: response.status,
           ok: response.ok,
           body: payload.slice(0, 20_000)
@@ -256,15 +432,18 @@ function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; m
   if (!action) {
     return { allowed: false, message: "action is required", riskLevel: "unknown" };
   }
-  if (["workspace_read_file", "workspace_diff", "workspace_apply_patch"].includes(action)) {
+  if (["workspace_list_files", "workspace_read_file", "workspace_search_text", "workspace_diff", "workspace_propose_patch", "workspace_apply_patch"].includes(action)) {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
     try {
-      resolveWorkspacePath(String(input.path ?? ""));
+      resolveWorkspacePath(String(input.path ?? (action === "workspace_list_files" || action === "workspace_search_text" ? "." : "")));
     } catch (error) {
       return { allowed: false, message: error instanceof Error ? error.message : String(error), riskLevel: "blocked" };
     }
   }
-  if (action === "mcp_http_call") {
+  if (action === "workspace_run_shell" && !env.APP_WORKSPACE_SHELL_ENABLED) {
+    return { allowed: false, message: "workspace shell is disabled", riskLevel: "shell" };
+  }
+  if (action === "mcp_call" || action === "mcp_http_call") {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
     try {
       assertMcpAllowed(String(input.url ?? ""));
@@ -299,6 +478,9 @@ function sanitizeObservation(value: unknown): unknown {
 }
 
 function assertMcpAllowed(value: string): void {
+  if (!value.trim()) {
+    throw new Error("MCP endpoint URL is required");
+  }
   const url = new URL(value);
   if (!["http:", "https:"].includes(url.protocol)) {
     throw new Error("MCP HTTP adapter only supports http(s)");
@@ -307,6 +489,130 @@ function assertMcpAllowed(value: string): void {
   if (allowlist.length > 0 && !allowlist.some((prefix) => value.startsWith(prefix))) {
     throw new Error("MCP endpoint is not in APP_MCP_HTTP_ALLOWLIST");
   }
+}
+
+function listFiles(root: string, maxDepth: number): Array<Record<string, unknown>> {
+  const workspaceRoot = resolve(env.APP_WORKSPACE_ROOT);
+  const results: Array<Record<string, unknown>> = [];
+  const visit = (path: string, depth: number) => {
+    if (results.length >= 200 || depth > maxDepth) {
+      return;
+    }
+    const stat = statSync(path);
+    results.push({
+      path: relative(workspaceRoot, path) || ".",
+      type: stat.isDirectory() ? "directory" : "file",
+      size: stat.isFile() ? stat.size : undefined
+    });
+    if (!stat.isDirectory()) {
+      return;
+    }
+    for (const entry of readdirSync(path).sort()) {
+      visit(resolve(path, entry), depth + 1);
+      if (results.length >= 200) {
+        break;
+      }
+    }
+  };
+  visit(root, 0);
+  return results;
+}
+
+function searchText(root: string, query: string, maxMatches: number): Array<Record<string, unknown>> {
+  if (!query) {
+    return [];
+  }
+  const workspaceRoot = resolve(env.APP_WORKSPACE_ROOT);
+  const matches: Array<Record<string, unknown>> = [];
+  const visit = (path: string, depth: number) => {
+    if (matches.length >= maxMatches || depth > 8) {
+      return;
+    }
+    const stat = statSync(path);
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(path).sort()) {
+        visit(resolve(path, entry), depth + 1);
+        if (matches.length >= maxMatches) {
+          break;
+        }
+      }
+      return;
+    }
+    if (!stat.isFile() || stat.size > 1_000_000) {
+      return;
+    }
+    let content = "";
+    try {
+      content = readFileSync(path, "utf8");
+    } catch {
+      return;
+    }
+    const lines = content.split("\n");
+    for (let index = 0; index < lines.length && matches.length < maxMatches; index += 1) {
+      if (lines[index].includes(query)) {
+        matches.push({
+          path: relative(workspaceRoot, path),
+          lineNumber: index + 1,
+          line: lines[index]
+        });
+      }
+    }
+  };
+  visit(root, 0);
+  return matches;
+}
+
+async function runShell(commandText: string, timeoutSeconds: number): Promise<Record<string, unknown>> {
+  if (!env.APP_WORKSPACE_SHELL_ENABLED) {
+    return { status: "error", message: "workspace shell is disabled" };
+  }
+  const command = commandText.trim().split(/\s+/).filter(Boolean);
+  if (!isAllowedCommand(command)) {
+    return { status: "error", message: "command is not allowed" };
+  }
+  const timeout = Math.max(1, Math.min(timeoutSeconds, env.APP_WORKSPACE_COMMAND_TIMEOUT_SECONDS, 30)) * 1000;
+  try {
+    const { stdout, stderr } = await execFileAsync(command[0], command.slice(1), {
+      cwd: resolve(env.APP_WORKSPACE_ROOT),
+      timeout,
+      maxBuffer: env.APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES
+    });
+    const output = `${stdout}${stderr}`;
+    return {
+      exitCode: 0,
+      stdout,
+      stderr,
+      output,
+      truncated: Buffer.byteLength(output) >= env.APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES
+    };
+  } catch (error) {
+    const failure = error as { code?: number | string; stdout?: string; stderr?: string; message?: string };
+    return {
+      status: "error",
+      exitCode: typeof failure.code === "number" ? failure.code : undefined,
+      stdout: String(failure.stdout ?? ""),
+      stderr: String(failure.stderr ?? failure.message ?? ""),
+      output: `${String(failure.stdout ?? "")}${String(failure.stderr ?? failure.message ?? "")}`.slice(0, env.APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES)
+    };
+  }
+}
+
+function isAllowedCommand(command: string[]): boolean {
+  if (command.length === 0) {
+    return false;
+  }
+  const allowed = new Set(env.APP_WORKSPACE_ALLOWED_COMMANDS.split(",").map((item) => item.trim()).filter(Boolean));
+  if (!allowed.has(command[0])) {
+    return false;
+  }
+  if (command[0] === "pwd") {
+    return command.length === 1;
+  }
+  if (command[0] === "git") {
+    const subcommands = new Set(env.APP_WORKSPACE_ALLOWED_GIT_SUBCOMMANDS.split(",").map((item) => item.trim()).filter(Boolean));
+    return command.length >= 2 && subcommands.has(command[1]);
+  }
+  return ["ls", "rg"].includes(command[0]);
 }
 
 function lineDiff(current: string, proposed: string): string {
