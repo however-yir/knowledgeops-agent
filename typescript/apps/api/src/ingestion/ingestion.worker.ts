@@ -37,7 +37,7 @@ export class IngestionWorker implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     const started = Date.now();
     try {
-      const processed = this.ingestionService.processReadyBatch(env.APP_INGESTION_WORKER_CONCURRENCY);
+      const processed = await this.ingestionService.processReadyBatch(env.APP_INGESTION_WORKER_CONCURRENCY);
       this.metrics.increment("ingestion_worker_batches_total", { outcome: "success" });
       this.metrics.observe("ingestion_worker_batch_latency_ms", Date.now() - started);
       return processed;

@@ -8,16 +8,16 @@ Java remains in place while the TypeScript implementation grows under `typescrip
 | `src/main/java/com/enterprise/iqk/controller` | `apps/api/src/*` controllers | Parity-ready | `pnpm parity` + smoke |
 | `src/main/java/com/enterprise/iqk/security` | `apps/api/src/auth` | Parity-ready | API key/JWT test + route permission guard + audit/rate-limit/headers |
 | `src/main/resources/db/migration` | `prisma/schema.prisma` + `PrismaPersistenceService` + `PlatformStore` fallback | Parity-ready | `pnpm db:validate` + persisted state + MySQL bridge |
-| `src/main/java/com/enterprise/iqk/ingestion` | `apps/api/src/ingestion` | Parity-ready | Idempotent upload/job/chunk/retry/DLQ worker tests |
-| `src/main/java/com/enterprise/iqk/retrieval` | `apps/api/src/ai/retrieval.service.ts` | Parity-ready | Hybrid vector/BM25/graph/web/rerank/evidence tests |
+| `src/main/java/com/enterprise/iqk/ingestion` | `apps/api/src/ingestion` | Parity-ready | Idempotent upload/job/chunk/retry/DLQ worker tests + Redis Stream mode |
+| `src/main/java/com/enterprise/iqk/retrieval` | `apps/api/src/ai/retrieval.service.ts` | Parity-ready | Hybrid local/pgvector/BM25/graph/web/rerank/evidence tests |
 | `src/main/java/com/enterprise/iqk/rag` | `apps/api/src/ai` | Parity-ready | Upload then PDF chat smoke + contract diff |
 | `src/main/java/com/enterprise/iqk/memory` | `apps/api/src/operations` + `prisma/schema.prisma` | Parity-ready | Memory item/event routes + table mapping |
 | `src/main/java/com/enterprise/iqk/graph` | `apps/api/src/operations` + `prisma/schema.prisma` | Parity-ready | Graph entity/relation/fact routes + table mapping |
 | `src/main/java/com/enterprise/iqk/agent/harness` | `apps/api/src/agent` | Parity-ready | Preview/execute + policy + workspace/rag/memory/graph runtimes |
-| `src/main/java/com/enterprise/iqk/agent/workflow` | `apps/api/src/workflow` | Parity-ready | Task/step/event/research routes |
+| `src/main/java/com/enterprise/iqk/agent/workflow` | `apps/api/src/workflow` | Parity-ready | Task/step/event/research routes + async worker + LLM planner/writer |
 | `src/main/java/com/enterprise/iqk/evaluation` | `apps/api/src/evaluation` | Parity-ready | Dataset/run weighted scoring + reports |
 | `src/main/java/com/enterprise/iqk/repository/ChatHistoryRepository` | `apps/api/src/history` | Parity-ready | History service test + route parity |
-| `performance/k6` | `scripts/perf-smoke.mjs` | Parity-ready | auto-start compiled API + p95/failure gate |
+| `performance/k6` | `scripts/perf-smoke.mjs` + `scripts/load-gate.mjs` | Parity-ready | auto-start compiled API + p95/p99/failure gate |
 | `frontend/src/api/client.ts` | Existing frontend env switch + TS backend helpers | Parity-ready | `pnpm frontend:contract` + frontend build |
 | `.github/workflows` | `.github/workflows/typescript.yml` | Parity-ready | CI runs TS checks, MySQL/Redis services, contract, perf, Docker |
 

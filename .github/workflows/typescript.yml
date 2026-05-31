@@ -71,13 +71,29 @@ jobs:
         working-directory: typescript
         run: pnpm frontend:contract
 
+      - name: Migration readiness
+        working-directory: typescript
+        run: pnpm migration:readiness
+
       - name: Build
         working-directory: typescript
         run: pnpm build
 
+      - name: E2E smoke
+        working-directory: typescript
+        run: pnpm e2e:smoke
+
       - name: Performance smoke
         working-directory: typescript
         run: pnpm perf:smoke
+
+      - name: Load gate
+        working-directory: typescript
+        run: LOAD_DURATION_SECONDS=10 LOAD_VUS=50 LOAD_P99_MS=30000 pnpm load:gate
+
+      - name: SBOM
+        working-directory: typescript
+        run: pnpm sbom
 
       - name: Docker Compose config
         working-directory: typescript

@@ -2,17 +2,22 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import type { IngestionJob } from "@knowledgeops/shared";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
 import { env } from "../config/env.js";
 import { IngestionJobRecord, PlatformStore } from "../platform/platform.store.js";
+import { IngestionQueueService } from "./ingestion.queue.js";
 
 @Injectable()
 export class IngestionService {
-  constructor(private readonly store: PlatformStore, private readonly retrievalService: RetrievalService) {}
+  constructor(
+    private readonly store: PlatformStore,
+    private readonly retrievalService: RetrievalService,
+    @Optional() private readonly queue?: IngestionQueueService
+  ) {}
 
   async createJob(params: {
     tenantId: string;
@@ -67,6 +72,11 @@ export class IngestionService {
     this.store.idempotencyIndex.set(`${params.tenantId}:${idempotencyKey}`, job.jobId);
     this.store.incrementMetric("ingestion_jobs_submitted_total", { source: job.sourceType, tenant: params.tenantId });
     this.store.persist();
+    void this.queue?.enqueue(job).catch(() => {
+      job.status = "RETRY";
+      job.errorMessage = "failed to enqueue redis stream job";
+      this.store.persist();
+    });
     return toPublicJob(job);
   }
 
@@ -129,7 +139,18 @@ export class IngestionService {
     return "processed";
   }
 
-  processReadyBatch(limit = env.APP_INGESTION_WORKER_CONCURRENCY): number {
+  async processReadyBatch(limit = env.APP_INGESTION_WORKER_CONCURRENCY): Promise<number> {
+    if (this.queue?.enabled()) {
+      const messages = await this.queue.next(limit);
+      let processed = 0;
+      for (const message of messages) {
+        if (this.processOne(message.tenantId, message.jobId) === "processed") {
+          processed += 1;
+          await this.queue.ack(message.streamId);
+        }
+      }
+      return processed;
+    }
     const candidates = [...this.store.ingestionJobs.values()]
       .filter((job) => isReady(job))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))

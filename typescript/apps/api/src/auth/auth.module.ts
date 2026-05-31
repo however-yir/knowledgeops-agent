@@ -3,6 +3,7 @@ import { APP_GUARD } from "@nestjs/core";
 
 import { PlatformModule } from "../platform/platform.module.js";
 import { AuditLogMiddleware } from "./audit.middleware.js";
+import { AuditRetentionWorker } from "./audit-retention.worker.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthGuard } from "./auth.guard.js";
 import { AuthContextMiddleware } from "./auth.middleware.js";
@@ -18,6 +19,7 @@ import { SecurityHeadersMiddleware } from "./security-headers.middleware.js";
     AuthService,
     AuthContextMiddleware,
     AuditLogMiddleware,
+    AuditRetentionWorker,
     HttpMetricsMiddleware,
     RateLimitMiddleware,
     SecurityHeadersMiddleware,

@@ -1,5 +1,6 @@
 import { Injectable, NestMiddleware } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { Redis } from "ioredis";
 import type { ServerResponse } from "node:http";
 
 import type { RequestWithContext } from "../common/request-context.js";
@@ -14,19 +15,26 @@ interface Bucket {
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
   private readonly buckets = new Map<string, Bucket>();
+  private redis: Redis | undefined;
 
-  use(req: FastifyRequest, res: FastifyReply | ServerResponse, next: () => void): void {
+  async use(req: FastifyRequest, res: FastifyReply | ServerResponse, next: () => void): Promise<void> {
     if (!env.APP_RATE_LIMIT_ENABLED || req.url.startsWith("/actuator")) {
       next();
       return;
     }
     const key = this.resolveKey(req as RequestWithContext);
+    if (env.APP_DISTRIBUTED_RATE_LIMIT_ENABLED) {
+      const allowed = await this.distributedAllowed(key).catch(() => true);
+      if (!allowed) {
+        reject(res);
+        return;
+      }
+      next();
+      return;
+    }
     const bucket = this.refill(this.buckets.get(key) ?? { tokens: env.APP_RATE_LIMIT_CAPACITY, refreshedAt: Date.now() });
     if (bucket.tokens < 1) {
-      const raw = responseRaw(res);
-      raw.statusCode = 429;
-      raw.setHeader("Content-Type", "application/json");
-      raw.end(JSON.stringify({ ok: 0, msg: "rate limit exceeded" }));
+      reject(res);
       return;
     }
     bucket.tokens -= 1;
@@ -51,8 +59,25 @@ export class RateLimitMiddleware implements NestMiddleware {
     const principal = req.context?.identity?.principal;
     return principal ? `tenant:${tenant}:principal:${principal}` : `tenant:${tenant}:ip:${req.ip ?? "unknown"}`;
   }
+
+  private async distributedAllowed(key: string): Promise<boolean> {
+    this.redis ??= new Redis(env.APP_REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
+    const windowKey = `rate:${key}:${Math.floor(Date.now() / (env.APP_RATE_LIMIT_REFILL_SECONDS * 1000))}`;
+    const count = await this.redis.incr(windowKey);
+    if (count === 1) {
+      await this.redis.expire(windowKey, env.APP_RATE_LIMIT_REFILL_SECONDS + 5);
+    }
+    return count <= env.APP_RATE_LIMIT_CAPACITY;
+  }
 }
 
 function responseRaw(res: FastifyReply | ServerResponse): ServerResponse {
   return "raw" in res ? res.raw : res;
+}
+
+function reject(res: FastifyReply | ServerResponse): void {
+  const raw = responseRaw(res);
+  raw.statusCode = 429;
+  raw.setHeader("Content-Type", "application/json");
+  raw.end(JSON.stringify({ ok: 0, msg: "rate limit exceeded" }));
 }

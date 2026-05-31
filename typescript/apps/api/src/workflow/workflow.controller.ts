@@ -25,11 +25,11 @@ export class WorkflowController {
   }
 
   @Post("ai/research/tasks")
-  createResearch(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { topic?: string; prompt?: string; modelProfile?: string }) {
+  async createResearch(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { topic?: string; prompt?: string; modelProfile?: string }) {
     const prompt = body.topic ?? body.prompt ?? "research";
     const task = env.APP_WORKFLOW_ASYNC_ENABLED
       ? this.workflowService.enqueueResearch(tenantHeader, prompt, body.modelProfile)
-      : this.workflowService.executeResearch(tenantHeader, prompt, body.modelProfile);
+      : await this.workflowService.executeResearchAsync(tenantHeader, prompt, body.modelProfile);
     return {
       ok: 1,
       taskId: task.taskId,
@@ -64,6 +64,6 @@ export class WorkflowController {
   @Header("Content-Type", "text/event-stream")
   async workflowReactStream(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
     this.workflowService.startReactTask(tenantHeader, body.prompt, body.modelProfile, body.chatId, body.sessionId);
-    return this.aiService.textStream(await this.aiService.reactChat(body, normalizeTenant(tenantHeader), "workflow_react"));
+    return this.aiService.reactChatStream(body, normalizeTenant(tenantHeader), "workflow_react");
   }
 }

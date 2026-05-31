@@ -103,6 +103,85 @@ export class AiService {
     return `${trace}event: token\ndata: ${token}\n\nevent: done\ndata: ${done}\n\n`;
   }
 
+  async reactChatStream(request: ReactChatRequest, tenantId = "public", historyType = "react"): Promise<string> {
+    const started = Date.now();
+    const prompt = request.prompt || "";
+    const route = this.modelRouter.resolve(request.modelProfile, historyType, tenantId, request.chatId);
+    const rag = await this.retrievalService.answerAsync(prompt, tenantId, request.chatId);
+    const memoryUsed = this.relevantMemory(tenantId, prompt);
+    const localAnswer = composeAnswer(rag.answer, memoryUsed);
+    const estimatedInputTokens = this.costService.estimateTokens([prompt, ...rag.evidence, ...memoryUsed].join("\n"));
+    const estimatedOutputTokens = this.costService.estimateTokens(localAnswer);
+    this.costService.assertBudget(tenantId, route.costTier, estimatedInputTokens, estimatedOutputTokens);
+
+    const trace = {
+      step: 1,
+      thought: "Resolve route and stream provider tokens from grounded retrieval context.",
+      action: "llm_stream",
+      actionInput: { prompt, chatId: request.chatId, tenantId, model: route.model },
+      observation: {
+        citations: rag.citations.length,
+        evidence: rag.evidence.length,
+        memoryUsed: memoryUsed.length,
+        retrievalStats: rag.retrievalStats
+      }
+    };
+    let answer = "";
+    let sse = `event: trace\ndata: ${JSON.stringify(trace)}\n\n`;
+    try {
+      for await (const chunk of this.llmClient.streamComplete({
+        prompt,
+        route,
+        groundedContext: rag.evidence,
+        memoryContext: memoryUsed
+      })) {
+        answer += chunk.token;
+        sse += `event: token\ndata: ${JSON.stringify({ token: chunk.token })}\n\n`;
+      }
+    } catch (error) {
+      this.metrics.increment("llm_stream_fallback_total", { route: route.profile });
+      sse += `event: error\ndata: ${JSON.stringify({ message: error instanceof Error ? error.message : String(error) })}\n\n`;
+    }
+
+    if (!answer.trim()) {
+      const fallback = await this.reactChat(request, tenantId, historyType);
+      return this.textStream(fallback);
+    }
+    const outputTokens = this.costService.estimateTokens(answer);
+    this.costService.recordUsage(tenantId, route.costTier, estimatedInputTokens, outputTokens);
+    this.metrics.increment("react_stream_requests_total", { outcome: "success", route: route.profile });
+    this.metrics.observe("react_stream_latency_ms", Date.now() - started, { route: route.profile });
+    const response: ReactChatResponse = {
+      ok: 1,
+      msg: "ok",
+      chatId: request.chatId,
+      answer,
+      citations: rag.citations,
+      evidence: rag.evidence,
+      routeProfile: route.profile,
+      routeReason: route.reason,
+      routeCostTier: route.costTier,
+      experimentKey: route.experimentKey,
+      experimentVariant: route.experimentVariant,
+      experimentBucket: route.experimentBucket,
+      trace: [
+        trace,
+        {
+          step: 2,
+          thought: "Finish provider streaming response and persist usage/history.",
+          action: "finish",
+          observation: { status: "completed", model: route.model, inputTokens: estimatedInputTokens, outputTokens }
+        }
+      ]
+    };
+    if (request.chatId?.trim()) {
+      this.historyService.appendExchange(tenantId, historyType, request.chatId, prompt, answer);
+      this.saveConversationSummary(tenantId, request.chatId, prompt, answer);
+    }
+    sse += `event: done\ndata: ${JSON.stringify(response)}\n\n`;
+    return sse;
+  }
+
   saveFeedback(tenantId: string, payload: Record<string, unknown>): void {
     this.store.feedback.push({ tenantId, ...payload, createdAt: new Date().toISOString() });
     this.store.persist();

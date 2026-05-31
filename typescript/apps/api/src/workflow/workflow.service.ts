@@ -1,10 +1,12 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 
+import { OpenAiCompatibleClient } from "../ai/llm.client.js";
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
 import { normalizeTenant } from "../common/tenant.js";
 import { env } from "../config/env.js";
 import { MetricsService } from "../platform/metrics.service.js";
+import { ModelRouterService } from "../platform/model-router.service.js";
 import { PlatformStore, WorkflowStep, WorkflowTask } from "../platform/platform.store.js";
 
 type WorkflowState = "CREATED" | "PLANNING" | "SEARCHING" | "RETRIEVING" | "WRITING" | "DONE" | "FAILED";
@@ -17,14 +19,16 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly store: PlatformStore,
     private readonly retrievalService: RetrievalService,
-    private readonly metrics: MetricsService
+    private readonly metrics: MetricsService,
+    @Optional() private readonly llmClient?: OpenAiCompatibleClient,
+    @Optional() private readonly modelRouter?: ModelRouterService
   ) {}
 
   onModuleInit(): void {
     if (!env.APP_WORKFLOW_ASYNC_ENABLED) {
       return;
     }
-    this.timer = setInterval(() => this.processQueuedTasks(), env.APP_WORKFLOW_WORKER_INTERVAL_MS);
+    this.timer = setInterval(() => void this.processQueuedTasks(), env.APP_WORKFLOW_WORKER_INTERVAL_MS);
     this.timer.unref?.();
   }
 
@@ -58,11 +62,16 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     return this.runResearchTask(task);
   }
 
+  async executeResearchAsync(tenantId: string | undefined, topic: string, modelProfile?: string): Promise<WorkflowTask> {
+    const task = this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
+    return this.runResearchTaskAsync(task);
+  }
+
   enqueueResearch(tenantId: string | undefined, topic: string, modelProfile?: string): WorkflowTask {
     return this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
   }
 
-  processQueuedTasks(): number {
+  async processQueuedTasks(): Promise<number> {
     if (this.running) {
       return 0;
     }
@@ -73,12 +82,48 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .slice(0, 1);
       for (const task of candidates) {
-        this.runResearchTask(task);
+        await this.runResearchTaskAsync(task);
       }
       return candidates.length;
     } finally {
       this.running = false;
     }
+  }
+
+  private async runResearchTaskAsync(task: WorkflowTask): Promise<WorkflowTask> {
+    const started = Date.now();
+    const topic = task.userInput;
+    try {
+      this.transition(task.taskId, "PLANNING");
+      const planStep = this.startStep(task.taskId, "ResearchPlanner", 1, { topic });
+      const subQuestions = await this.planResearchWithLlm(task, topic);
+      this.completeStep(planStep.stepId, "COMPLETED", { subQuestions, strategy: "llm_hybrid_rag" }, { subQuestions }, "Plan research sub-questions with routed LLM fallback.", "plan", { topic });
+
+      this.transition(task.taskId, "SEARCHING");
+      const findings: string[] = [];
+      let order = 2;
+      for (const question of subQuestions) {
+        this.transition(task.taskId, "RETRIEVING");
+        const searchStep = this.startStep(task.taskId, "HybridRetriever", order, { question });
+        const retrieval = await this.retrievalService.hybridRetrieveAsync(question, task.tenantId, task.chatId ?? "", 5);
+        const finding = renderFinding(question, retrieval.documents.map((doc) => doc.content));
+        findings.push(finding);
+        this.completeStep(searchStep.stepId, "COMPLETED", { docsFound: retrieval.documents.length }, { finding }, "Retrieve evidence for sub-question.", "hybrid_retrieve", { question });
+        order += 1;
+      }
+
+      this.transition(task.taskId, "WRITING");
+      const writeStep = this.startStep(task.taskId, "ReportWriter", order, { topic });
+      const report = await this.writeReportWithLlm(task, topic, findings);
+      this.completeStep(writeStep.stepId, "COMPLETED", { reportLength: report.length }, report, "Write research report with routed LLM fallback.", "write_report", { topic });
+      this.completeTask(task.taskId, "DONE", report);
+      this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "DONE" });
+      this.metrics.observe("agent_workflow_task_latency_ms", Date.now() - started, { type: task.type });
+    } catch (error) {
+      this.completeTask(task.taskId, "FAILED", error instanceof Error ? error.message : String(error));
+      this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "FAILED" });
+    }
+    return this.getTask(task.taskId) ?? task;
   }
 
   private runResearchTask(task: WorkflowTask): WorkflowTask {
@@ -227,6 +272,35 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
       createdAt: nowIso()
     });
     this.store.workflowEvents.set(taskId, events);
+  }
+
+  private async planResearchWithLlm(task: WorkflowTask, topic: string): Promise<string[]> {
+    const route = this.modelRouter?.resolve(task.modelProfile, "research_planner", task.tenantId, task.taskId);
+    if (!route || !this.llmClient) {
+      return planResearch(topic);
+    }
+    const result = await this.llmClient.complete({
+      prompt: `Create three focused research sub-questions for: ${topic}. Return one per line.`,
+      route,
+      groundedContext: [],
+      memoryContext: []
+    }).catch(() => undefined);
+    const lines = result?.answer.split("\n").map((line) => line.replace(/^[-*\d.\s]+/, "").trim()).filter(Boolean).slice(0, 5);
+    return lines?.length ? lines : planResearch(topic);
+  }
+
+  private async writeReportWithLlm(task: WorkflowTask, topic: string, findings: string[]): Promise<string> {
+    const route = this.modelRouter?.resolve(task.modelProfile, "research_writer", task.tenantId, task.taskId);
+    if (!route || !this.llmClient) {
+      return renderReport(topic, findings);
+    }
+    const result = await this.llmClient.complete({
+      prompt: `Write a concise research report for ${topic}. Use these findings:\n${findings.join("\n\n")}`,
+      route,
+      groundedContext: findings,
+      memoryContext: []
+    }).catch(() => undefined);
+    return result?.answer.trim() || renderReport(topic, findings);
   }
 }
 

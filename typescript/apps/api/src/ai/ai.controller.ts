@@ -17,7 +17,7 @@ export class AiController {
   @Post("ai/react/chat/stream")
   @Header("Content-Type", "text/event-stream")
   async reactChatStream(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
-    return this.aiService.textStream(await this.aiService.reactChat(request, tenantFrom(req)));
+    return this.aiService.reactChatStream(request, tenantFrom(req));
   }
 
   @All("ai/chat")

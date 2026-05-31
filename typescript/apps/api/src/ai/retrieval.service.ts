@@ -1,8 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import { cosineSimilarity, scoreByKeywordDensity, scoreByTokenOverlap, tokenize, truncateText } from "../common/text.js";
 import { env } from "../config/env.js";
 import { embeddingVector, KnowledgeChunk, PlatformStore } from "../platform/platform.store.js";
+import { VectorClient } from "./vector.client.js";
 
 export interface ScoredChunk extends KnowledgeChunk {
   retrievalScore: number;
@@ -27,7 +28,10 @@ export interface HybridRetrievalResult {
 
 @Injectable()
 export class RetrievalService {
-  constructor(private readonly store: PlatformStore) {}
+  constructor(
+    private readonly store: PlatformStore,
+    @Optional() private readonly vectorClient?: VectorClient
+  ) {}
 
   addDocumentChunks(params: {
     tenantId: string;
@@ -57,6 +61,7 @@ export class RetrievalService {
       createdAt: new Date().toISOString()
     }));
     this.store.knowledgeChunks.push(...chunks);
+    void this.vectorClient?.upsertChunks(chunks).catch(() => undefined);
     return chunks;
   }
 
@@ -93,14 +98,15 @@ export class RetrievalService {
   }
 
   async hybridRetrieveAsync(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K): Promise<HybridRetrievalResult> {
-    const vectorDocs = this.vectorRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, 0.4));
+    const vectorDocs = (await this.vectorRetrieveAsync(query, tenantId, chatId, topK)).map((doc) => applyWeight(doc, 0.4));
     const keywordDocs = this.keywordRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, 0.25));
     const graphDocs = this.graphRetrieve(query, tenantId, topK).map((doc) => applyWeight(doc, 0.2));
     const webDocs = (await this.webRetrieveAsync(query, topK)).map((doc) => applyWeight(doc, 0.15));
     const all = [...vectorDocs, ...keywordDocs, ...graphDocs, ...webDocs]
       .filter((doc) => doc.retrievalScore >= env.RAG_SIMILARITY_THRESHOLD);
     const deduped = deduplicate(all);
-    const judged = judgeEvidence(query, rerank(query, deduped));
+    const reranked = await this.vectorClient?.rerank(query, deduped).catch(() => undefined) ?? rerank(query, deduped);
+    const judged = await this.vectorClient?.judgeEvidence(query, reranked).catch(() => undefined) ?? judgeEvidence(query, reranked);
     return {
       documents: judged.slice(0, topK),
       totalBeforeDedup: all.length,
@@ -127,6 +133,27 @@ export class RetrievalService {
       .filter((chunk) => chunk.retrievalScore > 0)
       .sort((a, b) => b.retrievalScore - a.retrievalScore)
       .slice(0, topK);
+  }
+
+  private async vectorRetrieveAsync(query: string, tenantId: string, chatId: string, topK: number): Promise<ScoredChunk[]> {
+    const external = await this.vectorClient?.searchPgVector(query, tenantId, chatId, topK).catch(() => undefined);
+    if (external?.length) {
+      return external.map((doc, index) => scored({
+        chunkId: String(doc.chunkId ?? `pgvector:${index}`),
+        tenantId: String(doc.tenantId ?? tenantId),
+        chatId: String(doc.chatId ?? chatId),
+        jobId: String(doc.jobId ?? "pgvector"),
+        fileName: String(doc.fileName ?? doc.title ?? "pgvector"),
+        sourceType: String(doc.sourceType ?? "VECTOR"),
+        chunkIndex: Number(doc.chunkIndex ?? index),
+        content: String(doc.content ?? ""),
+        tokenSet: tokenize(String(doc.content ?? "")),
+        vector: Array.isArray(doc.vector) ? doc.vector : embeddingVector(String(doc.content ?? "")),
+        metadata: doc.metadata ?? {},
+        createdAt: String(doc.createdAt ?? new Date().toISOString())
+      }, Number(doc.retrievalScore ?? doc.finalScore ?? 0.5), "vector"));
+    }
+    return this.vectorRetrieve(query, tenantId, chatId, topK);
   }
 
   private keywordRetrieve(query: string, tenantId: string, chatId: string, topK: number): ScoredChunk[] {

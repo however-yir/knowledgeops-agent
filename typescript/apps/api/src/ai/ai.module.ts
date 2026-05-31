@@ -5,11 +5,12 @@ import { AiController } from "./ai.controller.js";
 import { AiService } from "./ai.service.js";
 import { OpenAiCompatibleClient } from "./llm.client.js";
 import { RetrievalService } from "./retrieval.service.js";
+import { VectorClient } from "./vector.client.js";
 
 @Module({
   imports: [HistoryModule],
   controllers: [AiController],
-  providers: [AiService, RetrievalService, OpenAiCompatibleClient],
-  exports: [AiService, RetrievalService]
+  providers: [AiService, RetrievalService, OpenAiCompatibleClient, VectorClient],
+  exports: [AiService, RetrievalService, OpenAiCompatibleClient, VectorClient]
 })
 export class AiModule {}
