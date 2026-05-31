@@ -4,9 +4,13 @@
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "build": "pnpm -r build",
+    "contract:diff": "node scripts/contract-diff.mjs",
+    "db:generate": "pnpm --filter @knowledgeops/api exec prisma generate --schema ../../prisma/schema.prisma",
     "db:validate": "node scripts/check-prisma-schema.mjs",
+    "frontend:contract": "node scripts/frontend-contract-smoke.mjs",
     "parity": "node scripts/check-parity.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
+    "prod:gate": "pnpm parity && pnpm db:validate && pnpm contract:diff && pnpm frontend:contract && pnpm perf:smoke",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @knowledgeops/shared build && pnpm -r test"
   },

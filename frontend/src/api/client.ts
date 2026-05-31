@@ -8,6 +8,10 @@ import type {
   EvalComparison,
   EvalDataset,
   EvalDatasetCreate,
+  GraphEntity,
+  GraphFact,
+  IngestionJob,
+  MemoryItem,
   EvalRun,
   EvalRunRequest,
   FeedbackRequest,
@@ -439,6 +443,95 @@ export async function submitAnswerFeedback(
   if (!response.ok || !payload || payload.ok !== 1) {
     throw formatHttpError(response.status, payload?.msg ?? 'submit feedback failed');
   }
+}
+
+export async function uploadKnowledgeFile(
+  chatId: string,
+  file: File,
+  auth?: AuthContext,
+  idempotencyKey?: string,
+): Promise<{ ok: number; msg: string; job: IngestionJob | null }> {
+  const form = new FormData();
+  form.set('file', file);
+  const response = await fetch(resolveApi(`/ai/pdf/upload/${encodeURIComponent(chatId)}`), {
+    method: 'POST',
+    headers: {
+      ...buildAuthHeaders(auth),
+      ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
+    },
+    body: form,
+  });
+  const payload = await parseJsonSafely<{ ok: number; msg: string; job: IngestionJob | null }>(
+    response,
+  );
+  if (!response.ok || !payload || payload.ok !== 1) {
+    throw formatHttpError(response.status, payload?.msg ?? 'upload failed');
+  }
+  return payload;
+}
+
+export async function listMemoryItems(
+  auth?: AuthContext,
+  params?: { userId?: string; type?: string; limit?: number },
+): Promise<MemoryItem[]> {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ai/memory/items', {
+        userId: params?.userId ?? 'anonymous',
+        type: params?.type,
+        limit: params?.limit ?? 20,
+      }),
+    ),
+    { method: 'GET', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<MemoryItem[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list memory failed');
+  }
+  return payload;
+}
+
+export async function listGraphEntities(
+  auth?: AuthContext,
+  params?: { q?: string; type?: string; limit?: number },
+): Promise<GraphEntity[]> {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ai/graph/entities', {
+        q: params?.q,
+        type: params?.type,
+        limit: params?.limit ?? 50,
+      }),
+    ),
+    { method: 'GET', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<GraphEntity[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list graph entities failed');
+  }
+  return payload;
+}
+
+export async function listGraphFacts(
+  auth?: AuthContext,
+  params?: { q?: string; predicate?: string; minConfidence?: number; limit?: number },
+): Promise<GraphFact[]> {
+  const response = await fetch(
+    resolveApi(
+      withQuery('/ai/graph/facts', {
+        q: params?.q,
+        predicate: params?.predicate,
+        minConfidence: params?.minConfidence,
+        limit: params?.limit ?? 50,
+      }),
+    ),
+    { method: 'GET', headers: buildAuthHeaders(auth) },
+  );
+  const payload = await parseJsonSafely<GraphFact[]>(response);
+  if (!response.ok || !payload) {
+    throw formatHttpError(response.status, 'list graph facts failed');
+  }
+  return payload;
 }
 
 export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCostSummary> {

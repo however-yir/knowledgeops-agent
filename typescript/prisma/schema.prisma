@@ -502,3 +502,39 @@ model EvalResult {
   @@index([tenantId, datasetId, caseId], map: "idx_eval_result_tenant_dataset_case")
   @@map("eval_result")
 }
+
+model KnowledgeChunk {
+  id           BigInt   @id @default(autoincrement())
+  chunkId      String   @unique(map: "uk_knowledge_chunk_id") @map("chunk_id") @db.VarChar(128)
+  tenantId     String   @default("public") @map("tenant_id") @db.VarChar(64)
+  chatId       String   @map("chat_id") @db.VarChar(128)
+  jobId        String   @map("job_id") @db.VarChar(64)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  sourceType   String   @map("source_type") @db.VarChar(32)
+  chunkIndex   Int      @map("chunk_index")
+  content      String   @db.LongText
+  metadataJson Json?    @map("metadata_json")
+  vectorJson   Json?    @map("vector_json")
+  createdAt    DateTime @map("created_at")
+  updatedAt    DateTime @map("updated_at")
+
+  @@unique([tenantId, jobId, chunkIndex], map: "uk_knowledge_chunk_tenant_job_index")
+  @@index([tenantId, chatId, chunkIndex], map: "idx_knowledge_chunk_tenant_chat")
+  @@index([tenantId, sourceType], map: "idx_knowledge_chunk_tenant_source")
+  @@map("knowledge_chunk")
+}
+
+model HarnessEvent {
+  id          BigInt   @id @default(autoincrement())
+  eventId     String   @unique(map: "uk_harness_event_id") @map("event_id") @db.VarChar(64)
+  action      String   @db.VarChar(64)
+  source      String   @db.VarChar(64)
+  status      String   @db.VarChar(32)
+  latencyMs   BigInt   @default(0) @map("latency_ms")
+  payloadJson Json?    @map("payload_json")
+  createdAt   DateTime @map("created_at")
+
+  @@index([action, status], map: "idx_harness_event_action_status")
+  @@index([createdAt], map: "idx_harness_event_created")
+  @@map("harness_event")
+}

@@ -227,3 +227,57 @@ export interface EvalComparison {
   baseline?: EvalRun | null;
   current?: EvalRun | null;
 }
+
+export interface IngestionJob {
+  jobId: string;
+  chatId: string;
+  sourceName: string;
+  status: string;
+  attemptCount: number;
+  maxRetries: number;
+  errorMessage?: string;
+  traceId?: string;
+  queueBackend: string;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface MemoryItem {
+  memoryId: string;
+  tenantId: string;
+  userId: string;
+  type: string;
+  content: string;
+  source?: string;
+  sourceTaskId?: string;
+  confidence: number;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GraphEntity {
+  entityId: string;
+  tenantId: string;
+  name: string;
+  type: string;
+  description?: string;
+  aliases: string[];
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GraphFact {
+  factId: string;
+  tenantId: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence: number;
+  source?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}

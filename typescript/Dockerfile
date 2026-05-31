@@ -21,5 +21,10 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/packages/shared/dist packages/shared/dist
+RUN addgroup -S app && adduser -S app -G app \
+  && mkdir -p /app/data/uploads \
+  && chown -R app:app /app
+USER app
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -qO- http://127.0.0.1:3000/actuator/health || exit 1
 CMD ["pnpm", "--filter", "@knowledgeops/api", "start"]

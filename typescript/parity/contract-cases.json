@@ -1,0 +1,53 @@
+[
+  {
+    "label": "health",
+    "method": "GET",
+    "path": "/actuator/health",
+    "expectStatus": 200
+  },
+  {
+    "label": "react chat",
+    "method": "POST",
+    "path": "/ai/react/chat",
+    "body": { "prompt": "contract smoke", "chatId": "contract-smoke" },
+    "expectStatus": 200
+  },
+  {
+    "label": "react stream",
+    "method": "POST",
+    "path": "/ai/react/chat/stream",
+    "body": { "prompt": "contract stream smoke", "chatId": "contract-stream-smoke" },
+    "expectStatus": 200,
+    "sse": true
+  },
+  {
+    "label": "ingestion jobs",
+    "method": "GET",
+    "path": "/ingestion/jobs?chatId=contract-smoke",
+    "expectStatus": 200
+  },
+  {
+    "label": "cost summary",
+    "method": "GET",
+    "path": "/cost/summary",
+    "expectStatus": 200
+  },
+  {
+    "label": "memory list",
+    "method": "GET",
+    "path": "/ai/memory/items?userId=anonymous",
+    "expectStatus": 200
+  },
+  {
+    "label": "graph entities",
+    "method": "GET",
+    "path": "/ai/graph/entities",
+    "expectStatus": 200
+  },
+  {
+    "label": "evaluation datasets",
+    "method": "GET",
+    "path": "/ai/evaluation/datasets",
+    "expectStatus": 200
+  }
+]

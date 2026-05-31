@@ -24,7 +24,8 @@ export interface ApiKeyRecord {
 }
 
 export interface RefreshTokenRecord {
-  token: string;
+  tokenHash: string;
+  token?: string;
   principal: string;
   roles: string[];
   tenantId: string;
@@ -280,6 +281,8 @@ interface PersistedState {
 
 @Injectable()
 export class PlatformStore {
+  private readonly persistenceSinks: Array<() => void | Promise<void>> = [];
+
   readonly apiKeys = new Map<string, ApiKeyRecord>();
   readonly refreshTokens = new Map<string, RefreshTokenRecord>();
   readonly ingestionJobs = new Map<string, IngestionJobRecord>();
@@ -354,6 +357,13 @@ export class PlatformStore {
       harnessEvents: this.harnessEvents,
       metrics: Object.fromEntries(this.metrics.entries())
     } satisfies PersistedState, null, 2));
+    for (const sink of this.persistenceSinks) {
+      void Promise.resolve(sink()).catch(() => undefined);
+    }
+  }
+
+  registerPersistenceSink(sink: () => void | Promise<void>): void {
+    this.persistenceSinks.push(sink);
   }
 
   incrementMetric(name: string, labels: Record<string, string | number | boolean | undefined> = {}, value = 1): void {
@@ -367,7 +377,10 @@ export class PlatformStore {
     }
     const raw = readState(env.APP_STATE_FILE);
     raw.apiKeys?.forEach((record) => this.apiKeys.set(record.keyHash, record));
-    raw.refreshTokens?.forEach((record) => this.refreshTokens.set(record.token, record));
+    raw.refreshTokens?.forEach((record) => {
+      const tokenHash = record.tokenHash || sha256Hex(record.token ?? "");
+      this.refreshTokens.set(tokenHash, { ...record, tokenHash, token: undefined });
+    });
     raw.ingestionJobs?.forEach((record) => this.ingestionJobs.set(`${record.tenantId}:${record.jobId}`, record));
     raw.idempotencyIndex?.forEach(([key, value]) => this.idempotencyIndex.set(key, value));
     raw.knowledgeChunks?.forEach((chunk) => this.knowledgeChunks.push({

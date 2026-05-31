@@ -10,9 +10,12 @@
     "apps/api/src/evaluation/evaluation.controller.ts",
     "apps/api/src/operations/operations.controller.ts",
     "apps/api/src/sessions/sessions.controller.ts",
+    "apps/api/src/ai/llm.client.ts",
+    "apps/api/src/ingestion/ingestion.worker.ts",
     "apps/api/src/platform/model-router.service.ts",
     "apps/api/src/platform/tenant-cost.service.ts",
     "apps/api/src/platform/metrics.service.ts",
+    "apps/api/src/platform/prisma.persistence.service.ts",
     "apps/api/src/auth/rate-limit.middleware.ts",
     "apps/api/src/auth/security-headers.middleware.ts",
     "prisma/schema.prisma",
@@ -73,9 +76,13 @@
     { "label": "GET /ai/memory/items", "tsFragments": ["Get(\"ai/memory/items\")"] },
     { "label": "POST /ai/memory/items", "tsFragments": ["Post(\"ai/memory/items\")"] },
     { "label": "DELETE /ai/memory/items/:memoryId", "tsFragments": ["Delete(\"ai/memory/items/:memoryId\")"] },
+    { "label": "GET /ai/memory/context", "tsFragments": ["Get(\"ai/memory/context\")"] },
+    { "label": "POST /ai/memory/cleanup", "tsFragments": ["Post(\"ai/memory/cleanup\")"] },
     { "label": "GET /ai/graph/entities", "tsFragments": ["Get(\"ai/graph/entities\")"] },
     { "label": "POST /ai/graph/entities", "tsFragments": ["Post(\"ai/graph/entities\")"] },
+    { "label": "GET /ai/graph/entities/:entityId/neighbors", "tsFragments": ["Get(\"ai/graph/entities/:entityId/neighbors\")"] },
     { "label": "POST /ai/graph/relations", "tsFragments": ["Post(\"ai/graph/relations\")"] },
+    { "label": "GET /ai/graph/facts", "tsFragments": ["Get(\"ai/graph/facts\")"] },
     { "label": "POST /ai/graph/facts", "tsFragments": ["Post(\"ai/graph/facts\")"] }
   ]
 }

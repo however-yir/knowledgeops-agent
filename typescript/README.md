@@ -17,8 +17,12 @@ prisma/             TypeScript-side database model mapping
 cd typescript
 pnpm install
 pnpm typecheck
+pnpm test
 pnpm parity
 pnpm db:validate
+pnpm contract:diff
+pnpm frontend:contract
+pnpm perf:smoke
 pnpm build
 pnpm --filter @knowledgeops/api dev
 ```
@@ -58,8 +62,12 @@ GET  /audit/logs
 GET  /actuator/prometheus
 GET  /ai/memory/items
 POST /ai/memory/items
+GET  /ai/memory/context
+POST /ai/memory/cleanup
 GET  /ai/graph/entities
 POST /ai/graph/entities
+GET  /ai/graph/entities/:entityId/neighbors
+GET  /ai/graph/facts
 POST /ai/graph/relations
 POST /ai/graph/facts
 ```
@@ -78,7 +86,7 @@ The local TypeScript demo API key defaults to:
 local-demo-api-key
 ```
 
-State is persisted locally through `APP_STATE_FILE` for CI and single-node deployments, while `prisma/schema.prisma` keeps the MySQL table model aligned with the Java Flyway schema. Docker enables `APP_SECURITY_ENABLED=true`, so protected routes require either:
+State is persisted locally through `APP_STATE_FILE` for CI and single-node deployments. For production, set `APP_PRISMA_ENABLED=true` and `DATABASE_URL=mysql://...`; the Prisma persistence bridge writes auth, API key, refresh token hash, audit, ingestion, sessions, chunks, workflow, memory, graph, evaluation, cost, exposure, and harness-event state into MySQL with transaction/upsert semantics. Docker enables `APP_SECURITY_ENABLED=true`, so protected routes require either:
 
 ```text
 Authorization: Bearer <jwt>
@@ -89,15 +97,42 @@ When security is enabled, the TypeScript API applies the same route-level `PERM_
 
 The TypeScript runtime now includes Java-parity local implementations for:
 
-- hybrid retrieval over vector-like hashed embeddings, keyword matches, graph facts/entities, and optional web-search configuration
-- ingestion idempotency, file safety checks, retry metadata, and chunk indexing
+- OpenAI-compatible LLM generation with model routing, timeout/retry, usage capture, and deterministic fallback
+- hybrid retrieval over vector-like hashed embeddings, BM25/keyword matches, graph facts/entities, optional web-search backend, rerank, evidence judge, citations, and retrieval stats
+- ingestion idempotency, file safety checks, MIME/size limits, retry delay, DLQ status, background worker mode, and chunk indexing
 - tenant cost governance, budget hard limits, model routing, and quality-vs-cost exposure logging
-- memory items/events, graph entities/relations/facts, workflow task/step/event lifecycle, and trusted agent actions
+- memory items/events/context snapshots/cleanup, graph entities/relations/facts/neighbors, workflow task/step/event lifecycle with optional async worker, and trusted agent actions including workspace diff/apply and MCP HTTP adapter
+
+Production feature flags:
+
+```bash
+APP_LLM_ENABLED=true
+OPENAI_API_KEY=...
+APP_PRISMA_ENABLED=true
+DATABASE_URL=mysql://user:pass@host:3306/knowledgeops_agent
+APP_INGESTION_WORKER_ENABLED=true
+APP_WORKFLOW_ASYNC_ENABLED=true
+APP_WEB_SEARCH_ENABLED=true
+APP_WEB_SEARCH_ENDPOINT=https://search.example.com/search
+APP_MCP_HTTP_ALLOWLIST=https://mcp.example.com/
+```
+
+Before enabling Prisma in a production image or host, generate the Prisma client for the checked-in schema:
+
+```bash
+pnpm db:generate
+```
 
 With the API running, use the local performance smoke to guard the same p95/error-rate SLO shape as the Java k6 profile:
 
 ```bash
 BASE_URL=http://localhost:3000 pnpm perf:smoke
+```
+
+To run a live Java-vs-TS contract comparison, start both services and set:
+
+```bash
+APP_JAVA_BASE_URL=http://localhost:8080 APP_TS_BASE_URL=http://localhost:3000 pnpm contract:diff
 ```
 
 ## Migration Rule

@@ -55,7 +55,7 @@ export class IngestionService {
       idempotencyKey,
       contentHash,
       rawText: extractText(sourceName, params.content),
-      status: "PENDING",
+      status: env.APP_INGESTION_WORKER_ENABLED ? "QUEUED" : "PENDING",
       attemptCount: 0,
       maxRetries: env.APP_INGESTION_MAX_RETRIES,
       traceId: params.traceId ?? "",
@@ -117,7 +117,7 @@ export class IngestionService {
     } catch (error) {
       job.attemptCount += 1;
       job.errorMessage = truncateError(error instanceof Error ? error.message : String(error));
-      job.status = job.attemptCount < job.maxRetries ? "RETRY" : "FAILED";
+      job.status = job.attemptCount < job.maxRetries ? "RETRY" : "DLQ";
       job.nextRetryAt = job.status === "RETRY"
         ? new Date(Date.now() + env.APP_INGESTION_BASE_DELAY_SECONDS * Math.max(1, job.attemptCount) * 1000).toISOString()
         : undefined;
@@ -127,6 +127,20 @@ export class IngestionService {
     job.updatedAt = nowIso();
     this.store.persist();
     return "processed";
+  }
+
+  processReadyBatch(limit = env.APP_INGESTION_WORKER_CONCURRENCY): number {
+    const candidates = [...this.store.ingestionJobs.values()]
+      .filter((job) => isReady(job))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, Math.max(1, limit));
+    let processed = 0;
+    for (const job of candidates) {
+      if (this.processOne(job.tenantId, job.jobId) === "processed") {
+        processed += 1;
+      }
+    }
+    return processed;
   }
 
   enqueueReadyRetries(tenantId: string, limit = 50): number {
@@ -169,6 +183,14 @@ async function persistUpload(jobId: string, sourceName: string, content: Buffer)
 function scanFile(sourceName: string, content: Buffer): void {
   const lower = sourceName.toLowerCase();
   const head = content.subarray(0, 8192).toString("latin1");
+  if (content.length > env.APP_INGESTION_MAX_FILE_BYTES) {
+    throw new Error(`file exceeds max size ${env.APP_INGESTION_MAX_FILE_BYTES} bytes`);
+  }
+  const mimeType = inferMimeType(lower);
+  const allowed = new Set(env.APP_ALLOWED_UPLOAD_MIME_TYPES.split(",").map((item) => item.trim()).filter(Boolean));
+  if (!allowed.has(mimeType) && !allowed.has("application/octet-stream")) {
+    throw new Error(`file mime type ${mimeType} is not allowed`);
+  }
   if (head.includes("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")) {
     throw new Error("file blocked by malware signature");
   }
@@ -196,6 +218,19 @@ function sanitizeFilename(value: string): string {
 
 function inferSourceType(sourceName: string): string {
   return sourceName.toLowerCase().endsWith(".pdf") ? "PDF" : "TEXT";
+}
+
+function inferMimeType(sourceName: string): string {
+  if (sourceName.endsWith(".pdf")) {
+    return "application/pdf";
+  }
+  if (sourceName.endsWith(".md") || sourceName.endsWith(".markdown")) {
+    return "text/markdown";
+  }
+  if (sourceName.endsWith(".txt") || sourceName.endsWith(".text")) {
+    return "text/plain";
+  }
+  return "application/octet-stream";
 }
 
 function sha256Buffer(content: Buffer): string {

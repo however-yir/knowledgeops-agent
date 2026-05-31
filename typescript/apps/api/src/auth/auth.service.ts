@@ -122,11 +122,12 @@ export class AuthService {
     if (!refreshToken) {
       return { ok: 0, msg: "invalid refresh token" };
     }
-    const record = this.store.refreshTokens.get(refreshToken);
+    const tokenHash = sha256Hex(refreshToken);
+    const record = this.store.refreshTokens.get(tokenHash);
     if (!record || record.revokedAt || Date.parse(record.expiresAt) <= Date.now()) {
       return { ok: 0, msg: "invalid refresh token" };
     }
-    this.store.refreshTokens.delete(refreshToken);
+    this.store.refreshTokens.delete(tokenHash);
     this.store.persist();
     return this.issueTokens(record.principal, record.roles, record.tenantId);
   }
@@ -200,9 +201,10 @@ export class AuthService {
       expiresIn: `${env.APP_JWT_EXPIRE_MINUTES}m`
     });
     const refreshToken = newId("refresh");
+    const tokenHash = sha256Hex(refreshToken);
     const refreshExpiresAt = new Date(Date.now() + env.APP_REFRESH_EXPIRE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    this.store.refreshTokens.set(refreshToken, {
-      token: refreshToken,
+    this.store.refreshTokens.set(tokenHash, {
+      tokenHash,
       principal,
       roles,
       tenantId,

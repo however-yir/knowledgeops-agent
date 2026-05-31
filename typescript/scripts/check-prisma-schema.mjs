@@ -34,7 +34,9 @@ const requiredTables = [
   "eval_dataset",
   "eval_case",
   "eval_run",
-  "eval_result"
+  "eval_result",
+  "knowledge_chunk",
+  "harness_event"
 ];
 
 const mappedTables = new Set([...schema.matchAll(/@@map\("([^"]+)"\)/g)].map((match) => match[1]));

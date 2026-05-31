@@ -10,19 +10,19 @@ export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   @Post("ai/react/chat")
-  reactChat(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
+  async reactChat(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
     return this.aiService.reactChat(request, tenantFrom(req));
   }
 
   @Post("ai/react/chat/stream")
   @Header("Content-Type", "text/event-stream")
-  reactChatStream(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
-    return this.aiService.textStream(this.aiService.reactChat(request, tenantFrom(req)));
+  async reactChatStream(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
+    return this.aiService.textStream(await this.aiService.reactChat(request, tenantFrom(req)));
   }
 
   @All("ai/chat")
   @Header("Content-Type", "text/html;charset=utf-8")
-  chat(
+  async chat(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
     @Query("modelProfile") modelProfile: string | undefined,
@@ -30,12 +30,12 @@ export class AiController {
     @Req() req: FastifyRequest
   ) {
     const request = chatRequestFrom(prompt, chatId, modelProfile, body);
-    return this.aiService.reactChat(request, tenantFrom(req), "chat").answer;
+    return (await this.aiService.reactChat(request, tenantFrom(req), "chat")).answer;
   }
 
   @All("ai/service")
   @Header("Content-Type", "text/html;charset=utf-8")
-  service(
+  async service(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
     @Query("modelProfile") modelProfile: string | undefined,
@@ -43,12 +43,12 @@ export class AiController {
     @Req() req: FastifyRequest
   ) {
     const request = chatRequestFrom(prompt, chatId, modelProfile, body);
-    return this.aiService.reactChat(request, tenantFrom(req), "service").answer;
+    return (await this.aiService.reactChat(request, tenantFrom(req), "service")).answer;
   }
 
   @All("ai/pdf/chat")
   @Header("Content-Type", "text/html;charset=UTF-8")
-  pdfChat(
+  async pdfChat(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
     @Query("modelProfile") modelProfile: string | undefined,
@@ -56,7 +56,7 @@ export class AiController {
     @Req() req: FastifyRequest
   ) {
     const request = chatRequestFrom(prompt, chatId, modelProfile, body);
-    const result = this.aiService.reactChat(request, tenantFrom(req), "pdf");
+    const result = await this.aiService.reactChat(request, tenantFrom(req), "pdf");
     const citations = result.citations?.length
       ? result.citations.map((citation, index) => `[${index + 1}] ${citation}`).join("\n")
       : "";

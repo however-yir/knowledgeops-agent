@@ -4,6 +4,7 @@ import { createReadStream, existsSync } from "node:fs";
 import { buffer } from "node:stream/consumers";
 
 import { normalizeTenant, TENANT_HEADER } from "../common/tenant.js";
+import { env } from "../config/env.js";
 import { HistoryService } from "../history/history.service.js";
 import { IngestionService } from "./ingestion.service.js";
 
@@ -27,7 +28,9 @@ export class IngestionController {
       idempotencyKey
     });
     this.historyService.saveSession(tenantId, "pdf", chatId);
-    this.ingestionService.processOne(tenantId, job.jobId);
+    if (!env.APP_INGESTION_WORKER_ENABLED) {
+      this.ingestionService.processOne(tenantId, job.jobId);
+    }
     return { ok: 1, msg: "accepted", job: this.ingestionService.getJob(tenantId, job.jobId) ?? job };
   }
 

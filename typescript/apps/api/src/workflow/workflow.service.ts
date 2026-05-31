@@ -1,20 +1,38 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
 import { normalizeTenant } from "../common/tenant.js";
+import { env } from "../config/env.js";
 import { MetricsService } from "../platform/metrics.service.js";
 import { PlatformStore, WorkflowStep, WorkflowTask } from "../platform/platform.store.js";
 
 type WorkflowState = "CREATED" | "PLANNING" | "SEARCHING" | "RETRIEVING" | "WRITING" | "DONE" | "FAILED";
 
 @Injectable()
-export class WorkflowService {
+export class WorkflowService implements OnModuleInit, OnModuleDestroy {
+  private timer: NodeJS.Timeout | undefined;
+  private running = false;
+
   constructor(
     private readonly store: PlatformStore,
     private readonly retrievalService: RetrievalService,
     private readonly metrics: MetricsService
   ) {}
+
+  onModuleInit(): void {
+    if (!env.APP_WORKFLOW_ASYNC_ENABLED) {
+      return;
+    }
+    this.timer = setInterval(() => this.processQueuedTasks(), env.APP_WORKFLOW_WORKER_INTERVAL_MS);
+    this.timer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+  }
 
   createTask(tenantId: string | undefined, type: string, userInput: string, modelProfile?: string, chatId?: string, sessionId?: string): WorkflowTask {
     const task: WorkflowTask = {
@@ -36,8 +54,36 @@ export class WorkflowService {
   }
 
   executeResearch(tenantId: string | undefined, topic: string, modelProfile?: string): WorkflowTask {
-    const started = Date.now();
     const task = this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
+    return this.runResearchTask(task);
+  }
+
+  enqueueResearch(tenantId: string | undefined, topic: string, modelProfile?: string): WorkflowTask {
+    return this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
+  }
+
+  processQueuedTasks(): number {
+    if (this.running) {
+      return 0;
+    }
+    this.running = true;
+    try {
+      const candidates = [...this.store.workflowTasks.values()]
+        .filter((task) => task.type === "DEEP_RESEARCH" && !["DONE", "FAILED"].includes(task.status))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .slice(0, 1);
+      for (const task of candidates) {
+        this.runResearchTask(task);
+      }
+      return candidates.length;
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private runResearchTask(task: WorkflowTask): WorkflowTask {
+    const started = Date.now();
+    const topic = task.userInput;
     try {
       this.transition(task.taskId, "PLANNING");
       const planStep = this.startStep(task.taskId, "ResearchPlanner", 1, { topic });
@@ -64,6 +110,7 @@ export class WorkflowService {
       this.completeTask(task.taskId, "DONE", report);
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "DONE" });
       this.metrics.increment("agent_workflow_task_latency_ms_sum", { type: task.type }, Date.now() - started);
+      this.metrics.observe("agent_workflow_task_latency_ms", Date.now() - started, { type: task.type });
     } catch (error) {
       this.completeTask(task.taskId, "FAILED", error instanceof Error ? error.message : String(error));
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "FAILED" });

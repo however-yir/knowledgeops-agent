@@ -107,6 +107,49 @@ export class OperationsController {
     return this.store.memoryEvents.get(memoryId) ?? [];
   }
 
+  @Get("ai/memory/context")
+  memoryContext(
+    @Headers(TENANT_HEADER) tenantHeader: string | undefined,
+    @Query("userId") userId = "anonymous",
+    @Query("prompt") prompt = "",
+    @Query("limit") limit = "8"
+  ) {
+    const tenantId = normalizeTenant(tenantHeader);
+    const now = Date.now();
+    const tokens = prompt.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const items = this.store.memoryItems
+      .filter((item) => item.tenantId === tenantId && item.userId === userId)
+      .filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
+      .map((item) => ({
+        ...item,
+        relevance: clamp(tokens.filter((token) => item.content.toLowerCase().includes(token)).length / Math.max(1, tokens.length) + item.confidence * 0.2, 0, 1)
+      }))
+      .sort((a, b) => b.relevance - a.relevance || b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, Math.max(1, Math.min(Number(limit), 50)));
+    return {
+      userId,
+      tenantId,
+      items,
+      snapshot: items.map((item) => `[${item.type}:${item.confidence}] ${item.content}`).join("\n")
+    };
+  }
+
+  @Post("ai/memory/cleanup")
+  cleanupMemory(@Headers(TENANT_HEADER) tenantHeader: string | undefined) {
+    const tenantId = normalizeTenant(tenantHeader);
+    const before = this.store.memoryItems.length;
+    const now = Date.now();
+    for (let index = this.store.memoryItems.length - 1; index >= 0; index -= 1) {
+      const item = this.store.memoryItems[index];
+      if (item.tenantId === tenantId && item.expiresAt && Date.parse(item.expiresAt) <= now) {
+        this.store.memoryItems.splice(index, 1);
+        appendMemoryEvent(this.store, item.memoryId, "EXPIRE", "retention cleanup");
+      }
+    }
+    this.store.persist();
+    return { ok: 1, removed: before - this.store.memoryItems.length };
+  }
+
   @Get("ai/graph/entities")
   graphEntities(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Query("q") query = "", @Query("type") type?: string, @Query("limit") limit = "50") {
     const tenantId = normalizeTenant(tenantHeader);
@@ -174,6 +217,19 @@ export class OperationsController {
     return relation;
   }
 
+  @Get("ai/graph/entities/:entityId/neighbors")
+  graphNeighbors(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("entityId") entityId: string, @Query("limit") limit = "50") {
+    const tenantId = normalizeTenant(tenantHeader);
+    const max = Math.max(1, Math.min(Number(limit), 100));
+    const relations = this.store.graphRelations
+      .filter((relation) => relation.tenantId === tenantId && (relation.sourceEntityId === entityId || relation.targetEntityId === entityId))
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, max);
+    const entityIds = new Set(relations.flatMap((relation) => [relation.sourceEntityId, relation.targetEntityId]));
+    const entities = this.store.graphEntities.filter((entity) => entity.tenantId === tenantId && entityIds.has(entity.entityId));
+    return { entityId, relations, entities };
+  }
+
   @Post("ai/graph/facts")
   addGraphFact(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: {
     subject?: string;
@@ -202,6 +258,26 @@ export class OperationsController {
     this.store.graphFacts.push(fact);
     this.store.persist();
     return fact;
+  }
+
+  @Get("ai/graph/facts")
+  graphFacts(
+    @Headers(TENANT_HEADER) tenantHeader: string | undefined,
+    @Query("q") query = "",
+    @Query("predicate") predicate?: string,
+    @Query("minConfidence") minConfidence = "0",
+    @Query("limit") limit = "50"
+  ) {
+    const tenantId = normalizeTenant(tenantHeader);
+    const normalized = query.trim().toLowerCase();
+    const min = clamp(Number(minConfidence), 0, 1);
+    return this.store.graphFacts
+      .filter((fact) => fact.tenantId === tenantId)
+      .filter((fact) => !predicate || fact.predicate === predicate)
+      .filter((fact) => fact.confidence >= min)
+      .filter((fact) => !normalized || `${fact.subject} ${fact.predicate} ${fact.object}`.toLowerCase().includes(normalized))
+      .sort((a, b) => b.confidence - a.confidence || b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, Math.max(1, Math.min(Number(limit), 100)));
   }
 }
 

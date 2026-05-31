@@ -41,7 +41,7 @@ export class EvaluationController {
   }
 
   @Post("datasets/:datasetId/runs")
-  triggerRun(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("datasetId") datasetId: string, @Body() body?: { modelProfile?: string }) {
+  async triggerRun(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("datasetId") datasetId: string, @Body() body?: { modelProfile?: string }) {
     const tenantId = normalizeTenant(tenantHeader);
     const dataset = this.store.evalDatasets.get(datasetId);
     if (!dataset) {
@@ -51,10 +51,12 @@ export class EvaluationController {
     if (totalCases === 0) {
       return { ok: 0, msg: "dataset has no cases" };
     }
-    const results = (dataset?.cases ?? []).map((testCase, index) => {
+    const results = [];
+    for (const [index, testCase] of (dataset?.cases ?? []).entries()) {
+      const started = Date.now();
       const question = String(testCase.question ?? "");
       const chatId = String(testCase.chatId ?? `eval-${datasetId}-${index}`);
-      const answer = this.aiService.reactChat({ prompt: question, chatId, modelProfile: body?.modelProfile }, tenantId);
+      const answer = await this.aiService.reactChat({ prompt: question, chatId, modelProfile: body?.modelProfile }, tenantId);
       const expectedKeywords = toStringArray(testCase.expectedKeywords);
       const expectedCitations = toStringArray(testCase.expectedCitations);
       const forbiddenKeywords = toStringArray(testCase.forbiddenKeywords);
@@ -74,7 +76,7 @@ export class EvaluationController {
         answerFaithfulness = Math.min(answerFaithfulness, 0.2);
       }
       const score = round(0.30 * retrievalHit + 0.25 * citationCoverage + 0.25 * keywordScore + 0.20 * answerFaithfulness);
-      return {
+      results.push({
         resultId: newId("res"),
         caseId: String(testCase.caseId ?? `case-${index + 1}`),
         status: score >= 0.7 ? "PASSED" : "FAILED",
@@ -87,10 +89,10 @@ export class EvaluationController {
         keywordScore,
         answerFaithfulness,
         score,
-        latencyMs: 0,
+        latencyMs: Date.now() - started,
         errorMessage: score >= 0.7 ? undefined : "expected keywords not sufficiently covered"
-      };
-    });
+      });
+    }
     const passedCases = results.filter((result) => result.status === "PASSED").length;
     const runScore = totalCases === 0 ? 0 : results.reduce((sum, result) => sum + Number(result.score), 0) / totalCases;
     const run = {
@@ -106,7 +108,7 @@ export class EvaluationController {
         retrievalHitRate: totalCases === 0 ? 0 : avg(results.map((result) => Number(result.retrievalHit))),
         citationCoverageRate: totalCases === 0 ? 0 : avg(results.map((result) => Number(result.citationCoverage))),
         answerFaithfulnessScore: totalCases === 0 ? 0 : avg(results.map((result) => Number(result.answerFaithfulness))),
-        avgLatencyMs: 0,
+        avgLatencyMs: avg(results.map((result) => Number(result.latencyMs))),
         failureRate: totalCases === 0 ? 0 : (totalCases - passedCases) / totalCases
       },
       results,

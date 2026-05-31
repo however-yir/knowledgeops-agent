@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post } from "@nestjs/common";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
@@ -20,6 +21,30 @@ export class HarnessController {
         requiredKeys: ["path"],
         optionalKeys: ["maxBytes"],
         riskLevel: "read",
+        trustedOnly: true
+      },
+      {
+        action: "workspace_diff",
+        runtime: "workspace",
+        requiredKeys: ["path", "content"],
+        optionalKeys: [],
+        riskLevel: "write_preview",
+        trustedOnly: true
+      },
+      {
+        action: "workspace_apply_patch",
+        runtime: "workspace",
+        requiredKeys: ["path", "content"],
+        optionalKeys: ["expectedSha256"],
+        riskLevel: "write",
+        trustedOnly: true
+      },
+      {
+        action: "mcp_http_call",
+        runtime: "mcp",
+        requiredKeys: ["url", "tool"],
+        optionalKeys: ["arguments"],
+        riskLevel: "external_call",
         trustedOnly: true
       },
       {
@@ -66,7 +91,7 @@ export class HarnessController {
   }
 
   @Post("actions/execute/:token")
-  execute(@Param("token") token: string) {
+  async execute(@Param("token") token: string) {
     const started = Date.now();
     const request = this.store.trustedActions.get(token);
     if (!request) {
@@ -81,7 +106,7 @@ export class HarnessController {
       return this.record(request, "policy", "blocked", Date.now() - started, { error: decision.message });
     }
     try {
-      const observation = this.executeAction(request);
+      const observation = await this.executeAction(request);
       return this.record(request, observation.source, "executed", Date.now() - started, observation);
     } catch (error) {
       return this.record(request, "runtime", "error", Date.now() - started, {
@@ -92,7 +117,7 @@ export class HarnessController {
     }
   }
 
-  private executeAction(request: Record<string, unknown>) {
+  private async executeAction(request: Record<string, unknown>) {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
     if (request.action === "rag_query") {
       const query = String(input.query ?? "");
@@ -113,6 +138,60 @@ export class HarnessController {
         observation: {
           path: relative(resolve(env.APP_WORKSPACE_ROOT), path),
           content: readFileSync(path, "utf8").slice(0, maxBytes)
+        }
+      };
+    }
+    if (request.action === "workspace_diff") {
+      const path = resolveWorkspacePath(String(input.path ?? ""));
+      const current = readFileSync(path, "utf8");
+      const proposed = String(input.content ?? "");
+      return {
+        source: "workspace",
+        action: "workspace_diff",
+        observation: {
+          path: relative(resolve(env.APP_WORKSPACE_ROOT), path),
+          currentSha256: sha256(current),
+          proposedSha256: sha256(proposed),
+          diff: lineDiff(current, proposed)
+        }
+      };
+    }
+    if (request.action === "workspace_apply_patch") {
+      const path = resolveWorkspacePath(String(input.path ?? ""));
+      const current = readFileSync(path, "utf8");
+      const expectedSha256 = String(input.expectedSha256 ?? "");
+      if (expectedSha256 && expectedSha256 !== sha256(current)) {
+        throw new Error("file changed since preview");
+      }
+      const proposed = String(input.content ?? "");
+      writeFileSync(path, proposed);
+      return {
+        source: "workspace",
+        action: "workspace_apply_patch",
+        observation: {
+          path: relative(resolve(env.APP_WORKSPACE_ROOT), path),
+          previousSha256: sha256(current),
+          newSha256: sha256(proposed),
+          diff: lineDiff(current, proposed)
+        }
+      };
+    }
+    if (request.action === "mcp_http_call") {
+      const url = String(input.url ?? "");
+      assertMcpAllowed(url);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tool: input.tool, arguments: input.arguments ?? {} })
+      });
+      const payload = await response.text();
+      return {
+        source: "mcp",
+        action: "mcp_http_call",
+        observation: {
+          statusCode: response.status,
+          ok: response.ok,
+          body: payload.slice(0, 20_000)
         }
       };
     }
@@ -172,20 +251,28 @@ export class HarnessController {
   }
 }
 
-function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; message: string } {
+function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; message: string; riskLevel: string } {
   const action = String(request.action ?? "");
   if (!action) {
-    return { allowed: false, message: "action is required" };
+    return { allowed: false, message: "action is required", riskLevel: "unknown" };
   }
-  if (action === "workspace_read_file") {
+  if (["workspace_read_file", "workspace_diff", "workspace_apply_patch"].includes(action)) {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
     try {
       resolveWorkspacePath(String(input.path ?? ""));
     } catch (error) {
-      return { allowed: false, message: error instanceof Error ? error.message : String(error) };
+      return { allowed: false, message: error instanceof Error ? error.message : String(error), riskLevel: "blocked" };
     }
   }
-  return { allowed: true, message: "allowed" };
+  if (action === "mcp_http_call") {
+    const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
+    try {
+      assertMcpAllowed(String(input.url ?? ""));
+    } catch (error) {
+      return { allowed: false, message: error instanceof Error ? error.message : String(error), riskLevel: "external_call" };
+    }
+  }
+  return { allowed: true, message: "allowed", riskLevel: action.includes("apply") || action.includes("save") ? "write" : "read" };
 }
 
 function resolveWorkspacePath(value: string): string {
@@ -209,4 +296,42 @@ function sanitizeObservation(value: unknown): unknown {
   } catch {
     return text;
   }
+}
+
+function assertMcpAllowed(value: string): void {
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("MCP HTTP adapter only supports http(s)");
+  }
+  const allowlist = env.APP_MCP_HTTP_ALLOWLIST.split(",").map((item) => item.trim()).filter(Boolean);
+  if (allowlist.length > 0 && !allowlist.some((prefix) => value.startsWith(prefix))) {
+    throw new Error("MCP endpoint is not in APP_MCP_HTTP_ALLOWLIST");
+  }
+}
+
+function lineDiff(current: string, proposed: string): string {
+  const before = current.split("\n");
+  const after = proposed.split("\n");
+  const max = Math.max(before.length, after.length);
+  const lines: string[] = [];
+  for (let index = 0; index < max; index += 1) {
+    if (before[index] === after[index]) {
+      continue;
+    }
+    if (before[index] !== undefined) {
+      lines.push(`-${before[index]}`);
+    }
+    if (after[index] !== undefined) {
+      lines.push(`+${after[index]}`);
+    }
+    if (lines.length > 400) {
+      lines.push("...diff truncated...");
+      break;
+    }
+  }
+  return lines.join("\n");
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }

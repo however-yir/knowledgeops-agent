@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Headers, Param, Post, Query } from "@nes
 
 import { TENANT_HEADER, normalizeTenant } from "../common/tenant.js";
 import { AiService } from "../ai/ai.service.js";
+import { env } from "../config/env.js";
 import { WorkflowService } from "./workflow.service.js";
 
 @Controller()
@@ -26,7 +27,9 @@ export class WorkflowController {
   @Post("ai/research/tasks")
   createResearch(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { topic?: string; prompt?: string; modelProfile?: string }) {
     const prompt = body.topic ?? body.prompt ?? "research";
-    const task = this.workflowService.executeResearch(tenantHeader, prompt, body.modelProfile);
+    const task = env.APP_WORKFLOW_ASYNC_ENABLED
+      ? this.workflowService.enqueueResearch(tenantHeader, prompt, body.modelProfile)
+      : this.workflowService.executeResearch(tenantHeader, prompt, body.modelProfile);
     return {
       ok: 1,
       taskId: task.taskId,
@@ -52,15 +55,15 @@ export class WorkflowController {
   }
 
   @Post("ai/workflow/react/chat")
-  workflowReact(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
+  async workflowReact(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
     this.workflowService.startReactTask(tenantHeader, body.prompt, body.modelProfile, body.chatId, body.sessionId);
     return this.aiService.reactChat(body, normalizeTenant(tenantHeader), "workflow_react");
   }
 
   @Post("ai/workflow/react/chat/stream")
   @Header("Content-Type", "text/event-stream")
-  workflowReactStream(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
+  async workflowReactStream(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { prompt: string; chatId: string; modelProfile?: string; sessionId?: string }) {
     this.workflowService.startReactTask(tenantHeader, body.prompt, body.modelProfile, body.chatId, body.sessionId);
-    return this.aiService.textStream(this.aiService.reactChat(body, normalizeTenant(tenantHeader), "workflow_react"));
+    return this.aiService.textStream(await this.aiService.reactChat(body, normalizeTenant(tenantHeader), "workflow_react"));
   }
 }

@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
+import { PlatformModule } from "../platform/platform.module.js";
 import { AuditLogMiddleware } from "./audit.middleware.js";
 import { AuthController } from "./auth.controller.js";
 import { AuthGuard } from "./auth.guard.js";
@@ -11,6 +12,7 @@ import { RateLimitMiddleware } from "./rate-limit.middleware.js";
 import { SecurityHeadersMiddleware } from "./security-headers.middleware.js";
 
 @Module({
+  imports: [PlatformModule],
   controllers: [AuthController],
   providers: [
     AuthService,

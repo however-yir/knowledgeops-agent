@@ -16,6 +16,23 @@ on:
 jobs:
   typescript:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: knowledgeops_agent
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
     steps:
       - uses: actions/checkout@v6
 
@@ -46,6 +63,26 @@ jobs:
         working-directory: typescript
         run: pnpm db:validate
 
+      - name: Java vs TS contract diff
+        working-directory: typescript
+        run: pnpm contract:diff
+
+      - name: Frontend TS backend contract
+        working-directory: typescript
+        run: pnpm frontend:contract
+
       - name: Build
         working-directory: typescript
         run: pnpm build
+
+      - name: Performance smoke
+        working-directory: typescript
+        run: pnpm perf:smoke
+
+      - name: Docker Compose config
+        working-directory: typescript
+        run: docker compose -f docker-compose.yml config
+
+      - name: Docker build
+        working-directory: typescript
+        run: docker build -t knowledgeops-agent-ts:ci .
