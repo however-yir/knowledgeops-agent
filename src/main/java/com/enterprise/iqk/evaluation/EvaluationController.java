@@ -44,6 +44,15 @@ public class EvaluationController {
         return evaluationService.triggerRun(tenantId, datasetId, request);
     }
 
+    @PostMapping("/runs")
+    public EvalRunVO triggerRunByContract(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
+                                          @RequestBody EvalRunRequestVO request) {
+        if (request == null || !org.springframework.util.StringUtils.hasText(request.getDatasetId())) {
+            throw new IllegalArgumentException("datasetId is required");
+        }
+        return evaluationService.triggerRun(tenantId, request.getDatasetId(), request);
+    }
+
     @GetMapping("/datasets/{datasetId}/comparison")
     public EvalComparisonVO compareLatest(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
                                           @PathVariable("datasetId") String datasetId) {

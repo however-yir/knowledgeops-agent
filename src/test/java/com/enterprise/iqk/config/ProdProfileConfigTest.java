@@ -63,11 +63,68 @@ class ProdProfileConfigTest {
     }
 
     @Test
+    void prodRejectsPlaceholderJwtSecret() {
+        runner.withPropertyValues(
+                "app.cors.allowed-origins=https://example.com",
+                "app.security.enabled=true",
+                "app.security.jwt-secret=replace-me-with-real-secret"
+        ).run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(rootCause(context.getStartupFailure()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("placeholder");
+        });
+    }
+
+    @Test
+    void activeProdRejectsDisabledSecurity() {
+        runner.withPropertyValues(
+                "spring.profiles.active=prod",
+                "app.cors.allowed-origins=https://example.com",
+                "app.security.enabled=false"
+        ).run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(rootCause(context.getStartupFailure()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("must be true");
+        });
+    }
+
+    @Test
+    void activeProdRejectsRabbitGuestCredentials() {
+        runner.withPropertyValues(
+                "spring.profiles.active=prod",
+                "app.cors.allowed-origins=https://example.com",
+                "app.security.enabled=true",
+                "app.security.jwt-secret=a-real-prod-secret-key",
+                "spring.rabbitmq.username=guest",
+                "spring.rabbitmq.password=guest"
+        ).run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(rootCause(context.getStartupFailure()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("guest/guest");
+        });
+    }
+
+    @Test
     void prodAcceptsExplicitOriginsAndSecret() {
         runner.withPropertyValues(
                 "app.cors.allowed-origins=https://example.com,https://app.example.com",
                 "app.security.enabled=true",
                 "app.security.jwt-secret=a-real-prod-secret-key"
+        ).run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void activeProdAcceptsExplicitSecurityAndRabbitCredentials() {
+        runner.withPropertyValues(
+                "spring.profiles.active=prod",
+                "app.cors.allowed-origins=https://example.com,https://app.example.com",
+                "app.security.enabled=true",
+                "app.security.jwt-secret=a-real-prod-secret-key",
+                "spring.rabbitmq.username=knowledgeops",
+                "spring.rabbitmq.password=not-guest"
         ).run(context -> assertThat(context).hasNotFailed());
     }
 

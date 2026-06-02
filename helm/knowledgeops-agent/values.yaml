@@ -1,0 +1,104 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/however-yir/knowledgeops-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: knowledgeops.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 768Mi
+  limits:
+    cpu: "2"
+    memory: 1536Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+probes:
+  startup:
+    failureThreshold: 30
+    periodSeconds: 10
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+  liveness:
+    periodSeconds: 20
+    timeoutSeconds: 5
+
+env:
+  SPRING_PROFILES_ACTIVE: prod
+  APP_SECURITY_ENABLED: "true"
+  APP_VECTOR_STORE_BACKEND: pgvector
+  APP_REQUIRE_PGVECTOR: "true"
+  APP_INGESTION_QUEUE_BACKEND: redis_stream
+  OTEL_SAMPLING_PROBABILITY: "0.1"
+
+secretEnv:
+  DB_URL: ""
+  DB_USERNAME: ""
+  DB_PASSWORD: ""
+  OPENAI_API_KEY: ""
+  OPENAI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode"
+  APP_JWT_SECRET: ""
+  APP_CORS_ALLOWED_ORIGINS: ""
+  REDIS_HOST: ""
+  REDIS_PASSWORD: ""
+  RABBITMQ_HOST: ""
+  RABBITMQ_USERNAME: ""
+  RABBITMQ_PASSWORD: ""
+  APP_PGVECTOR_URL: ""
+  APP_PGVECTOR_USERNAME: ""
+  APP_PGVECTOR_PASSWORD: ""
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+
+extraEnv: []
+extraVolumeMounts: []
+extraVolumes: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

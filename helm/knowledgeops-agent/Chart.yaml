@@ -1,0 +1,13 @@
+apiVersion: v2
+name: knowledgeops-agent
+description: KnowledgeOps Agent Java service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ai
+  - rag
+  - spring-boot
+  - knowledgeops
+maintainers:
+  - name: KnowledgeOps

@@ -13,5 +13,8 @@ public class ReactTraceStepVO {
     private String action;
     private Map<String, Object> actionInput;
     private Object observation;
-}
 
+    public String getThoughtSummary() {
+        return thought;
+    }
+}

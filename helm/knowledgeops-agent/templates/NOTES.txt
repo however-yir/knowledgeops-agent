@@ -1,0 +1,10 @@
+KnowledgeOps Agent has been installed.
+
+Service:
+  {{ include "knowledgeops-agent.fullname" . }}:{{ .Values.service.port }}
+
+Health:
+  /actuator/health
+
+Metrics:
+  /actuator/prometheus

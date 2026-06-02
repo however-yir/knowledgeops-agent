@@ -9,8 +9,10 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.model.Media;
 import org.slf4j.MDC;
+import org.springframework.http.MediaType;
 import org.springframework.util.MimeType;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -64,6 +66,15 @@ public class ChatController {
             return multiModalChat(prompt, conversationId, files, modelProfile, chatId);
         }
 
+    }
+
+    @RequestMapping(value = "/chat/stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> chatStream(
+            @RequestParam("prompt") String prompt,
+            @RequestParam("chatId") String chatId,
+            @RequestParam(value = "modelProfile", required = false) String modelProfile,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files) {
+        return chat(prompt, chatId, modelProfile, files);
     }
 
     private Flux<String> multiModalChat(String prompt,

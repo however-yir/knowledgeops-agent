@@ -188,12 +188,12 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 ## 技术栈与版本基线
 
 - Java 17
-- Spring Boot 3.4.3
+- Spring Boot 3.4.5
 - Spring AI 1.0.0-M6
 - Spring Security 6.x（JWT + API Key + RBAC）
-- Resilience4j 2.2.0（CircuitBreaker / Retry / TimeLimiter）
+- Resilience4j 2.4.0（CircuitBreaker / Retry / TimeLimiter）
 - Bucket4j + Redis（分布式限流）
-- MyBatis-Plus 3.5.12
+- MyBatis-Plus 3.5.16
 - MySQL 8.x + HikariCP 连接池
 - Redis 7.x
 - RabbitMQ 3.x

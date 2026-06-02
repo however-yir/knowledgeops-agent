@@ -17,4 +17,16 @@ public class CitationItem {
     private String chunkId;
     private double confidence;   // 0-1
     private String excerpt;      // quoted text from source
+
+    public int getId() {
+        return index;
+    }
+
+    public String getSource() {
+        return sourceType;
+    }
+
+    public String getSnippet() {
+        return excerpt;
+    }
 }

@@ -16,7 +16,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-replace-me}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode}
       APP_SECURITY_ENABLED: "true"
-      APP_JWT_SECRET: ${APP_JWT_SECRET:-replace-me-with-real-secret}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-local-demo-secret-change-for-prod-2026}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:8088}
       APP_VECTOR_STORE_BACKEND: simple
       APP_REQUIRE_PGVECTOR: "false"
@@ -25,8 +25,8 @@ services:
       REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
-      RABBITMQ_USERNAME: guest
-      RABBITMQ_PASSWORD: guest
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-knowledgeops}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-knowledgeops-demo-rabbit}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318/v1/traces
     depends_on:
       mysql:
@@ -87,6 +87,9 @@ services:
     image: rabbitmq:3.13-management
     container_name: knowledgeops-agent-rabbitmq
     restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-knowledgeops}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-knowledgeops-demo-rabbit}
     ports:
       - "5672:5672"
       - "15672:15672"
