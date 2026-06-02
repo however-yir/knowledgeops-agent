@@ -1,0 +1,46 @@
+name: Python Rewrite CI
+
+on:
+  push:
+    branches: [python-rewrite]
+    paths:
+      - "python/**"
+      - "typescript/parity/contract-cases.json"
+      - ".github/workflows/python.yml"
+  workflow_dispatch:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        working-directory: python
+        run: pip install -e ".[test]"
+
+      - name: Test
+        run: pytest python
+
+      - name: Contract gate
+        working-directory: python
+        run: knowledgeops-python-contract
+
+      - name: Maturity gate
+        working-directory: python
+        run: knowledgeops-python-maturity
+
+      - name: E2E smoke
+        working-directory: python
+        run: knowledgeops-python-e2e-smoke
+
+      - name: Performance smoke
+        working-directory: python
+        run: ITERATIONS=40 P95_MS=1500 knowledgeops-python-perf-smoke
+
+      - name: Docker build
+        run: docker build -t knowledgeops-agent-python:ci python

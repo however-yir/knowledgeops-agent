@@ -11,7 +11,7 @@ class Settings:
     port: int = 3001
     cors_allowed_origins: tuple[str, ...] = ("http://localhost:8088", "http://localhost:5173")
     demo_api_key: str = "local-demo-api-key"
-    demo_tenant_id: str = "demo-tenant"
+    demo_tenant_id: str = "public"
     token_ttl_seconds: int = 3600
 
 
@@ -22,7 +22,7 @@ def load_settings() -> Settings:
         cors_allowed_origins=_csv(os.getenv("APP_CORS_ALLOWED_ORIGINS"))
         or ("http://localhost:8088", "http://localhost:5173"),
         demo_api_key=os.getenv("APP_DEMO_API_KEY", "local-demo-api-key"),
-        demo_tenant_id=os.getenv("APP_DEMO_TENANT_ID", "demo-tenant"),
+        demo_tenant_id=os.getenv("APP_DEMO_TENANT_ID", "public"),
         token_ttl_seconds=int(os.getenv("APP_TOKEN_TTL_SECONDS", "3600")),
     )
 

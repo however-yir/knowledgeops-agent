@@ -12,6 +12,10 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[test]"
 pytest
+knowledgeops-python-contract
+knowledgeops-python-maturity
+knowledgeops-python-e2e-smoke
+knowledgeops-python-perf-smoke
 uvicorn knowledgeops_py.app:create_app --factory --host 0.0.0.0 --port 3001
 ```
 
@@ -24,6 +28,8 @@ POST http://localhost:3001/auth/token
 GET  http://localhost:3001/ai/service?prompt=hello
 POST http://localhost:3001/ai/service
 ```
+
+The current Python runtime includes local parity implementations for the primary Java/TypeScript contract surface: auth, chat/SSE, PDF ingestion/RAG, history, sessions, harness, workflow/research, evaluation, cost, audit, memory, graph, OpenAPI, and Prometheus. It intentionally keeps persistence and provider integrations local until the API contract is stable.
 
 The local demo API key defaults to:
 
