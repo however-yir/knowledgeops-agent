@@ -35,3 +35,18 @@ Java remains in place while the TypeScript implementation grows under `typescrip
 4. Send shadow read traffic to TS and compare status, content type, JSON schema, SSE events, auth decisions, and pagination.
 5. For rollback, keep Java schema-compatible Flyway migrations as the source of truth. TS writes only mapped tables and can be disabled by setting `APP_PRISMA_ENABLED=false`; traffic can be moved back to Java without data shape conversion.
 6. For high-risk rollout, run dual-write only for append-safe audit/evaluation/harness tables first, then enable authoritative TS writes for ingestion, memory, graph, sessions, and cost after the contract diff stays clean.
+
+## Maturity Equivalence Gate
+
+The TypeScript rewrite is considered Java-maturity-equivalent only when these evidence gates pass together:
+
+| Gate | Evidence |
+|---|---|
+| API contract | `pnpm parity` and `pnpm contract:diff` cover health, OpenAPI, auth, chat, SSE, RAG, ingestion, history, sessions, harness, workflow, evaluation, cost, audit, metrics, memory, graph, and negative cases. |
+| security and tenant boundary | Auth service, auth guard, retrieval, workflow, and cost tests verify invalid credentials, tenant mismatch, role authorization, and tenant-scoped state. |
+| data persistence | `pnpm db:validate` and `pnpm migration:readiness` verify Prisma mappings for the Java Flyway runtime tables and the rollout/rollback plan. |
+| frontend cutover | `pnpm frontend:contract` verifies that the existing Vue client calls are present in the TypeScript backend contract. |
+| observability and performance | `pnpm e2e:smoke`, `pnpm perf:smoke`, `pnpm load:gate`, Prometheus contract cases, and SBOM generation run in CI. |
+| rollback | Keep Java as the schema-compatible fallback until shadow traffic, contract diff, and operational SLOs stay clean on TypeScript. |
+
+`pnpm maturity:gate` enforces that these evidence categories remain present in the repository and CI before the branch can be treated as cutover-ready.

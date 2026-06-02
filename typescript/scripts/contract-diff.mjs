@@ -49,6 +49,7 @@ async function call(baseUrl, testCase) {
     headers: {
       "content-type": "application/json",
       "x-tenant-id": "public",
+      ...(testCase.headers ?? {}),
       ...(process.env.APP_CONTRACT_API_KEY ? { "x-api-key": process.env.APP_CONTRACT_API_KEY } : {})
     },
     body: testCase.body ? JSON.stringify(testCase.body) : undefined

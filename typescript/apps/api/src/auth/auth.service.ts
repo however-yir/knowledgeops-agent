@@ -111,9 +111,12 @@ export class AuthService {
   }
 
   exchangeApiKey(apiKey: string | undefined, tenantHeader: string | undefined): AuthTokenResponse {
-    const identity = this.authenticateApiKey(apiKey, tenantHeader);
+    const identity = this.authenticateApiKey(apiKey);
     if (!identity) {
-      return { ok: 0, msg: apiKey ? "tenant mismatch for api key" : "invalid api key" };
+      return { ok: 0, msg: "invalid api key" };
+    }
+    if (tenantHeader && normalizeTenant(tenantHeader) !== identity.tenantId) {
+      return { ok: 0, msg: "tenant mismatch for api key" };
     }
     return this.issueTokens(identity.principal, identity.roles, identity.tenantId);
   }

@@ -11,11 +11,15 @@ describe("AuthGuard", () => {
     const previous = env.APP_SECURITY_ENABLED;
     env.APP_SECURITY_ENABLED = true;
     try {
-      const guard = new AuthGuard(new AuthService(new PlatformStore()));
+      const auth = new AuthService(new PlatformStore());
+      const guard = new AuthGuard(auth);
+      const opsKey = auth.issueApiKey("ops-key", "OPS", "public").rawApiKey ?? "";
 
       expect(guard.canActivate(contextFor("GET", "/cost/summary", "local-demo-api-key"))).toBe(true);
       expect(() => guard.canActivate(contextFor("POST", "/cost/budget", "bad-key"))).toThrow("authentication required");
       expect(() => guard.canActivate(contextFor("POST", "/cost/budget", "local-demo-api-key", "other"))).toThrow("authentication required");
+      expect(guard.canActivate(contextFor("GET", "/actuator/prometheus", opsKey))).toBe(true);
+      expect(() => guard.canActivate(contextFor("POST", "/cost/budget", opsKey))).toThrow("insufficient permission");
     } finally {
       env.APP_SECURITY_ENABLED = previous;
     }

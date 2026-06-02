@@ -23,6 +23,7 @@ pnpm db:validate
 pnpm contract:diff
 pnpm frontend:contract
 pnpm migration:readiness
+pnpm maturity:gate
 pnpm e2e:smoke
 pnpm perf:smoke
 LOAD_VUS=50 LOAD_DURATION_SECONDS=180 pnpm load:gate

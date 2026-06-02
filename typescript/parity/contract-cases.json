@@ -3,63 +3,265 @@
     "label": "health",
     "method": "GET",
     "path": "/actuator/health",
-    "expectStatus": 200
+    "expectStatus": 200,
+    "tags": ["health"]
+  },
+  {
+    "label": "prometheus metrics",
+    "method": "GET",
+    "path": "/actuator/prometheus",
+    "expectStatus": 200,
+    "tags": ["metrics", "observability"]
   },
   {
     "label": "openapi docs",
     "method": "GET",
     "path": "/v3/api-docs",
-    "expectStatus": 200
+    "expectStatus": 200,
+    "tags": ["openapi"]
+  },
+  {
+    "label": "auth token rejects invalid key",
+    "method": "POST",
+    "path": "/auth/token",
+    "headers": { "x-api-key": "contract-invalid-key" },
+    "expectStatus": 200,
+    "tags": ["auth", "security", "negative"]
+  },
+  {
+    "label": "auth refresh rejects invalid token",
+    "method": "POST",
+    "path": "/auth/refresh",
+    "headers": { "x-refresh-token": "contract-invalid-refresh" },
+    "expectStatus": 200,
+    "tags": ["auth", "security", "negative"]
+  },
+  {
+    "label": "issue api key surface",
+    "method": "POST",
+    "path": "/auth/api-keys?keyName=contract-user&role=USER&tenantId=public",
+    "expectStatus": 200,
+    "tags": ["auth", "security"]
+  },
+  {
+    "label": "chat html",
+    "method": "GET",
+    "path": "/ai/chat?prompt=contract%20smoke&chatId=contract-chat",
+    "expectStatus": 200,
+    "tags": ["chat"]
+  },
+  {
+    "label": "service html",
+    "method": "GET",
+    "path": "/ai/service?prompt=contract%20service&chatId=contract-service",
+    "expectStatus": 200,
+    "tags": ["chat"]
   },
   {
     "label": "react chat",
     "method": "POST",
     "path": "/ai/react/chat",
-    "body": { "prompt": "contract smoke", "chatId": "contract-smoke" },
-    "expectStatus": 200
+    "body": { "prompt": "contract smoke", "chatId": "contract-react" },
+    "expectStatus": 200,
+    "tags": ["chat"]
   },
   {
     "label": "react stream",
     "method": "POST",
     "path": "/ai/react/chat/stream",
-    "body": { "prompt": "contract stream smoke", "chatId": "contract-stream-smoke" },
+    "body": { "prompt": "contract stream smoke", "chatId": "contract-stream" },
     "expectStatus": 200,
-    "sse": true
+    "sse": true,
+    "tags": ["chat", "sse"]
+  },
+  {
+    "label": "feedback submit",
+    "method": "POST",
+    "path": "/ai/feedback",
+    "body": { "chatId": "contract-react", "rating": 1 },
+    "expectStatus": 200,
+    "tags": ["chat"]
+  },
+  {
+    "label": "pdf chat empty result",
+    "method": "GET",
+    "path": "/ai/pdf/chat?prompt=contract%20rag&chatId=contract-rag-empty",
+    "expectStatus": 200,
+    "tags": ["rag", "negative"]
+  },
+  {
+    "label": "pdf file missing",
+    "method": "GET",
+    "path": "/ai/pdf/file/contract-missing-file",
+    "expectStatus": 404,
+    "tags": ["rag", "ingestion", "negative"]
   },
   {
     "label": "ingestion jobs",
     "method": "GET",
     "path": "/ingestion/jobs?chatId=contract-smoke",
-    "expectStatus": 200
+    "expectStatus": 200,
+    "tags": ["ingestion"]
   },
   {
-    "label": "cost summary",
+    "label": "ingestion missing job",
     "method": "GET",
-    "path": "/cost/summary",
-    "expectStatus": 200
+    "path": "/ingestion/jobs/contract-missing-job",
+    "expectStatus": 404,
+    "tags": ["ingestion", "negative"]
   },
   {
-    "label": "memory list",
-    "method": "GET",
-    "path": "/ai/memory/items?userId=anonymous",
-    "expectStatus": 200
+    "label": "ingestion process endpoint",
+    "method": "POST",
+    "path": "/ingestion/jobs/process",
+    "expectStatus": 200,
+    "tags": ["ingestion"]
   },
   {
-    "label": "graph entities",
+    "label": "history list",
     "method": "GET",
-    "path": "/ai/graph/entities",
-    "expectStatus": 200
+    "path": "/ai/history/react?page=1&pageSize=20",
+    "expectStatus": 200,
+    "tags": ["history"]
+  },
+  {
+    "label": "history messages",
+    "method": "GET",
+    "path": "/ai/history/react/contract-react?page=1&pageSize=50",
+    "expectStatus": 200,
+    "tags": ["history"]
+  },
+  {
+    "label": "sessions list",
+    "method": "GET",
+    "path": "/ai/sessions?page=1&pageSize=20",
+    "expectStatus": 200,
+    "tags": ["sessions"]
+  },
+  {
+    "label": "session missing",
+    "method": "GET",
+    "path": "/ai/sessions/contract-missing-session",
+    "expectStatus": 200,
+    "tags": ["sessions", "negative"]
   },
   {
     "label": "harness actions",
     "method": "GET",
     "path": "/ai/harness/actions",
-    "expectStatus": 200
+    "expectStatus": 200,
+    "tags": ["harness"]
+  },
+  {
+    "label": "harness preview builtin",
+    "method": "POST",
+    "path": "/ai/harness/actions/preview",
+    "body": { "action": "query_course", "actionInput": { "type": "编程" } },
+    "expectStatus": 200,
+    "tags": ["harness"]
+  },
+  {
+    "label": "workflow react",
+    "method": "POST",
+    "path": "/ai/workflow/react/chat",
+    "body": { "prompt": "contract workflow", "chatId": "contract-workflow" },
+    "expectStatus": 200,
+    "tags": ["workflow", "chat"]
+  },
+  {
+    "label": "workflow tasks",
+    "method": "GET",
+    "path": "/ai/workflow/tasks?page=1&pageSize=20",
+    "expectStatus": 200,
+    "tags": ["workflow"]
+  },
+  {
+    "label": "research task",
+    "method": "POST",
+    "path": "/ai/research/tasks",
+    "body": { "topic": "contract research" },
+    "expectStatus": 200,
+    "tags": ["workflow"]
   },
   {
     "label": "evaluation datasets",
     "method": "GET",
     "path": "/ai/evaluation/datasets",
-    "expectStatus": 200
+    "expectStatus": 200,
+    "tags": ["evaluation"]
+  },
+  {
+    "label": "evaluation invalid dataset",
+    "method": "POST",
+    "path": "/ai/evaluation/datasets",
+    "body": { "name": "" },
+    "expectStatus": 200,
+    "tags": ["evaluation", "negative"]
+  },
+  {
+    "label": "cost summary",
+    "method": "GET",
+    "path": "/cost/summary",
+    "expectStatus": 200,
+    "tags": ["cost"]
+  },
+  {
+    "label": "cost budget update",
+    "method": "POST",
+    "path": "/cost/budget",
+    "body": { "tenantId": "public", "monthlyBudgetUsd": 25, "hardLimitEnabled": false },
+    "expectStatus": 200,
+    "tags": ["cost"]
+  },
+  {
+    "label": "audit logs",
+    "method": "GET",
+    "path": "/audit/logs?page=1&pageSize=20",
+    "expectStatus": 200,
+    "tags": ["audit", "observability"]
+  },
+  {
+    "label": "memory create",
+    "method": "POST",
+    "path": "/ai/memory/items",
+    "body": { "userId": "anonymous", "content": "contract memory", "type": "fact" },
+    "expectStatus": 200,
+    "tags": ["memory"]
+  },
+  {
+    "label": "memory list",
+    "method": "GET",
+    "path": "/ai/memory/items?userId=anonymous",
+    "expectStatus": 200,
+    "tags": ["memory"]
+  },
+  {
+    "label": "memory context",
+    "method": "GET",
+    "path": "/ai/memory/context?userId=anonymous&prompt=contract",
+    "expectStatus": 200,
+    "tags": ["memory"]
+  },
+  {
+    "label": "graph entities",
+    "method": "GET",
+    "path": "/ai/graph/entities",
+    "expectStatus": 200,
+    "tags": ["graph"]
+  },
+  {
+    "label": "graph entity create",
+    "method": "POST",
+    "path": "/ai/graph/entities",
+    "body": { "name": "Contract Entity", "type": "CONCEPT" },
+    "expectStatus": 200,
+    "tags": ["graph"]
+  },
+  {
+    "label": "graph facts",
+    "method": "GET",
+    "path": "/ai/graph/facts?query=contract",
+    "expectStatus": 200,
+    "tags": ["graph"]
   }
 ]

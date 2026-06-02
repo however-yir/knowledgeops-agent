@@ -42,4 +42,36 @@ describe("RetrievalService", () => {
     expect(result.documents[0]?.source).toBe("graph");
     expect(result.documents[0]?.content).toContain("shade and water");
   });
+
+  it("keeps retrieval results scoped to tenant and chat id", () => {
+    const service = new RetrievalService(new PlatformStore());
+    service.addDocumentChunks({
+      tenantId: "public",
+      chatId: "chat-1",
+      jobId: "job-1",
+      fileName: "public.txt",
+      sourceType: "TEXT",
+      text: "The public tenant policy mentions shade."
+    });
+    service.addDocumentChunks({
+      tenantId: "acme",
+      chatId: "chat-1",
+      jobId: "job-2",
+      fileName: "acme.txt",
+      sourceType: "TEXT",
+      text: "The acme tenant policy mentions hydration."
+    });
+    service.addDocumentChunks({
+      tenantId: "public",
+      chatId: "chat-2",
+      jobId: "job-3",
+      fileName: "other-chat.txt",
+      sourceType: "TEXT",
+      text: "The other chat policy mentions hydration."
+    });
+
+    expect(service.retrieve("hydration", "public", "chat-1")).toHaveLength(0);
+    expect(service.retrieve("hydration", "acme", "chat-1")[0]?.fileName).toBe("acme.txt");
+    expect(service.retrieve("hydration", "public", "chat-2")[0]?.fileName).toBe("other-chat.txt");
+  });
 });

@@ -16,4 +16,21 @@ describe("TenantCostService", () => {
     expect(summary.monthInputTokens).toBe(100);
     expect(() => service.assertBudget("acme", "high", 10_000, 10_000)).toThrow("tenant budget exceeded");
   });
+
+  it("keeps cost summaries tenant-scoped", () => {
+    const service = new TenantCostService(new PlatformStore());
+
+    service.recordUsage("public", "low", 100, 0);
+    service.recordUsage("acme", "high", 100, 0);
+
+    expect(service.summary("public").monthRequestCount).toBe(1);
+    expect(service.summary("acme").monthRequestCount).toBe(1);
+    expect(service.summary("public").monthCostUsd).not.toBe(service.summary("acme").monthCostUsd);
+  });
+
+  it("rejects negative budget updates", () => {
+    const service = new TenantCostService(new PlatformStore());
+
+    expect(() => service.updateBudget({ tenantId: "public", monthlyBudgetUsd: -1 })).toThrow("monthlyBudgetUsd must be non-negative");
+  });
 });

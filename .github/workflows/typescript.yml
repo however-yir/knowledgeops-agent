@@ -75,6 +75,10 @@ jobs:
         working-directory: typescript
         run: pnpm migration:readiness
 
+      - name: Maturity evidence gate
+        working-directory: typescript
+        run: pnpm maturity:gate
+
       - name: Build
         working-directory: typescript
         run: pnpm build
