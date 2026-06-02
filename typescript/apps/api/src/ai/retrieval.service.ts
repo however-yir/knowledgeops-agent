@@ -1,4 +1,5 @@
 import { Injectable, Optional } from "@nestjs/common";
+import type { Citation } from "@knowledgeops/shared";
 
 import { cosineSimilarity, scoreByKeywordDensity, scoreByTokenOverlap, tokenize, truncateText } from "../common/text.js";
 import { env } from "../config/env.js";
@@ -345,8 +346,8 @@ function answerFromRetrieval(retrieval: HybridRetrievalResult) {
     };
   }
   const evidence = chunks.map((chunk) => truncateText(chunk.content, 220));
-  const citations = chunks.map((chunk) => citationText(chunk));
-  const footer = citations.map((citation, index) => `[${index + 1}] ${citation}`).join("\n");
+  const citations = chunks.map((chunk, index) => citationFromChunk(chunk, index));
+  const footer = citations.map((citation, index) => `[${index + 1}] ${citation.source}#${citation.chunkId}`).join("\n");
   return {
     answer: `根据当前知识库，最相关内容如下：\n${evidence.map((item, index) => `[${index + 1}] ${item}`).join("\n")}\n\n引用:\n${footer}`,
     citations,
@@ -355,11 +356,14 @@ function answerFromRetrieval(retrieval: HybridRetrievalResult) {
   };
 }
 
-function citationText(chunk: ScoredChunk): string {
-  if (chunk.url) {
-    return `source=${chunk.fileName}, url=${chunk.url}`;
-  }
-  return `source=${chunk.fileName}, chunk=${chunk.chunkIndex}`;
+function citationFromChunk(chunk: ScoredChunk, index: number): Citation {
+  return {
+    id: `cite-${index + 1}`,
+    source: chunk.url ?? chunk.fileName,
+    title: chunk.title || chunk.fileName,
+    chunkId: chunk.chunkId,
+    snippet: truncateText(chunk.content, 180)
+  };
 }
 
 function bm25Score(query: string, chunk: KnowledgeChunk, corpus: KnowledgeChunk[]): number {

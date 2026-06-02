@@ -3,7 +3,7 @@ import { ApiHealth, ok } from "@knowledgeops/shared";
 
 @Controller()
 export class HealthController {
-  @Get("actuator/health")
+  @Get(["actuator/health", "health"])
   health(): ApiHealth {
     return {
       status: "UP"

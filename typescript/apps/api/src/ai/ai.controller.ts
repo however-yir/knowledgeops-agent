@@ -1,8 +1,9 @@
-import { All, Body, Controller, Header, Post, Query, Req } from "@nestjs/common";
+import { All, Body, Controller, Get, Header, Post, Query, Req } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import type { ReactChatRequest } from "@knowledgeops/shared";
 
 import type { RequestWithContext } from "../common/request-context.js";
+import { traceIdFrom } from "../common/trace.js";
 import { AiService } from "./ai.service.js";
 
 @Controller()
@@ -11,30 +12,38 @@ export class AiController {
 
   @Post("ai/react/chat")
   async reactChat(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
-    return this.aiService.reactChat(request, tenantFrom(req));
+    return this.aiService.reactChat(request, tenantFrom(req), "react", traceIdFrom(req));
   }
 
   @Post("ai/react/chat/stream")
   @Header("Content-Type", "text/event-stream")
   async reactChatStream(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
-    return this.aiService.reactChatStream(request, tenantFrom(req));
+    return this.aiService.reactChatStream(request, tenantFrom(req), "react", traceIdFrom(req));
   }
 
-  @All("ai/chat")
-  @Header("Content-Type", "text/html;charset=utf-8")
+  @Post("ai/chat")
+  async chatPost(@Body() body: ReactChatRequest, @Req() req: FastifyRequest) {
+    return this.aiService.reactChat(body, tenantFrom(req), "chat", traceIdFrom(req));
+  }
+
+  @Get("ai/chat")
   async chat(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
     @Query("modelProfile") modelProfile: string | undefined,
-    @Body() body: Partial<ReactChatRequest> | undefined,
     @Req() req: FastifyRequest
   ) {
-    const request = chatRequestFrom(prompt, chatId, modelProfile, body);
-    return (await this.aiService.reactChat(request, tenantFrom(req), "chat")).answer;
+    const request = chatRequestFrom(prompt, chatId, modelProfile, undefined);
+    return this.aiService.reactChat(request, tenantFrom(req), "chat", traceIdFrom(req));
+  }
+
+  @Post("ai/chat/stream")
+  @Header("Content-Type", "text/event-stream")
+  async chatStream(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
+    return this.aiService.reactChatStream(request, tenantFrom(req), "chat", traceIdFrom(req));
   }
 
   @All("ai/service")
-  @Header("Content-Type", "text/html;charset=utf-8")
   async service(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
@@ -43,24 +52,23 @@ export class AiController {
     @Req() req: FastifyRequest
   ) {
     const request = chatRequestFrom(prompt, chatId, modelProfile, body);
-    return (await this.aiService.reactChat(request, tenantFrom(req), "service")).answer;
+    return this.aiService.reactChat(request, tenantFrom(req), "service", traceIdFrom(req));
   }
 
-  @All("ai/pdf/chat")
-  @Header("Content-Type", "text/html;charset=UTF-8")
+  @Post("ai/pdf/chat")
+  async pdfChatPost(@Body() body: ReactChatRequest, @Req() req: FastifyRequest) {
+    return this.aiService.reactChat(body, tenantFrom(req), "pdf", traceIdFrom(req));
+  }
+
+  @Get("ai/pdf/chat")
   async pdfChat(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
     @Query("modelProfile") modelProfile: string | undefined,
-    @Body() body: Partial<ReactChatRequest> | undefined,
     @Req() req: FastifyRequest
   ) {
-    const request = chatRequestFrom(prompt, chatId, modelProfile, body);
-    const result = await this.aiService.reactChat(request, tenantFrom(req), "pdf");
-    const citations = result.citations?.length
-      ? result.citations.map((citation, index) => `[${index + 1}] ${citation}`).join("\n")
-      : "";
-    return citations ? `${result.answer}\n\n引用来源:\n${citations}` : result.answer;
+    const request = chatRequestFrom(prompt, chatId, modelProfile, undefined);
+    return this.aiService.reactChat(request, tenantFrom(req), "pdf", traceIdFrom(req));
   }
 
   @Post("ai/feedback")

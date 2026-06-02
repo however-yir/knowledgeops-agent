@@ -18,7 +18,12 @@ describe("RetrievalService", () => {
     const answer = service.answer("refund cancellation", "public", "chat-1");
 
     expect(answer.answer).toContain("refund policy");
-    expect(answer.citations).toEqual(["source=handbook.txt, chunk=0"]);
+    expect(answer.citations[0]).toMatchObject({
+      source: "handbook.txt",
+      title: "handbook.txt",
+      chunkId: "job-1:0"
+    });
+    expect(answer.citations[0]?.snippet).toContain("refund policy");
     expect(answer.evidence[0]).toContain("seven days");
   });
 

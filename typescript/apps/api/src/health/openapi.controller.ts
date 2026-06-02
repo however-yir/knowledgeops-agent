@@ -14,25 +14,40 @@ export class OpenApiController {
       components: {
         securitySchemes: {
           bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-          apiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" }
+          apiKeyAuth: { type: "apiKey", in: "header", name: "X-API-Key" },
+          tenantHeader: { type: "apiKey", in: "header", name: "X-Tenant-ID" }
         }
       },
       paths: {
         "/auth/token": postPath("Issue JWT and refresh token"),
         "/auth/refresh": postPath("Refresh JWT"),
         "/auth/api-keys": postPath("Issue API key"),
+        "/ai/chat": postPath("Run standard chat"),
+        "/ai/chat/stream": postPath("Stream standard chat"),
         "/ai/react/chat": postPath("Run ReAct chat"),
         "/ai/react/chat/stream": postPath("Run streaming ReAct chat"),
+        "/ai/pdf/chat": postPath("Run RAG chat"),
+        "/ai/pdf/upload/{chatId}": postPath("Upload PDF knowledge document"),
         "/ingestion/upload/{chatId}": postPath("Upload knowledge document"),
+        "/ingestion/jobs": getPath("List ingestion jobs"),
+        "/ingestion/jobs/{jobId}": getPath("Read ingestion job"),
+        "/ai/sessions": getPath("List sessions"),
+        "/ai/sessions/{sessionId}": getPath("Read session"),
+        "/ai/feedback": postPath("Submit chat feedback"),
         "/ai/harness/actions": getPath("List agent harness actions"),
         "/ai/harness/actions/preview": postPath("Preview trusted action"),
         "/ai/harness/actions/execute/{token}": postPath("Execute trusted action"),
         "/ai/evaluation/datasets": getPostPath("List or create evaluation datasets"),
+        "/ai/evaluation/runs": postPath("Run an evaluation dataset"),
+        "/audit/logs": getPath("Read audit logs"),
         "/ai/memory/items": getPostPath("List or create memory items"),
         "/ai/graph/entities": getPostPath("List or create graph entities"),
         "/cost/summary": getPath("Read tenant cost summary"),
+        "/cost/budget": postPath("Update tenant budget"),
         "/actuator/health": getPath("Health check"),
-        "/actuator/prometheus": getPath("Prometheus metrics")
+        "/health": getPath("Health check alias"),
+        "/actuator/prometheus": getPath("Prometheus metrics"),
+        "/metrics": getPath("Prometheus metrics alias")
       }
     };
   }
@@ -61,6 +76,11 @@ function getPostPath(summary: string) {
 function operation(summary: string) {
   return {
     summary,
+    parameters: [
+      { name: "Authorization", in: "header", required: false, schema: { type: "string" } },
+      { name: "X-API-Key", in: "header", required: false, schema: { type: "string" } },
+      { name: "X-Tenant-ID", in: "header", required: false, schema: { type: "string" } }
+    ],
     responses: {
       "200": {
         description: "OK"

@@ -80,6 +80,10 @@ if (!packageJson.scripts?.["prod:gate"]?.includes("maturity:gate")) {
   failures.push("prod:gate does not include maturity:gate");
 }
 
+if (!packageJson.scripts?.["prod:gate"]?.includes("security:defaults")) {
+  failures.push("prod:gate does not include security:defaults");
+}
+
 if (!workflow.includes("pnpm maturity:gate")) {
   failures.push("TypeScript CI does not run maturity:gate");
 }

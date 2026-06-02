@@ -36,35 +36,59 @@ The initial API exposes a Java-compatible health endpoint:
 
 ```text
 GET http://localhost:3000/actuator/health
+GET http://localhost:3000/health
 ```
 
-The current contract surface also includes:
+All JSON API responses use the enterprise envelope:
+
+```json
+{ "ok": 1, "msg": "ok", "data": {} }
+```
+
+JSON error responses use:
+
+```json
+{ "ok": 0, "msg": "error message", "code": "ERROR_CODE", "traceId": "trace_..." }
+```
+
+Protocol endpoints keep their protocol payloads: `/actuator/prometheus` and `/metrics` return Prometheus text, `/v3/api-docs` returns OpenAPI JSON, and `*/stream` endpoints return SSE events whose final `done` event contains the same response envelope.
+
+The enterprise contract surface includes:
 
 ```text
 POST /auth/token
 POST /auth/refresh
 POST /auth/api-keys
+GET  /actuator/health
+GET  /health
+GET  /actuator/prometheus
+GET  /metrics
+POST /ai/chat
+POST /ai/chat/stream
 POST /ai/react/chat
 POST /ai/react/chat/stream
-GET  /ai/chat
 GET  /ai/service
-GET  /ai/pdf/chat
-POST /ai/pdf/upload/:chatId
+POST /ai/pdf/chat
+POST /ai/pdf/upload/{chatId}
+POST /ingestion/upload/{chatId}
+GET  /ingestion/jobs
+GET  /ingestion/jobs/{jobId}
 GET  /ai/pdf/file/:chatId
 GET  /ai/history/:type
 GET  /ai/history/:type/:chatId
-POST /ingestion/upload/:chatId
-GET  /ingestion/jobs
-GET  /ingestion/jobs/:jobId
+GET  /ai/sessions
+GET  /ai/sessions/{sessionId}
+POST /ai/feedback
 POST /ai/harness/actions/preview
 POST /ai/harness/actions/execute/:token
 GET  /ai/workflow/tasks
 POST /ai/research/tasks
 GET  /ai/evaluation/datasets
 POST /ai/evaluation/datasets
+POST /ai/evaluation/runs
 GET  /cost/summary
+POST /cost/budget
 GET  /audit/logs
-GET  /actuator/prometheus
 GET  /ai/memory/items
 POST /ai/memory/items
 GET  /ai/memory/context
@@ -76,6 +100,23 @@ GET  /ai/graph/facts
 POST /ai/graph/relations
 POST /ai/graph/facts
 ```
+
+Fixed request headers:
+
+```text
+Authorization: Bearer <jwt-or-refresh-token>
+X-API-Key: <api-key>
+X-Tenant-ID: <tenant-id>
+```
+
+Fixed response payload fields:
+
+- Chat: `answer`, `model`, `usage`, `traceId`
+- RAG: `answer`, `citations`, `evidence`, `retrievalStats`
+- Citation: `id`, `source`, `title`, `chunkId`, `snippet`
+- Agent trace: `step`, `thoughtSummary`, `action`, `actionInput`, `observation`
+- Cost summary: `tenantId`, `monthCostUsd`, `monthlyBudgetUsd`, `budgetRemainingUsd`
+- Audit log: `tenantId`, `principal`, `method`, `path`, `status`, `createdAt`
 
 To point the existing Vue frontend at the TypeScript API:
 
@@ -147,6 +188,14 @@ With the API running, use the local performance smoke to guard the same p95/erro
 ```bash
 BASE_URL=http://localhost:3000 pnpm perf:smoke
 ```
+
+For local Docker deployment:
+
+```bash
+docker compose --profile enterprise up --build
+```
+
+The compose profile starts the API, MySQL, Redis, and RabbitMQ. Redis Stream is the default production ingestion queue in the profile; RabbitMQ remains available as a compatible queue backend.
 
 To run a live Java-vs-TS contract comparison, start both services and set:
 

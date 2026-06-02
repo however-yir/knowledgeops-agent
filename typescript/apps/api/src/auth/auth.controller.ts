@@ -13,8 +13,13 @@ export class AuthController {
   }
 
   @Post("refresh")
-  refresh(@Headers("x-refresh-token") refreshToken: string | undefined) {
-    return this.authService.refresh(refreshToken);
+  refresh(
+    @Headers("authorization") authorization: string | undefined,
+    @Headers("x-refresh-token") refreshToken: string | undefined,
+    @Body() body?: { refreshToken?: string }
+  ) {
+    const bearer = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : undefined;
+    return this.authService.refresh(body?.refreshToken ?? bearer ?? refreshToken);
   }
 
   @Post("api-keys")

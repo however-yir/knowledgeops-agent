@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
+import type { Citation } from "@knowledgeops/shared";
 
 import { AiService } from "../ai/ai.service.js";
 import { newId, nowIso } from "../common/ids.js";
@@ -61,7 +62,7 @@ export class EvaluationController {
       const expectedCitations = toStringArray(testCase.expectedCitations);
       const forbiddenKeywords = toStringArray(testCase.forbiddenKeywords);
       const answerPool = `${answer.answer}\n${(answer.evidence ?? []).join("\n")}`.toLowerCase();
-      const citationPool = (answer.citations ?? []).join("\n").toLowerCase();
+      const citationPool = citationSearchText(answer.citations ?? []);
       let keywordScore = expectedKeywords.length === 0
         ? (answer.answer.trim() ? 1 : 0)
         : hitRate(expectedKeywords, answerPool);
@@ -121,6 +122,14 @@ export class EvaluationController {
     return run;
   }
 
+  @Post("runs")
+  async triggerRunFromBody(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body?: { datasetId?: string; modelProfile?: string }) {
+    if (!body?.datasetId?.trim()) {
+      return { ok: 0, msg: "datasetId is required" };
+    }
+    return this.triggerRun(tenantHeader, body.datasetId, { modelProfile: body.modelProfile });
+  }
+
   @Get("datasets/:datasetId/comparison")
   compare(@Param("datasetId") datasetId: string) {
     const dataset = this.store.evalDatasets.get(datasetId);
@@ -177,7 +186,14 @@ function hitRate(expected: string[], actualLower: string): number {
   return round(expected.filter((item) => actualLower.includes(item.toLowerCase())).length / expected.length);
 }
 
-function scoreFaithfulness(answer: string, citations: string[]): number {
+function citationSearchText(citations: Citation[]): string {
+  return citations
+    .map((citation) => `${citation.id} ${citation.source} ${citation.title} ${citation.chunkId} ${citation.snippet}`)
+    .join("\n")
+    .toLowerCase();
+}
+
+function scoreFaithfulness(answer: string, citations: Citation[]): number {
   if (!answer.trim()) {
     return 0;
   }

@@ -5,6 +5,7 @@ import type { ServerResponse } from "node:http";
 
 import type { RequestWithContext } from "../common/request-context.js";
 import { normalizeTenant } from "../common/tenant.js";
+import { traceIdFrom } from "../common/trace.js";
 import { env } from "../config/env.js";
 
 interface Bucket {
@@ -26,7 +27,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     if (env.APP_DISTRIBUTED_RATE_LIMIT_ENABLED) {
       const allowed = await this.distributedAllowed(key).catch(() => true);
       if (!allowed) {
-        reject(res);
+        reject(req, res);
         return;
       }
       next();
@@ -34,7 +35,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     }
     const bucket = this.refill(this.buckets.get(key) ?? { tokens: env.APP_RATE_LIMIT_CAPACITY, refreshedAt: Date.now() });
     if (bucket.tokens < 1) {
-      reject(res);
+      reject(req, res);
       return;
     }
     bucket.tokens -= 1;
@@ -75,9 +76,11 @@ function responseRaw(res: FastifyReply | ServerResponse): ServerResponse {
   return "raw" in res ? res.raw : res;
 }
 
-function reject(res: FastifyReply | ServerResponse): void {
+function reject(req: FastifyRequest, res: FastifyReply | ServerResponse): void {
+  const traceId = traceIdFrom(req);
   const raw = responseRaw(res);
   raw.statusCode = 429;
   raw.setHeader("Content-Type", "application/json");
-  raw.end(JSON.stringify({ ok: 0, msg: "rate limit exceeded" }));
+  raw.setHeader("X-Trace-ID", traceId);
+  raw.end(JSON.stringify({ ok: 0, msg: "rate limit exceeded", code: "RATE_LIMIT_EXCEEDED", traceId }));
 }

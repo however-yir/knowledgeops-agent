@@ -14,8 +14,9 @@
     "migration:readiness": "node scripts/migration-readiness.mjs",
     "parity": "node scripts/check-parity.mjs",
     "perf:smoke": "node scripts/perf-smoke.mjs",
+    "security:defaults": "node scripts/security-defaults.mjs",
     "sbom": "node scripts/sbom.mjs",
-    "prod:gate": "pnpm parity && pnpm db:validate && pnpm contract:diff && pnpm frontend:contract && pnpm migration:readiness && pnpm maturity:gate && pnpm e2e:smoke && pnpm perf:smoke",
+    "prod:gate": "pnpm parity && pnpm db:validate && pnpm contract:diff && pnpm frontend:contract && pnpm migration:readiness && pnpm maturity:gate && pnpm security:defaults && pnpm e2e:smoke && pnpm perf:smoke",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @knowledgeops/shared build && pnpm -r test"
   },

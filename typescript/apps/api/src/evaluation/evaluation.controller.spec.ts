@@ -51,7 +51,16 @@ function fakeAiService(): AiService {
       msg: "ok",
       chatId: "eval-chat",
       answer: "Heat safety requires shade and water. [1]",
-      citations: ["source=policy.txt, chunk=0"],
+      model: "local-grounded",
+      usage: { inputTokens: 10, outputTokens: 12, totalTokens: 22 },
+      traceId: "trace-test",
+      citations: [{
+        id: "cite-1",
+        source: "policy.txt",
+        title: "policy.txt",
+        chunkId: "job-1:0",
+        snippet: "policy.txt says heat safety requires shade and water."
+      }],
       evidence: ["policy.txt says heat safety requires shade and water."],
       trace: []
     })

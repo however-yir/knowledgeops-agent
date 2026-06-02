@@ -1,7 +1,9 @@
 export interface Result<T> {
   ok: 0 | 1;
+  msg: string;
   data?: T;
-  message?: string;
+  code?: string;
+  traceId?: string;
 }
 
 export interface ApiHealth {
@@ -27,6 +29,27 @@ export interface ApiKeyIssueResponse {
   expiresAt?: string;
 }
 
+export interface ChatRequest {
+  chatId: string;
+  prompt: string;
+  modelProfile?: string;
+}
+
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd?: number;
+}
+
+export interface Citation {
+  id: string;
+  source: string;
+  title: string;
+  chunkId: string;
+  snippet: string;
+}
+
 export interface IngestionJob {
   jobId: string;
   chatId: string;
@@ -50,25 +73,25 @@ export interface IngestionSubmitResponse {
 
 export interface ReactTraceStep {
   step: number;
-  thought: string;
+  thoughtSummary: string;
   action: string;
   actionInput?: Record<string, unknown>;
   observation?: unknown;
 }
 
-export interface ReactChatRequest {
-  prompt: string;
-  chatId: string;
-  modelProfile?: string;
-}
+export type ReactChatRequest = ChatRequest;
 
 export interface ReactChatResponse {
   ok: number;
   msg: string;
   chatId: string;
   answer: string;
-  citations?: string[];
+  model: string;
+  usage: TokenUsage;
+  traceId: string;
+  citations?: Citation[];
   evidence?: string[];
+  retrievalStats?: unknown;
   routeProfile?: string;
   routeReason?: string;
   routeCostTier?: string;
@@ -79,9 +102,11 @@ export interface ReactChatResponse {
 }
 
 export interface CitationItem {
+  id: string;
   source: string;
-  chunk: number;
-  score: number;
+  title: string;
+  chunkId: string;
+  snippet: string;
 }
 
 export interface EvidenceItem {
@@ -93,8 +118,9 @@ export interface EvidenceItem {
 
 export interface RagAnswer {
   answer: string;
-  citations: string[];
+  citations: Citation[];
   evidence: string[];
+  retrievalStats: unknown;
 }
 
 export interface PagedResult<T> {
@@ -110,7 +136,7 @@ export interface SessionMessage {
   content: string;
   createdAt: number;
   state?: "pending" | "streaming" | "done" | "error" | "stopped";
-  citations?: string[];
+  citations?: Citation[];
   evidence?: string[];
 }
 
@@ -151,13 +177,16 @@ export interface EvalMetricSummary {
 export function ok<T>(data: T): Result<T> {
   return {
     ok: 1,
+    msg: "ok",
     data
   };
 }
 
-export function fail(message: string): Result<never> {
+export function fail(msg: string, code = "BAD_REQUEST", traceId?: string): Result<never> {
   return {
     ok: 0,
-    message
+    msg,
+    code,
+    traceId
   };
 }

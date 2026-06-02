@@ -7,9 +7,23 @@
     "tags": ["health"]
   },
   {
+    "label": "health alias",
+    "method": "GET",
+    "path": "/health",
+    "expectStatus": 200,
+    "tags": ["health"]
+  },
+  {
     "label": "prometheus metrics",
     "method": "GET",
     "path": "/actuator/prometheus",
+    "expectStatus": 200,
+    "tags": ["metrics", "observability"]
+  },
+  {
+    "label": "prometheus metrics alias",
+    "method": "GET",
+    "path": "/metrics",
     "expectStatus": 200,
     "tags": ["metrics", "observability"]
   },
@@ -32,7 +46,7 @@
     "label": "auth refresh rejects invalid token",
     "method": "POST",
     "path": "/auth/refresh",
-    "headers": { "x-refresh-token": "contract-invalid-refresh" },
+    "headers": { "authorization": "Bearer contract-invalid-refresh" },
     "expectStatus": 200,
     "tags": ["auth", "security", "negative"]
   },
@@ -44,11 +58,21 @@
     "tags": ["auth", "security"]
   },
   {
-    "label": "chat html",
-    "method": "GET",
-    "path": "/ai/chat?prompt=contract%20smoke&chatId=contract-chat",
+    "label": "chat",
+    "method": "POST",
+    "path": "/ai/chat",
+    "body": { "prompt": "contract smoke", "chatId": "contract-chat", "modelProfile": "balanced" },
     "expectStatus": 200,
     "tags": ["chat"]
+  },
+  {
+    "label": "chat stream",
+    "method": "POST",
+    "path": "/ai/chat/stream",
+    "body": { "prompt": "contract stream smoke", "chatId": "contract-chat-stream", "modelProfile": "balanced" },
+    "expectStatus": 200,
+    "sse": true,
+    "tags": ["chat", "sse"]
   },
   {
     "label": "service html",
@@ -84,8 +108,9 @@
   },
   {
     "label": "pdf chat empty result",
-    "method": "GET",
-    "path": "/ai/pdf/chat?prompt=contract%20rag&chatId=contract-rag-empty",
+    "method": "POST",
+    "path": "/ai/pdf/chat",
+    "body": { "prompt": "contract rag", "chatId": "contract-rag-empty", "modelProfile": "balanced" },
     "expectStatus": 200,
     "tags": ["rag", "negative"]
   },
@@ -195,6 +220,14 @@
     "method": "POST",
     "path": "/ai/evaluation/datasets",
     "body": { "name": "" },
+    "expectStatus": 200,
+    "tags": ["evaluation", "negative"]
+  },
+  {
+    "label": "evaluation run missing dataset",
+    "method": "POST",
+    "path": "/ai/evaluation/runs",
+    "body": { "modelProfile": "balanced" },
     "expectStatus": 200,
     "tags": ["evaluation", "negative"]
   },

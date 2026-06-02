@@ -31,10 +31,18 @@ export class OperationsController {
     return this.store.auditLogs
       .filter((log) => !tenantId || log.tenantId === tenantId)
       .slice(-bounded)
-      .reverse();
+      .reverse()
+      .map((log) => ({
+        tenantId: String(log.tenantId ?? "public"),
+        principal: String(log.principal ?? log.userIdentity ?? "anonymous"),
+        method: String(log.method ?? ""),
+        path: String(log.path ?? ""),
+        status: Number(log.status ?? log.statusCode ?? 0),
+        createdAt: String(log.createdAt ?? "")
+      }));
   }
 
-  @Get("actuator/prometheus")
+  @Get(["actuator/prometheus", "metrics"])
   @Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
   prometheus() {
     return this.metrics.prometheus();

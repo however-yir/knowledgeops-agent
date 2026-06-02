@@ -8,6 +8,7 @@ import { AuthService } from "./auth.service.js";
 
 const PUBLIC_ROUTES = [
   { method: "GET", path: "/actuator/health" },
+  { method: "GET", path: "/health" },
   { method: "GET", path: "/" },
   { method: "POST", path: "/auth/token" },
   { method: "POST", path: "/auth/refresh" }
@@ -74,7 +75,7 @@ function hasRoutePermission(request: FastifyRequest, permissions: string[]): boo
 }
 
 function requiredAuthorities(method: string, path: string): string[] {
-  if (path === "/actuator/prometheus") {
+  if (path === "/actuator/prometheus" || path === "/metrics") {
     return ["PERM_METRICS_READ", "ROLE_ADMIN", "ROLE_OPS"];
   }
   if (method === "GET" && path === "/audit/logs") {
@@ -86,7 +87,7 @@ function requiredAuthorities(method: string, path: string): string[] {
   if (method === "GET" && (path === "/ai/chat" || path === "/ai/service")) {
     return ["PERM_CHAT_READ", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
   }
-  if (method === "POST" && (path === "/ai/chat" || path === "/ai/service")) {
+  if (method === "POST" && (path === "/ai/chat" || path === "/ai/chat/stream" || path === "/ai/service")) {
     return ["PERM_CHAT_WRITE", "ROLE_ADMIN"];
   }
   if (method === "POST" && (path === "/ai/react/chat" || path === "/ai/react/chat/stream")) {
@@ -110,7 +111,10 @@ function requiredAuthorities(method: string, path: string): string[] {
   if (method === "POST" && path === "/ai/feedback") {
     return ["PERM_FEEDBACK_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
   }
-  if (method === "GET" && (path === "/ai/pdf/chat" || path.startsWith("/ai/pdf/file/"))) {
+  if ((method === "GET" || method === "POST") && path === "/ai/pdf/chat") {
+    return ["PERM_RAG_READ", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
+  }
+  if (method === "GET" && path.startsWith("/ai/pdf/file/")) {
     return ["PERM_RAG_READ", "ROLE_ADMIN"];
   }
   if (method === "POST" && (path.startsWith("/ai/pdf/upload/") || path.startsWith("/ingestion/upload/"))) {

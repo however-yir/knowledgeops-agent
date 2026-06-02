@@ -13,7 +13,7 @@ const server = await ensureServer();
 try {
   await expectJson("health", "/actuator/health", { status: "UP" }, "GET");
   await upload();
-  await expectOk("chat", "/ai/react/chat", { prompt: "heat safety", chatId });
+  assertFields("chat", await expectOk("chat", "/ai/react/chat", { prompt: "heat safety", chatId }), ["answer", "model", "usage", "traceId"]);
   await expectSse("stream", "/ai/react/chat/stream", { prompt: "heat safety stream", chatId });
   await expectJson("sessions", "/ai/sessions", { items: "array" }, "GET");
   await expectJson("memory create", "/ai/memory/items", { userId: "anonymous", content: "E2E memory item", type: "fact" });
@@ -25,7 +25,7 @@ try {
     name: `e2e-${Date.now()}`,
     cases: [{ question: "heat safety", expectedKeywords: ["heat"] }]
   });
-  await expectJson("eval run", `/ai/evaluation/datasets/${dataset.datasetId}/runs`, { modelProfile: "balanced" });
+  await expectJson("eval run", "/ai/evaluation/runs", { datasetId: dataset.datasetId, modelProfile: "balanced" });
   await expectJson("cost", "/cost/summary", { tenantId: "public" }, "GET");
   console.log("e2e smoke ok");
 } finally {
@@ -40,14 +40,12 @@ async function upload() {
   if (!response.ok) {
     throw new Error(`upload failed: ${response.status} ${await response.text()}`);
   }
+  const json = await response.json();
+  assertEnvelope("upload", json);
 }
 
 async function expectOk(label, path, body) {
-  const json = await expectJson(label, path, body);
-  if (json.ok !== 1) {
-    throw new Error(`${label} expected ok=1`);
-  }
-  return json;
+  return expectJson(label, path, body);
 }
 
 async function expectJson(label, path, bodyOrShape, method = "POST") {
@@ -62,8 +60,9 @@ async function expectJson(label, path, bodyOrShape, method = "POST") {
     throw new Error(`${label} failed: ${response.status} ${text}`);
   }
   const json = text ? JSON.parse(text) : null;
-  assertShape(label, json, hasBody ? undefined : bodyOrShape);
-  return json;
+  const payload = assertEnvelope(label, json);
+  assertShape(label, payload, hasBody ? undefined : bodyOrShape);
+  return payload;
 }
 
 async function expectSse(label, path, body) {
@@ -75,6 +74,23 @@ async function expectSse(label, path, body) {
   const text = await response.text();
   if (!response.ok || !text.includes("event: done")) {
     throw new Error(`${label} SSE failed`);
+  }
+  const done = text.match(/event: done\ndata: (.+)\n/)?.[1];
+  assertEnvelope(label, done ? JSON.parse(done) : null);
+}
+
+function assertEnvelope(label, json) {
+  if (json?.ok !== 1 || typeof json.msg !== "string" || !("data" in json)) {
+    throw new Error(`${label} expected { ok, msg, data } envelope`);
+  }
+  return json.data;
+}
+
+function assertFields(label, json, fields) {
+  for (const field of fields) {
+    if (!(field in (json ?? {}))) {
+      throw new Error(`${label} expected field ${field}`);
+    }
   }
 }
 

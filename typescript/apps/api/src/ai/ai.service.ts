@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { ReactChatRequest, ReactChatResponse } from "@knowledgeops/shared";
+import type { Citation, ReactChatRequest, ReactChatResponse } from "@knowledgeops/shared";
 
 import { HistoryService } from "../history/history.service.js";
 import { MetricsService } from "../platform/metrics.service.js";
@@ -24,7 +24,7 @@ export class AiService {
     private readonly businessTools: BusinessToolsService
   ) {}
 
-  async reactChat(request: ReactChatRequest, tenantId = "public", historyType = "react"): Promise<ReactChatResponse> {
+  async reactChat(request: ReactChatRequest, tenantId = "public", historyType = "react", traceId = newId("trace")): Promise<ReactChatResponse> {
     const started = Date.now();
     const prompt = request.prompt || "";
     const route = this.modelRouter.resolve(request.modelProfile, historyType, tenantId, request.chatId);
@@ -45,6 +45,7 @@ export class AiService {
     const finalAnswer = llmResult?.answer ?? localAnswer;
     const inputTokens = llmResult?.inputTokens ?? estimatedInputTokens;
     const outputTokens = llmResult?.outputTokens ?? this.costService.estimateTokens(finalAnswer);
+    const model = llmResult?.model ?? route.model;
     this.costService.recordUsage(tenantId, route.costTier, inputTokens, outputTokens);
     this.metrics.increment("react_requests_total", { outcome: "success", route: route.profile });
     this.metrics.increment("react_latency_ms_sum", { route: route.profile }, Date.now() - started);
@@ -55,8 +56,17 @@ export class AiService {
       msg: "ok",
       chatId: request.chatId,
       answer: finalAnswer,
+      model,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUsd: this.costService.calculateCost(route.costTier, inputTokens + outputTokens)
+      },
+      traceId,
       citations: [...(toolAnswer?.citations ?? []), ...rag.citations],
       evidence: [...(toolAnswer?.evidence ?? []), ...rag.evidence],
+      retrievalStats: rag.retrievalStats,
       routeProfile: route.profile,
       routeReason: route.reason,
       routeCostTier: route.costTier,
@@ -66,7 +76,7 @@ export class AiService {
       trace: [
         {
           step: 1,
-          thought: "Resolve model profile, budget, memory, and hybrid retrieval context.",
+          thoughtSummary: "Resolved model profile, budget, memory, and hybrid retrieval context.",
           action: toolAnswer ? toolAnswer.action : "hybrid_retrieve",
           actionInput: { prompt, chatId: request.chatId, tenantId, model: route.model },
           observation: {
@@ -78,12 +88,12 @@ export class AiService {
         },
         {
           step: 2,
-          thought: "Generate a grounded answer using the routed model, falling back to deterministic local composition when needed.",
+          thoughtSummary: "Generated a grounded answer using the routed model or deterministic local fallback.",
           action: llmResult?.degraded === false ? "llm_generate" : "local_fallback",
           actionInput: { routeProfile: route.profile },
           observation: {
             status: "completed",
-            model: llmResult?.model ?? "local-grounded",
+            model,
             degraded: llmResult?.degraded ?? true,
             errorMessage: llmResult?.errorMessage,
             inputTokens,
@@ -102,11 +112,11 @@ export class AiService {
   textStream(response: ReactChatResponse): string {
     const trace = response.trace.map((step) => `event: trace\ndata: ${JSON.stringify(step)}\n\n`).join("");
     const token = JSON.stringify({ token: response.answer });
-    const done = JSON.stringify(response);
+    const done = JSON.stringify({ ok: 1, msg: "ok", data: responseData(response) });
     return `${trace}event: token\ndata: ${token}\n\nevent: done\ndata: ${done}\n\n`;
   }
 
-  async reactChatStream(request: ReactChatRequest, tenantId = "public", historyType = "react"): Promise<string> {
+  async reactChatStream(request: ReactChatRequest, tenantId = "public", historyType = "react", traceId = newId("trace")): Promise<string> {
     const started = Date.now();
     const prompt = request.prompt || "";
     const route = this.modelRouter.resolve(request.modelProfile, historyType, tenantId, request.chatId);
@@ -120,7 +130,7 @@ export class AiService {
 
     const trace = {
       step: 1,
-      thought: "Resolve route and stream provider tokens from grounded retrieval context.",
+      thoughtSummary: "Resolved route and streamed provider tokens from grounded retrieval context.",
       action: toolAnswer ? toolAnswer.action : "llm_stream",
       actionInput: { prompt, chatId: request.chatId, tenantId, model: route.model },
       observation: {
@@ -148,10 +158,11 @@ export class AiService {
     }
 
     if (!answer.trim()) {
-      const fallback = await this.reactChat(request, tenantId, historyType);
+      const fallback = await this.reactChat(request, tenantId, historyType, traceId);
       return this.textStream(fallback);
     }
     const outputTokens = this.costService.estimateTokens(answer);
+    const model = route.model;
     this.costService.recordUsage(tenantId, route.costTier, estimatedInputTokens, outputTokens);
     this.metrics.increment("react_stream_requests_total", { outcome: "success", route: route.profile });
     this.metrics.observe("react_stream_latency_ms", Date.now() - started, { route: route.profile });
@@ -160,8 +171,17 @@ export class AiService {
       msg: "ok",
       chatId: request.chatId,
       answer,
+      model,
+      usage: {
+        inputTokens: estimatedInputTokens,
+        outputTokens,
+        totalTokens: estimatedInputTokens + outputTokens,
+        costUsd: this.costService.calculateCost(route.costTier, estimatedInputTokens + outputTokens)
+      },
+      traceId,
       citations: [...(toolAnswer?.citations ?? []), ...rag.citations],
       evidence: [...(toolAnswer?.evidence ?? []), ...rag.evidence],
+      retrievalStats: rag.retrievalStats,
       routeProfile: route.profile,
       routeReason: route.reason,
       routeCostTier: route.costTier,
@@ -172,9 +192,9 @@ export class AiService {
         trace,
         {
           step: 2,
-          thought: "Finish provider streaming response and persist usage/history.",
+          thoughtSummary: "Finished provider streaming response and persisted usage/history.",
           action: "finish",
-          observation: { status: "completed", model: route.model, inputTokens: estimatedInputTokens, outputTokens }
+          observation: { status: "completed", model, inputTokens: estimatedInputTokens, outputTokens }
         }
       ]
     };
@@ -182,7 +202,7 @@ export class AiService {
       this.historyService.appendExchange(tenantId, historyType, request.chatId, prompt, answer);
       this.saveConversationSummary(tenantId, request.chatId, prompt, answer);
     }
-    sse += `event: done\ndata: ${JSON.stringify(response)}\n\n`;
+    sse += `event: done\ndata: ${JSON.stringify({ ok: 1, msg: "ok", data: responseData(response) })}\n\n`;
     return sse;
   }
 
@@ -191,14 +211,14 @@ export class AiService {
     this.store.persist();
   }
 
-  private async educationToolAnswer(prompt: string): Promise<{ action: string; answer: string; citations: string[]; evidence: string[] } | undefined> {
+  private async educationToolAnswer(prompt: string): Promise<{ action: string; answer: string; citations: Citation[]; evidence: string[] } | undefined> {
     const normalized = prompt.toLowerCase();
     if (containsAny(normalized, ["校区", "campus"])) {
       const schools = await this.businessTools.querySchool();
       return {
         action: "query_school",
         answer: `可以参考这些校区：\n${markdownTable(["校区", "城市"], schools.map((school) => [school.name, school.city ?? ""]))}`,
-        citations: ["source=builtin://query_school, chunk=1"],
+        citations: [builtinCitation("query_school", "School catalog", schools.map((school) => school.name).join(", "))],
         evidence: schools.map((school) => `校区：${school.name}，城市：${school.city ?? "未知"}`)
       };
     }
@@ -216,7 +236,7 @@ export class AiService {
           educationLabel(course.edu),
           String(course.duration ?? "")
         ]))}`,
-        citations: ["source=builtin://query_course, chunk=1"],
+        citations: [builtinCitation("query_course", "Course catalog", courses.map((course) => course.name).join(", "))],
         evidence: courses.map((course) => `课程：${course.name}，类型：${course.type ?? "未分类"}，学历要求：${educationLabel(course.edu)}，学习时长：${course.duration ?? "未知"}天`)
       };
     }
@@ -278,6 +298,21 @@ export class AiService {
     });
     this.store.persist();
   }
+}
+
+function responseData(response: ReactChatResponse) {
+  const { ok: _ok, msg: _msg, ...data } = response;
+  return data;
+}
+
+function builtinCitation(action: string, title: string, snippet: string): Citation {
+  return {
+    id: `cite-${action}`,
+    source: `builtin://${action}`,
+    title,
+    chunkId: "builtin:1",
+    snippet: snippet || title
+  };
 }
 
 function containsAny(value: string, needles: string[]): boolean {

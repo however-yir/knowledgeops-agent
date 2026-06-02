@@ -1,5 +1,6 @@
 services:
   knowledgeops-agent-ts:
+    profiles: ["typescript", "enterprise"]
     build:
       context: .
     container_name: knowledgeops-agent-ts
@@ -10,7 +11,7 @@ services:
       APP_JWT_SECRET: replace_with_32_bytes_min_secret
       APP_DEMO_API_KEY: local-demo-api-key
       APP_CORS_ALLOWED_ORIGINS: http://localhost:8088,http://localhost:5173
-      APP_INGESTION_QUEUE_BACKEND: in-memory
+      APP_INGESTION_QUEUE_BACKEND: redis_stream
       APP_REDIS_URL: redis://redis:6379
       APP_REDIS_STREAM_KEY: knowledgeops:ingestion
       APP_REDIS_DLQ_STREAM_KEY: knowledgeops:ingestion:dlq
@@ -66,6 +67,7 @@ services:
           memory: 768M
 
   mysql:
+    profiles: ["typescript", "enterprise"]
     image: mysql:8.4
     container_name: knowledgeops-agent-ts-mysql
     environment:
@@ -75,12 +77,14 @@ services:
       - "3307:3306"
 
   redis:
+    profiles: ["typescript", "enterprise"]
     image: redis:7-alpine
     container_name: knowledgeops-agent-ts-redis
     ports:
       - "6380:6379"
 
   rabbitmq:
+    profiles: ["typescript", "enterprise"]
     image: rabbitmq:3-management
     container_name: knowledgeops-agent-ts-rabbitmq
     ports:
