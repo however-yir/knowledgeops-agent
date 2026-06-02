@@ -30,6 +30,10 @@ jobs:
         working-directory: python
         run: knowledgeops-python-contract
 
+      - name: Security defaults
+        working-directory: python
+        run: knowledgeops-python-security-gate
+
       - name: Maturity gate
         working-directory: python
         run: knowledgeops-python-maturity
@@ -41,6 +45,10 @@ jobs:
       - name: Performance smoke
         working-directory: python
         run: ITERATIONS=40 P95_MS=1500 knowledgeops-python-perf-smoke
+
+      - name: Python parity report
+        working-directory: python
+        run: knowledgeops-python-parity-report
 
       - name: Docker build
         run: docker build -t knowledgeops-agent-python:ci python

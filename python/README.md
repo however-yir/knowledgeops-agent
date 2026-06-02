@@ -13,9 +13,11 @@ python3 -m venv .venv
 pip install -e ".[test]"
 pytest
 knowledgeops-python-contract
+knowledgeops-python-security-gate
 knowledgeops-python-maturity
 knowledgeops-python-e2e-smoke
 knowledgeops-python-perf-smoke
+knowledgeops-python-parity-report
 uvicorn knowledgeops_py.app:create_app --factory --host 0.0.0.0 --port 3001
 ```
 
@@ -29,7 +31,19 @@ GET  http://localhost:3001/ai/service?prompt=hello
 POST http://localhost:3001/ai/service
 ```
 
-The current Python runtime includes local parity implementations for the primary Java/TypeScript contract surface: auth, chat/SSE, PDF ingestion/RAG, history, sessions, harness, workflow/research, evaluation, cost, audit, memory, graph, OpenAPI, and Prometheus. It intentionally keeps persistence and provider integrations local until the API contract is stable.
+The current Python runtime is the FastAPI enterprise service track. It includes API Key auth, JWT/refresh token issue, RBAC dependencies, `X-Tenant-ID` context, rate limiting, Chat/SSE, ReAct trace, RAG upload/chat, ingestion jobs, simple-vector hybrid retrieval, citations/evidence/refusal, sessions, feedback, evaluation runs, cost governance, audit logs, health/metrics, OpenAPI contract validation, e2e/perf/security gates, Docker, and a Python parity report.
+
+All JSON responses use:
+
+```json
+{ "ok": 1, "msg": "ok", "data": {}, "traceId": "trace_..." }
+```
+
+Error responses use:
+
+```json
+{ "ok": 0, "msg": "error message", "code": "ERROR_CODE", "traceId": "trace_..." }
+```
 
 The local demo API key defaults to:
 

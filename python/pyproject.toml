@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",
   "python-multipart>=0.0.20,<1",
+  "redis>=5.0,<6",
   "uvicorn[standard]>=0.32,<1"
 ]
 
@@ -25,7 +26,9 @@ knowledgeops-python-api = "knowledgeops_py.main:run"
 knowledgeops-python-contract = "knowledgeops_py.scripts.contract_gate:main"
 knowledgeops-python-e2e-smoke = "knowledgeops_py.scripts.e2e_smoke:main"
 knowledgeops-python-maturity = "knowledgeops_py.scripts.maturity_gate:main"
+knowledgeops-python-parity-report = "knowledgeops_py.scripts.parity_report:main"
 knowledgeops-python-perf-smoke = "knowledgeops_py.scripts.perf_smoke:main"
+knowledgeops-python-security-gate = "knowledgeops_py.scripts.security_gate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
