@@ -21,7 +21,7 @@
     "element-plus": "^2.14.0",
     "highlight.js": "^11.11.1",
     "marked": "^18.0.3",
-    "vue": "^3.5.34"
+    "vue": "^3.5.35"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.59.2",
