@@ -21,7 +21,7 @@
         <jjwt.version>0.13.0</jjwt.version>
         <springdoc.version>2.6.0</springdoc.version>
         <maven-surefire-plugin.version>3.5.5</maven-surefire-plugin.version>
-        <maven-failsafe-plugin.version>3.5.5</maven-failsafe-plugin.version>
+        <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
         <checkstyle.version>10.26.1</checkstyle.version>
