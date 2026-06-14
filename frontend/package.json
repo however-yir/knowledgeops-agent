@@ -26,13 +26,13 @@
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
-    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitejs/plugin-vue": "^6.0.7",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^9.28.0",
     "prettier": "^3.4.0",
     "typescript": "^5.9.2",
-    "vite": "^6.4.2",
+    "vite": "^8.0.16",
     "vue-eslint-parser": "^9.4.0",
     "vue-tsc": "^3.2.8"
   }
