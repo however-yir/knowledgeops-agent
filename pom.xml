@@ -27,7 +27,7 @@
         <checkstyle.version>10.26.1</checkstyle.version>
         <pmd-plugin.version>3.28.0</pmd-plugin.version>
         <pmd.version>7.24.0</pmd.version>
-        <spotbugs-plugin.version>4.8.6.6</spotbugs-plugin.version>
+        <spotbugs-plugin.version>4.10.2.0</spotbugs-plugin.version>
         <owasp.version>12.2.2</owasp.version>
         <cyclonedx.version>2.9.1</cyclonedx.version>
         <jacoco.version>0.8.14</jacoco.version>
