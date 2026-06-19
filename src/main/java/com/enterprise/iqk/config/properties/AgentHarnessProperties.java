@@ -20,8 +20,8 @@ public class AgentHarnessProperties {
     @Data
     public static class Workspace {
         private String root = ".";
-        private boolean writeEnabled = true;
-        private boolean shellEnabled = true;
+        private boolean writeEnabled = false;
+        private boolean shellEnabled = false;
         private int commandTimeoutSeconds = 10;
         private int maxCommandOutputBytes = 12_000;
         private int maxFileBytes = 20_000;

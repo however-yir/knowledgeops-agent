@@ -352,6 +352,8 @@ public class WorkspaceRuntime implements AgentRuntime {
     private static AgentHarnessProperties defaultProperties(Path workspaceRoot) {
         AgentHarnessProperties properties = new AgentHarnessProperties();
         properties.getWorkspace().setRoot(workspaceRoot.toString());
+        properties.getWorkspace().setWriteEnabled(true);
+        properties.getWorkspace().setShellEnabled(true);
         return properties;
     }
 

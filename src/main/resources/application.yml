@@ -169,11 +169,11 @@ app:
     read-timeout-ms: ${APP_WEB_SEARCH_READ_TIMEOUT_MS:8000}
     max-results: ${APP_WEB_SEARCH_MAX_RESULTS:5}
   agent-harness:
-    trusted-runtime-enabled: ${APP_AGENT_HARNESS_TRUSTED_ENABLED:true}
+    trusted-runtime-enabled: ${APP_AGENT_HARNESS_TRUSTED_ENABLED:false}
     workspace:
       root: ${APP_AGENT_HARNESS_WORKSPACE_ROOT:.}
-      write-enabled: ${APP_AGENT_HARNESS_WORKSPACE_WRITE_ENABLED:true}
-      shell-enabled: ${APP_AGENT_HARNESS_WORKSPACE_SHELL_ENABLED:true}
+      write-enabled: ${APP_AGENT_HARNESS_WORKSPACE_WRITE_ENABLED:false}
+      shell-enabled: ${APP_AGENT_HARNESS_WORKSPACE_SHELL_ENABLED:false}
       command-timeout-seconds: ${APP_AGENT_HARNESS_COMMAND_TIMEOUT_SECONDS:10}
       max-command-output-bytes: ${APP_AGENT_HARNESS_MAX_COMMAND_OUTPUT_BYTES:12000}
       max-file-bytes: ${APP_AGENT_HARNESS_MAX_FILE_BYTES:20000}
@@ -192,6 +192,7 @@ rag:
   retrieve-top-k: ${RAG_RETRIEVE_TOP_K:12}
   rerank-top-k: ${RAG_RERANK_TOP_K:6}
   similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.45}
+  temperature: ${RAG_TEMPERATURE:0.2}
   split:
     chunk-size: ${RAG_CHUNK_SIZE:800}
     min-chunk-size: ${RAG_MIN_CHUNK_SIZE:120}
