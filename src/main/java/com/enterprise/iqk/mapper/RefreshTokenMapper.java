@@ -25,6 +25,7 @@ public interface RefreshTokenMapper extends BaseMapper<RefreshTokenRecord> {
             UPDATE refresh_tokens
             SET revoked_at = #{revokedAt}
             WHERE id = #{id}
+              AND revoked_at IS NULL
             """)
     int revoke(@Param("id") Long id, @Param("revokedAt") LocalDateTime revokedAt);
 }

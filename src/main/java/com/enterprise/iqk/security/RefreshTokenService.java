@@ -6,6 +6,7 @@ import com.enterprise.iqk.mapper.RefreshTokenMapper;
 import com.enterprise.iqk.util.HashUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -38,6 +39,7 @@ public class RefreshTokenService {
         return new RefreshTokenIssueResult(raw, record.getTenantId(), expiresAt);
     }
 
+    @Transactional
     public AuthIdentity consume(String rawToken) {
         if (!StringUtils.hasText(rawToken)) {
             return null;
@@ -47,7 +49,11 @@ public class RefreshTokenService {
         if (record == null) {
             return null;
         }
-        refreshTokenMapper.revoke(record.getId(), LocalDateTime.now());
+        // Conditional revoke guards against concurrent reuse of the same token:
+        // only the first caller flips revoked_at, the rest get 0 rows and are rejected.
+        if (refreshTokenMapper.revoke(record.getId(), LocalDateTime.now()) == 0) {
+            return null;
+        }
         String roleCsv = Objects.toString(record.getRoles(), "");
         List<String> roles = Arrays.stream(roleCsv.split(","))
                 .filter(StringUtils::hasText)
