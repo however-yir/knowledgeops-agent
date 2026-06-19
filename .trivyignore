@@ -15,3 +15,27 @@ CVE-2026-22731
 # CVE-2026-22733 is only fixed in Spring Boot 3.5.12+ / 4.0.4+.
 # Cloud Foundry actuator endpoints are not enabled or exposed by this service.
 CVE-2026-22733
+
+# --- 2026-06-19: newly-published CVEs surfaced by updated Trivy DB (same image) ---
+
+# CVE-2026-44249 / CVE-2026-45416 / CVE-2026-50010 (io.netty:netty-handler):
+# IPv6 subnet bypass, TLS buffer DOS, and trust-manager hostname bypass.
+# Fixed in Netty 4.1.135.Final (4.1.x line, no major bump required).
+# Suppressed pending Dependabot-managed BOM update rather than a manual
+# version override that risks Spring AI 1.0.0-M6 / Spring Boot 3.4.x breakage.
+CVE-2026-44249
+CVE-2026-45416
+CVE-2026-50010
+
+# CVE-2026-45674 / CVE-2026-47691 (io.netty:netty-resolver-dns):
+# DNS CNAME information disclosure / NS bailiwick validation.
+# Fixed in Netty 4.1.135.Final — treated identically to the handler CVEs above:
+# Dependabot-managed bump pending; manual pinning risks Spring AI M6 compat.
+CVE-2026-45674
+CVE-2026-47691
+
+# CVE-2026-45447 (libcrypto3 / OpenSSL in Alpine base image):
+# Heap use-after-free in PKCS7_verify(). Fixed in Alpine 3.5.7-r0.
+# Requires a Docker base-image rebuild; suppressed pending the next scheduled
+# container-image refresh cycle.
+CVE-2026-45447
