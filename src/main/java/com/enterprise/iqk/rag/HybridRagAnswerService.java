@@ -1,6 +1,7 @@
 package com.enterprise.iqk.rag;
 
 import com.enterprise.iqk.config.properties.RagProperties;
+import com.enterprise.iqk.constants.SystemConstants;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.retrieval.CitationItem;
 import com.enterprise.iqk.retrieval.CitationService;
@@ -83,8 +84,9 @@ public class HybridRagAnswerService {
             tenantCostService.assertBudget(normalizedTenantId, decision.costTier(), inputTokens, 600);
 
             String answer = chatClient.prompt()
-                    .options(ChatOptions.builder().model(decision.model()).build())
-                    .system("你是一个企业级RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。")
+                    .options(ChatOptions.builder().model(decision.model())
+                            .temperature(ragProperties.getTemperature()).build())
+                    .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
                     .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
                     .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                     .call()
