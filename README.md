@@ -26,7 +26,7 @@ KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. I
 | Enterprise RAG | PDF upload, async ingestion jobs, tenant-scoped retrieval, answer citations, evidence snippets |
 | Tenant and permission boundary | API Key, JWT, refresh token lifecycle, RBAC permissions, tenant headers, audit logging |
 | Operations baseline | Docker Compose, Flyway migrations, structured logs, Prometheus metrics, Loki logs, Tempo traces, Alertmanager rules |
-| Quality evidence | RAG Evaluation Studio, Unit tests, Testcontainers integration tests, JaCoCo, regression evaluation, E2E smoke logs, Docker image build |
+| Quality evidence | RAG Evaluation Studio, Unit tests, Testcontainers integration tests, JaCoCo, regression evaluation, E2E smoke logs, Docker image build; framework-agnostic external eval via [ragproof](https://github.com/however-yir/ragproof) |
 | Extensible AI workflow | Spring AI chat, ReAct trace payloads, SSE token streaming, model routing, tool execution hooks |
 
 ## Product Surfaces
@@ -589,6 +589,8 @@ python3 scripts/generate_eval_dataset.py
 python3 scripts/generate_eval_predictions.py
 python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
 ```
+
+> 内置回归评测之外，如需框架无关、直接对接 HTTP API 的外部评测与 CI 门禁，可搭配 [ragproof](https://github.com/however-yir/ragproof)（recall@k / MRR / faithfulness / 引用溯源指标 + 阈值卡红线）。对接本平台的示例配置见 ragproof 仓库中的 `examples/knowledgeops.yaml`。
 
 ### CI
 
