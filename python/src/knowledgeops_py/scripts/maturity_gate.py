@@ -4,15 +4,26 @@ from pathlib import Path
 
 from knowledgeops_py.scripts.contract_gate import REQUIRED_OPENAPI_ENDPOINTS
 
-
 REQUIRED_FILES = [
     "python/src/knowledgeops_py/app.py",
     "python/src/knowledgeops_py/dto.py",
+    "python/src/knowledgeops_py/domain/context.py",
+    "python/src/knowledgeops_py/domain/ports.py",
+    "python/src/knowledgeops_py/infrastructure/models.py",
+    "python/src/knowledgeops_py/infrastructure/database.py",
+    "python/src/knowledgeops_py/infrastructure/queues.py",
+    "python/src/knowledgeops_py/infrastructure/providers.py",
+    "python/src/knowledgeops_py/workers/runner.py",
     "python/src/knowledgeops_py/scripts/contract_gate.py",
+    "python/src/knowledgeops_py/scripts/java_baseline_manifest.py",
+    "python/src/knowledgeops_py/scripts/manifest_gate.py",
     "python/src/knowledgeops_py/scripts/security_gate.py",
     "python/src/knowledgeops_py/scripts/parity_report.py",
     "python/tests/test_app.py",
     "python/Dockerfile",
+    "python/alembic/versions/0001_java_v14_baseline.py",
+    "python/parity/java-baseline-manifest.json",
+    "python/helm/knowledgeops-python/templates/workloads.yaml",
     ".github/workflows/python.yml",
 ]
 
@@ -33,6 +44,12 @@ REQUIRED_CI_COMMANDS = [
     "knowledgeops-python-e2e-smoke",
     "knowledgeops-python-perf-smoke",
     "knowledgeops-python-parity-report",
+    "knowledgeops-python-manifest-gate",
+    "ruff check",
+    "mypy",
+    "bandit",
+    "pip-audit",
+    "alembic upgrade",
 ]
 
 

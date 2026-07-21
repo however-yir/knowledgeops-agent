@@ -5,15 +5,20 @@ on:
     branches: [python-rewrite]
     paths:
       - "python/**"
-      - "typescript/parity/contract-cases.json"
+      - "docker-compose.python.yml"
       - ".github/workflows/python.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
@@ -21,7 +26,34 @@ jobs:
 
       - name: Install
         working-directory: python
-        run: pip install -e ".[test]"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test,quality]"
+
+      - name: Lint
+        run: ruff check python/src python/tests
+
+      - name: Type check
+        working-directory: python
+        run: mypy
+
+      - name: Security static analysis
+        run: bandit -q -r python/src/knowledgeops_py -x python/src/knowledgeops_py/scripts
+
+      - name: Alembic migration gate
+        working-directory: python
+        run: APP_DATABASE_URL=sqlite+aiosqlite:////tmp/knowledgeops-ci.db alembic upgrade head
+
+      - name: Fixed Java baseline manifest
+        env:
+          BASELINE_SHA: ac62bb3a83239b1b3a8701fcdcad7d337c2c400a
+        run: |
+          baseline_dir=$(mktemp -d)
+          git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
+          trap 'git worktree remove --force "$baseline_dir"' EXIT
+          knowledgeops-python-manifest-gate \
+            --repository "$baseline_dir" \
+            --manifest python/parity/java-baseline-manifest.json
 
       - name: Test
         run: pytest python
@@ -46,9 +78,33 @@ jobs:
         working-directory: python
         run: ITERATIONS=40 P95_MS=1500 knowledgeops-python-perf-smoke
 
+      - name: Dependency audit and SBOM
+        working-directory: python
+        run: |
+          pip-audit --progress-spinner=off
+          cyclonedx-py environment --output-file reports/python-sbom.json
+
       - name: Python parity report
         working-directory: python
         run: knowledgeops-python-parity-report
 
+      - name: Upload Python evidence
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: python-rewrite-evidence
+          path: |
+            python/reports/**
+
       - name: Docker build
         run: docker build -t knowledgeops-agent-python:ci python
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: python/
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

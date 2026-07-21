@@ -1,0 +1,238 @@
+{
+  "baselineSha": "ac62bb3a83239b1b3a8701fcdcad7d337c2c400a",
+  "migrations": [
+    "src/main/resources/db/migration/V10__agent_workflow_tables.sql",
+    "src/main/resources/db/migration/V11__knowledge_graph_tables.sql",
+    "src/main/resources/db/migration/V12__memory_system_tables.sql",
+    "src/main/resources/db/migration/V13__rag_evaluation_studio.sql",
+    "src/main/resources/db/migration/V14__agent_harness_permissions.sql",
+    "src/main/resources/db/migration/V1__init_core_and_platform_tables.sql",
+    "src/main/resources/db/migration/V2__security_lifecycle_and_audit_retention.sql",
+    "src/main/resources/db/migration/V4__expand_permission_matrix.sql",
+    "src/main/resources/db/migration/V5__route_level_permissions_and_api_key_index.sql",
+    "src/main/resources/db/migration/V6__tenant_isolation.sql",
+    "src/main/resources/db/migration/V7__seed_demo_admin_api_key.sql",
+    "src/main/resources/db/migration/V8__session_feedback_cost_platform.sql",
+    "src/main/resources/db/migration/V9__conversation_ingestion_tenant_isolation.sql"
+  ],
+  "tables": [
+    "agent_event",
+    "agent_session_state",
+    "agent_step",
+    "agent_task",
+    "answer_feedback",
+    "api_keys",
+    "audit_log",
+    "conversation",
+    "course",
+    "course_reservation",
+    "eval_case",
+    "eval_dataset",
+    "eval_result",
+    "eval_run",
+    "ingestion_job",
+    "kg_entity",
+    "kg_fact",
+    "kg_relation",
+    "memory_event",
+    "memory_item",
+    "model_ab_exposure",
+    "permissions",
+    "refresh_tokens",
+    "role_permissions",
+    "roles",
+    "school",
+    "tenant_budget",
+    "tenant_usage_daily",
+    "user_roles",
+    "users"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/ai/evaluation/datasets"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/evaluation/datasets"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/evaluation/datasets/{datasetId}/comparison"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/evaluation/datasets/{datasetId}/runs"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/evaluation/runs"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/evaluation/runs/{runId}"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/evaluation/runs/{runId}/baseline"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/evaluation/runs/{runId}/report"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/feedback"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/harness/actions"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/harness/actions/execute/{token}"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/harness/actions/preview"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/history/{type}"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/history/{type}/{chatId}"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/pdf/file/{chatId}"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/react/chat"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/react/chat/stream"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/research/tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/research/tasks/{taskId}"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/research/tasks/{taskId}/events"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/research/tasks/{taskId}/report"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/sessions"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/sessions/{sessionId}"
+    },
+    {
+      "method": "PUT",
+      "path": "/ai/sessions/{sessionId}"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/sessions/{sessionId}/archive"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/sessions/{sessionId}/branches/compare"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/sessions/{sessionId}/branches/merge"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/sessions/{sessionId}/pin"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/workflow/react/chat"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/workflow/react/chat/stream"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/workflow/tasks"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/workflow/tasks/{taskId}"
+    },
+    {
+      "method": "GET",
+      "path": "/ai/workflow/tasks/{taskId}/events"
+    },
+    {
+      "method": "GET",
+      "path": "/audit/logs"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/api-keys"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/api-keys/revoke"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/api-keys/rotate"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/refresh"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/token"
+    },
+    {
+      "method": "POST",
+      "path": "/cost/budget"
+    },
+    {
+      "method": "GET",
+      "path": "/cost/summary"
+    },
+    {
+      "method": "GET",
+      "path": "/ingestion/jobs"
+    },
+    {
+      "method": "POST",
+      "path": "/ingestion/jobs/process"
+    },
+    {
+      "method": "GET",
+      "path": "/ingestion/jobs/{jobId}"
+    },
+    {
+      "method": "POST",
+      "path": "/ingestion/upload/{chatId}"
+    }
+  ],
+  "sseEventContract": [
+    "trace",
+    "token",
+    "done",
+    "error"
+  ]
+}

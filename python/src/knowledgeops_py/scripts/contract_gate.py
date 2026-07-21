@@ -7,13 +7,18 @@ from fastapi.testclient import TestClient
 
 from knowledgeops_py.app import create_app
 
-
 AUTH_HEADERS = {"X-API-Key": "local-demo-api-key", "X-Tenant-ID": "public"}
 
 REQUIRED_OPENAPI_ENDPOINTS = [
     ("POST", "/auth/token"),
     ("POST", "/auth/refresh"),
     ("POST", "/auth/api-keys"),
+    ("POST", "/auth/api-keys/rotate"),
+    ("POST", "/auth/api-keys/revoke"),
+    ("GET", "/auth/oidc/login"),
+    ("GET", "/auth/oidc/callback"),
+    ("POST", "/auth/oidc/exchange"),
+    ("POST", "/auth/logout"),
     ("GET", "/actuator/health"),
     ("GET", "/health"),
     ("GET", "/actuator/prometheus"),
@@ -27,6 +32,10 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("GET", "/ingestion/jobs"),
     ("GET", "/ingestion/jobs/{jobId}"),
     ("POST", "/ai/pdf/chat"),
+    ("GET", "/ai/pdf/chat"),
+    ("GET", "/ai/pdf/file/{chatId}"),
+    ("GET", "/ai/history/{kind}"),
+    ("GET", "/ai/history/{kind}/{chatId}"),
     ("GET", "/ai/sessions"),
     ("GET", "/ai/sessions/{sessionId}"),
     ("POST", "/ai/feedback"),
@@ -36,6 +45,17 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("GET", "/cost/summary"),
     ("POST", "/cost/budget"),
     ("GET", "/ai/harness/actions"),
+    ("POST", "/ai/harness/actions/preview"),
+    ("POST", "/ai/harness/actions/execute/{token}"),
+    ("POST", "/ai/workflow/react/chat"),
+    ("POST", "/ai/workflow/react/chat/stream"),
+    ("GET", "/ai/workflow/tasks"),
+    ("GET", "/ai/workflow/tasks/{taskId}"),
+    ("GET", "/ai/research/tasks/{taskId}"),
+    ("POST", "/ai/memory/items"),
+    ("GET", "/ai/memory/items"),
+    ("POST", "/ai/graph/entities"),
+    ("GET", "/ai/graph/entities"),
 ]
 
 
@@ -73,12 +93,18 @@ def check_runtime_contract(client: TestClient) -> list[str]:
     refresh = envelope_data(client.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}))
     if not refresh.get("token"):
         failures.append("refresh response missing token")
-    envelope_data(client.post("/auth/api-keys?keyName=contract-user&role=USER&tenantId=public"))
+    envelope_data(client.post("/auth/api-keys?keyName=contract-user&role=USER", headers=AUTH_HEADERS))
     envelope_data(client.get("/actuator/health"))
+    prometheus = client.get("/actuator/prometheus", headers=AUTH_HEADERS)
+    if prometheus.status_code != 200 or "knowledgeops_python_up 1" not in prometheus.text:
+        failures.append("canonical Prometheus endpoint did not return native metrics")
     envelope_data(client.get("/metrics", headers=AUTH_HEADERS))
 
     chat_body = {"chatId": "contract-chat", "prompt": "contract smoke", "modelProfile": "balanced"}
     chat = envelope_data(client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body))
+    legacy_chat = envelope_data(client.post("/python/v1/ai/chat", headers=AUTH_HEADERS, json=chat_body))
+    if not legacy_chat.get("answer"):
+        failures.append("legacy /python/v1 chat adapter returned no answer")
     assert_keys(failures, "chat", chat, ["answer", "model", "usage", "traceId"])
     assert_sse(failures, "chat stream", client.post("/ai/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
     react = envelope_data(client.post("/ai/react/chat", headers=AUTH_HEADERS, json=chat_body))

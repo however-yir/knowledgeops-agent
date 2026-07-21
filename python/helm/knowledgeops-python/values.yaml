@@ -1,0 +1,30 @@
+image:
+  repository: ghcr.io/however-yir/knowledgeops-agent-python
+  tag: latest
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 2
+  servicePort: 3001
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+worker:
+  replicas: 1
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+config:
+  APP_ENV: production
+  APP_INGESTION_QUEUE_BACKEND: redis_stream
+  APP_RERANKER_BACKEND: remote
+  APP_CORS_ALLOWED_ORIGINS: https://knowledgeops.example.com
+
+secretName: knowledgeops-python

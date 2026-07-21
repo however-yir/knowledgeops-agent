@@ -1,0 +1,79 @@
+{{- $name := include "knowledgeops-python.fullname" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: api}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: api}
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["knowledgeops-python-api"]
+          ports: [{containerPort: {{ .Values.api.servicePort }}}]
+          envFrom:
+            - configMapRef: {name: {{ $name }}}
+            - secretRef: {name: {{ .Values.secretName }}}
+          readinessProbe: {httpGet: {path: /actuator/health, port: {{ .Values.api.servicePort }}}, initialDelaySeconds: 10}
+          livenessProbe: {httpGet: {path: /actuator/health, port: {{ .Values.api.servicePort }}}, initialDelaySeconds: 20}
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: worker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: worker}
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["knowledgeops-python-worker"]
+          envFrom:
+            - configMapRef: {name: {{ $name }}}
+            - secretRef: {name: {{ .Values.secretName }}}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: api}
+  ports: [{port: {{ .Values.api.servicePort }}, targetPort: {{ .Values.api.servicePort }} }]
+---
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}-api
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ $name }}-api}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}}}
+{{- end }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: api}

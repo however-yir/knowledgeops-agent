@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
-from knowledgeops_py.app import create_app
-from knowledgeops_py.config import Settings
-
+from knowledgeops_py.app import create_api_key, create_app
+from knowledgeops_py.config import Settings, load_settings
 
 AUTH_HEADERS = {"X-API-Key": "test-key", "X-Tenant-ID": "tenant-a"}
 
@@ -44,13 +44,13 @@ def test_auth_token_refresh_and_invalid_key_contract() -> None:
     assert invalid.json()["ok"] == 0
 
     data = assert_envelope(token.json())
-    assert data["token"].startswith("pyjwt.")
+    assert data["token"].count(".") == 2
     assert data["refreshToken"].startswith("refresh_")
     assert data["tenantId"] == "tenant-a"
 
     refreshed = test_client.post("/auth/refresh", headers={"X-Refresh-Token": data["refreshToken"]})
     assert refreshed.status_code == 200
-    assert assert_envelope(refreshed.json())["token"].startswith("pyjwt.")
+    assert assert_envelope(refreshed.json())["token"].count(".") == 2
 
 
 def test_error_response_contains_code_and_trace_id() -> None:
@@ -158,3 +158,94 @@ def test_sessions_feedback_evaluation_cost_and_audit_contract() -> None:
     assert {"tenantId", "monthCostUsd", "monthlyBudgetUsd", "budgetRemainingUsd"} <= set(cost_data)
     audit_item = assert_envelope(audit.json())[0]
     assert {"tenantId", "principal", "method", "path", "status", "createdAt"} <= set(audit_item)
+
+
+def test_admin_key_lifecycle_and_tenant_write_boundaries() -> None:
+    app = create_app(Settings(demo_api_key="admin-key", demo_tenant_id="tenant-a"))
+    test_client = TestClient(app)
+    headers = {"X-API-Key": "admin-key", "X-Tenant-ID": "tenant-a"}
+
+    assert test_client.post("/auth/api-keys?keyName=blocked").status_code == 401
+    issued = assert_envelope(test_client.post("/auth/api-keys?keyName=reporter&role=USER", headers=headers).json())
+    assert issued["tenantId"] == "tenant-a"
+    assert test_client.post("/auth/api-keys?keyName=wrong-role&role=NOPE", headers=headers).status_code == 422
+    rotated = assert_envelope(test_client.post("/auth/api-keys/rotate?keyName=reporter", headers=headers).json())
+    assert rotated["rawApiKey"] != issued["rawApiKey"]
+    assert_envelope(test_client.post("/auth/api-keys/revoke?keyName=reporter", headers=headers).json())
+    assert test_client.post("/auth/token", headers={"X-API-Key": rotated["rawApiKey"]}).json()["ok"] == 0
+
+    budget = assert_envelope(
+        test_client.post("/cost/budget", headers=headers, json={"tenantId": "other-tenant", "monthlyBudgetUsd": 39}).json()
+    )
+    assert budget["tenantId"] == "tenant-a"
+    other_key = create_api_key(app.state.store, "other", "ADMIN", "tenant-b")
+    other_headers = {"X-API-Key": other_key.rawApiKey, "X-Tenant-ID": "tenant-b"}
+    denied = test_client.get("/cost/summary", headers={"X-API-Key": other_key.rawApiKey, "X-Tenant-ID": "tenant-a"})
+    assert denied.status_code == 403
+    test_client.post("/ai/chat", headers=headers, json={"chatId": "tenant-a-session", "prompt": "private"})
+    assert test_client.get("/ai/sessions/tenant-a-session", headers=other_headers).status_code == 404
+    dataset = assert_envelope(test_client.post("/ai/evaluation/datasets", headers=headers, json={"name": "private", "cases": []}).json())
+    assert test_client.post("/ai/evaluation/runs", headers=other_headers, json={"datasetId": dataset["datasetId"]}).status_code == 404
+
+
+def test_harness_workflow_research_memory_graph_and_evaluations_are_tenant_scoped() -> None:
+    test_client = client()
+    headers = AUTH_HEADERS
+
+    preview = assert_envelope(
+        test_client.post(
+            "/ai/harness/actions/preview",
+            headers=headers,
+            json={"action": "memory_save", "actionInput": {"content": "Tenant a preference", "type": "fact"}},
+        ).json()
+    )
+    executed = assert_envelope(test_client.post(f"/ai/harness/actions/execute/{preview['confirmationToken']}", headers=headers).json())
+    assert executed["status"] == "COMPLETED"
+    assert test_client.post(f"/ai/harness/actions/execute/{preview['confirmationToken']}", headers=headers).status_code == 404
+
+    memory = assert_envelope(test_client.get("/ai/memory/items", headers=headers).json())
+    assert memory[0]["principal"] == "local-demo"
+    context = assert_envelope(test_client.get("/ai/memory/context?prompt=preference", headers=headers).json())
+    assert context[0]["content"] == "Tenant a preference"
+    entity = assert_envelope(test_client.post("/ai/graph/entities", headers=headers, json={"name": "Tenant Entity", "type": "CONCEPT"}).json())
+    assert entity["tenantId"] == "tenant-a"
+    assert assert_envelope(test_client.get("/ai/graph/entities", headers=headers).json())[0]["name"] == "Tenant Entity"
+
+    workflow = assert_envelope(test_client.post("/ai/workflow/react/chat", headers=headers, json={"chatId": "wf", "prompt": "workflow"}).json())
+    assert assert_envelope(test_client.get(f"/ai/workflow/tasks/{workflow['taskId']}", headers=headers).json())["status"] == "COMPLETED"
+    assert assert_envelope(test_client.get(f"/ai/workflow/tasks/{workflow['taskId']}/events", headers=headers).json())
+    assert assert_envelope(test_client.get("/ai/workflow/tasks", headers=headers).json())["total"] == 1
+    research = assert_envelope(test_client.post("/ai/research/tasks", headers=headers, json={"topic": "Heat safety"}).json())
+    assert "# Heat safety" in test_client.get(f"/ai/research/tasks/{research['taskId']}/report", headers=headers).text
+
+    dataset = assert_envelope(test_client.post("/ai/evaluation/datasets", headers=headers, json={"name": "d", "cases": [{"question": "KnowledgeOps"}]}).json())
+    run = assert_envelope(test_client.post(f"/ai/evaluation/datasets/{dataset['datasetId']}/runs", headers=headers, json={}).json())
+    assert assert_envelope(test_client.get(f"/ai/evaluation/runs/{run['runId']}", headers=headers).json())["runId"] == run["runId"]
+    assert assert_envelope(test_client.post(f"/ai/evaluation/runs/{run['runId']}/baseline", headers=headers).json())["isBaseline"]
+    assert assert_envelope(test_client.get(f"/ai/evaluation/datasets/{dataset['datasetId']}/comparison", headers=headers).json())["runs"]
+    assert "# Evaluation" in test_client.get(f"/ai/evaluation/runs/{run['runId']}/report", headers=headers).text
+
+
+def test_extended_java_routes_file_safety_and_production_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    test_client = client()
+    headers = AUTH_HEADERS
+    assert test_client.get("/ai/chat?prompt=hello&chatId=html", headers=headers).headers["content-type"].startswith("text/html")
+    assert test_client.get("/ai/pdf/file/missing", headers=headers).status_code == 404
+    assert test_client.post("/ai/pdf/upload/doc", headers=headers, files={"file": ("bad.exe", b"no", "application/octet-stream")}).status_code == 415
+    assert test_client.post("/ai/pdf/upload/doc", headers=headers, files={"file": ("bad.pdf", b"not-pdf", "application/pdf")}).status_code == 415
+    assert assert_envelope(test_client.post("/ingestion/jobs/process", headers=headers).json())["processed"] == 0
+    assert test_client.get("/auth/oidc/login").status_code == 503
+    assert test_client.post("/auth/logout", headers={"X-Refresh-Token": "unused"}).status_code == 200
+
+    with pytest.raises(ValueError, match="APP_JWT_SECRET"):
+        Settings(environment="production", demo_api_key="real-key", database_url="sqlite+aiosqlite:///x", redis_url="redis://x", reranker_backend="remote").validate_startup()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("APP_JWT_SECRET", "x" * 32)
+    monkeypatch.setenv("APP_DEMO_API_KEY", "not-a-default")
+    monkeypatch.setenv("APP_DATABASE_URL", "sqlite+aiosqlite:///x")
+    monkeypatch.setenv("APP_REDIS_URL", "redis://x")
+    monkeypatch.setenv("APP_RERANKER_BACKEND", "remote")
+    monkeypatch.setenv("APP_RERANKER_URL", "https://reranker.example.test")
+    monkeypatch.setenv("APP_MODEL_BASE_URL", "https://model.example.test")
+    monkeypatch.setenv("APP_MODEL_API_KEY", "test-model-key")
+    assert load_settings().is_production

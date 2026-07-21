@@ -8,7 +8,7 @@ Python target: FastAPI enterprise service edition.
 |---|---|---|
 | Java | Baseline | Spring Boot source and Maven/Baseline CI |
 | TypeScript | Rewrite reference | TypeScript parity gates and contract cases |
-| Python | Enterprise parity track | pytest, contract gate, e2e smoke, perf smoke, security gate, Docker build |
+| Python | Enterprise rewrite | unit/integration tests, contract gate, security gate, Alembic, SBOM and container CI |
 
 ## Fixed API Surface
 
@@ -17,6 +17,12 @@ Python target: FastAPI enterprise service edition.
 | POST | `/auth/token` | implemented |
 | POST | `/auth/refresh` | implemented |
 | POST | `/auth/api-keys` | implemented |
+| POST | `/auth/api-keys/rotate` | implemented |
+| POST | `/auth/api-keys/revoke` | implemented |
+| GET | `/auth/oidc/login` | implemented |
+| GET | `/auth/oidc/callback` | implemented |
+| POST | `/auth/oidc/exchange` | implemented |
+| POST | `/auth/logout` | implemented |
 | GET | `/actuator/health` | implemented |
 | GET | `/health` | implemented |
 | GET | `/actuator/prometheus` | implemented |
@@ -30,6 +36,10 @@ Python target: FastAPI enterprise service edition.
 | GET | `/ingestion/jobs` | implemented |
 | GET | `/ingestion/jobs/{jobId}` | implemented |
 | POST | `/ai/pdf/chat` | implemented |
+| GET | `/ai/pdf/chat` | implemented |
+| GET | `/ai/pdf/file/{chatId}` | implemented |
+| GET | `/ai/history/{kind}` | implemented |
+| GET | `/ai/history/{kind}/{chatId}` | implemented |
 | GET | `/ai/sessions` | implemented |
 | GET | `/ai/sessions/{sessionId}` | implemented |
 | POST | `/ai/feedback` | implemented |
@@ -39,6 +49,17 @@ Python target: FastAPI enterprise service edition.
 | GET | `/cost/summary` | implemented |
 | POST | `/cost/budget` | implemented |
 | GET | `/ai/harness/actions` | implemented |
+| POST | `/ai/harness/actions/preview` | implemented |
+| POST | `/ai/harness/actions/execute/{token}` | implemented |
+| POST | `/ai/workflow/react/chat` | implemented |
+| POST | `/ai/workflow/react/chat/stream` | implemented |
+| GET | `/ai/workflow/tasks` | implemented |
+| GET | `/ai/workflow/tasks/{taskId}` | implemented |
+| GET | `/ai/research/tasks/{taskId}` | implemented |
+| POST | `/ai/memory/items` | implemented |
+| GET | `/ai/memory/items` | implemented |
+| POST | `/ai/graph/entities` | implemented |
+| GET | `/ai/graph/entities` | implemented |
 
 ## Response Contract
 
@@ -49,8 +70,8 @@ Python target: FastAPI enterprise service edition.
 - Citation data includes `id`, `source`, `title`, `chunkId`, `snippet`.
 - Agent trace includes `step`, `thoughtSummary`, `action`, `actionInput`, `observation`.
 
-## Remaining Production Work
+## Deployment Evidence Required
 
-- Replace local simple queue/vector stores with managed Redis/pgvector in production configuration.
-- Add live Java-vs-TS-vs-Python response diff once Python is deployed beside the other runtimes.
-- Add provider-backed LLM integration after local contract gates stay stable.
+- Real model, Redis, pgvector, RabbitMQ and OIDC settings are mandatory in production; CI uses deterministic local adapters.
+- Run the Java/Python black-box runner against a deployed isolated stack before any routing change.
+- Shadow evidence remains external: 10,000 requests or seven days, zero tenant isolation failures, and agreed error/latency limits.

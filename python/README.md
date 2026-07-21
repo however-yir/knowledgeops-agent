@@ -12,6 +12,9 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[test]"
 pytest
+alembic upgrade head
+knowledgeops-python-api
+knowledgeops-python-worker
 knowledgeops-python-contract
 knowledgeops-python-security-gate
 knowledgeops-python-maturity
@@ -31,7 +34,7 @@ GET  http://localhost:3001/ai/service?prompt=hello
 POST http://localhost:3001/ai/service
 ```
 
-The current Python runtime is the FastAPI enterprise service track. It includes API Key auth, JWT/refresh token issue, RBAC dependencies, `X-Tenant-ID` context, rate limiting, Chat/SSE, ReAct trace, RAG upload/chat, ingestion jobs, simple-vector hybrid retrieval, citations/evidence/refusal, sessions, feedback, evaluation runs, cost governance, audit logs, health/metrics, OpenAPI contract validation, e2e/perf/security gates, Docker, and a Python parity report.
+The Python runtime is a FastAPI enterprise service track. It includes administrator-scoped API Key lifecycle, standard JWT refresh rotation, OIDC + PKCE, trusted tenant context, rate limiting, Chat/SSE, RAG ingestion, sessions, evaluation, workflows, research, memory, graph, Harness confirmation tokens, Alembic persistence, API/Worker deployment commands and contract gates.
 
 All JSON responses use:
 
@@ -45,12 +48,10 @@ Error responses use:
 { "ok": 0, "msg": "error message", "code": "ERROR_CODE", "traceId": "trace_..." }
 ```
 
-The local demo API key defaults to:
+The local demo API key is development-only and defaults to:
 
 ```text
 local-demo-api-key
 ```
 
-## Migration Rule
-
-Python modules are parity-ready only when their route contract, local behavior tests, persistence mapping, and cross-runtime contract checks match the Java baseline and the TypeScript rewrite evidence.
+Read [MIGRATION.md](MIGRATION.md) for production prerequisites, baseline generation, shadow validation and rollback.

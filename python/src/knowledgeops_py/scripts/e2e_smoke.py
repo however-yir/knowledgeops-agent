@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from knowledgeops_py.app import create_app
 
-
 AUTH_HEADERS = {"X-API-Key": "local-demo-api-key", "X-Tenant-ID": "public"}
 
 
