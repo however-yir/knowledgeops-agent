@@ -54,6 +54,7 @@ from .infrastructure.file_store import LocalFileStore
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
 from .infrastructure.providers import OpenAICompatibleChatProvider
+from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
 from .observability.setup import configure_observability
@@ -157,11 +158,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     security_repository: SecurityRepository | None = (
         SqlAlchemySecurityRepository(session_factory) if session_factory is not None else None
     )
+    ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     ingestion_service = (
         IngestionApplicationService(
             SqlAlchemyIngestionRepository(session_factory),
             LocalFileStore(Path(active_settings.storage_path)),
             active_settings.ingestion_queue_backend,
+            ingestion_queue,
         )
         if session_factory is not None
         else None
@@ -182,6 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             if engine is not None:
                 await engine.dispose()
+            await close_ingestion_queue(ingestion_queue)
 
     app = FastAPI(
         title="KnowledgeOps Agent Python Enterprise API",

@@ -20,9 +20,16 @@ class RedisStreamsIngestionQueue:
     stream: str = "knowledgeops:ingestion"
     group: str = "knowledgeops-python-workers"
     consumer: str = "worker-1"
+    dead_letter_stream: str = "knowledgeops:ingestion:dlq"
 
     async def publish(self, context: TenantContext, job_id: str) -> None:
         await self.client.xadd(self.stream, {"jobId": job_id, "tenantId": context.tenant_id})
+
+    async def publish_dead_letter(self, context: TenantContext, job_id: str, reason: str) -> None:
+        await self.client.xadd(
+            self.dead_letter_stream,
+            {"jobId": job_id, "tenantId": context.tenant_id, "reason": reason[:1024]},
+        )
 
     async def consume(self) -> AsyncIterator[str]:
         try:
@@ -56,6 +63,16 @@ class RabbitMqIngestionQueue:
                 arguments={"x-dead-letter-exchange": "", "x-dead-letter-routing-key": dead_letter.name},
             )
             body = json.dumps({"jobId": job_id, "tenantId": context.tenant_id}).encode()
+            await channel.default_exchange.publish(aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), queue.name)
+        finally:
+            await connection.close()
+
+    async def publish_dead_letter(self, context: TenantContext, job_id: str, reason: str) -> None:
+        connection = await aio_pika.connect_robust(self.url)
+        try:
+            channel = await connection.channel(publisher_confirms=True)
+            queue = await channel.declare_queue(self.dead_letter_queue, durable=True)
+            body = json.dumps({"jobId": job_id, "tenantId": context.tenant_id, "reason": reason[:1024]}).encode()
             await channel.default_exchange.publish(aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), queue.name)
         finally:
             await connection.close()

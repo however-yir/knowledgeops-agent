@@ -11,6 +11,7 @@ from knowledgeops_py.config import load_settings
 from knowledgeops_py.infrastructure.database import create_engine, create_session_factory
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository
+from knowledgeops_py.infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 
 
 async def run_worker(once: bool = False) -> None:
@@ -21,18 +22,26 @@ async def run_worker(once: bool = False) -> None:
         loop.add_signal_handler(signum, stopping.set)
     if settings.database_url:
         engine = create_engine(settings.database_url)
+        queue = create_ingestion_queue(settings, "worker")
         service = IngestionApplicationService(
             SqlAlchemyIngestionRepository(create_session_factory(engine)),
             LocalFileStore(Path(settings.storage_path)),
             settings.ingestion_queue_backend,
+            queue,
         )
         try:
+            if queue is not None:
+                async for job_id in queue.consume():
+                    await service.process_message(job_id)
+                    if once or stopping.is_set():
+                        return
             while not stopping.is_set():
                 processed = await service.process_ready()
                 if once:
                     return
                 await asyncio.sleep(0.1 if processed else 1.0)
         finally:
+            await close_ingestion_queue(queue)
             await engine.dispose()
         return
 

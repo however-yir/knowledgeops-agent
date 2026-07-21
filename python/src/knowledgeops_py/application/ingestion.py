@@ -10,6 +10,7 @@ from uuid import uuid4
 from pypdf import PdfReader
 
 from knowledgeops_py.domain.context import TenantContext
+from knowledgeops_py.domain.ports import IngestionQueue
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from knowledgeops_py.infrastructure.models import IngestionJobRecord
@@ -20,6 +21,7 @@ class IngestionApplicationService:
     repository: SqlAlchemyIngestionRepository
     files: LocalFileStore
     queue_backend: str
+    queue: IngestionQueue | None = None
     max_retries: int = 3
     retry_delay_seconds: int = 10
 
@@ -31,7 +33,7 @@ class IngestionApplicationService:
         job_id = f"job_{uuid4().hex[:16]}"
         file_path = await self.files.save(context.tenant_id, job_id, source_name, content)
         try:
-            return await self.repository.create(
+            job = await self.repository.create(
                 IngestionJobRecord(
                     job_id=job_id,
                     tenant_id=context.tenant_id,
@@ -47,6 +49,9 @@ class IngestionApplicationService:
                     payload={},
                 )
             )
+            if self.queue is not None:
+                await self.queue.publish(context, job.job_id)
+            return job
         except Exception:
             await self.files.delete(context.tenant_id, file_path)
             raise
@@ -71,6 +76,13 @@ class IngestionApplicationService:
             if await self.process(job_id) is not None:
                 processed += 1
         return processed
+
+    async def process_message(self, job_id: str) -> PersistedIngestionJob | None:
+        job = await self.process(job_id)
+        if job is not None and job.status == "FAILED" and self.queue is not None:
+            context = TenantContext(job.trace_id or "", job.tenant_id, "worker", (), (), "worker")
+            await self.queue.publish_dead_letter(context, job.job_id, job.error_message or "ingestion failed")
+        return job
 
     def _chunks(self, job: PersistedIngestionJob, text: str) -> list[dict[str, Any]]:
         parts = split_text(text)
