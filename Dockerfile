@@ -14,7 +14,8 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-RUN addgroup -S appgroup && \
+RUN apk upgrade --no-cache && \
+    addgroup -S appgroup && \
     adduser -S -G appgroup appuser && \
     mkdir -p /app/data /app/logs && \
     chown -R appuser:appgroup /app && \

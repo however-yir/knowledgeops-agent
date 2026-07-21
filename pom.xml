@@ -32,6 +32,7 @@
         <cyclonedx.version>2.9.1</cyclonedx.version>
         <jacoco.version>0.8.14</jacoco.version>
         <!-- Override managed versions to fix CVEs (keep Spring Boot 3.4.x base) -->
+        <jackson-bom.version>2.18.8</jackson-bom.version>
         <netty.version>4.1.133.Final</netty.version>
         <tomcat.version>10.1.55</tomcat.version>
         <postgresql.version>42.7.11</postgresql.version>
