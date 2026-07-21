@@ -148,7 +148,7 @@ class SqlAlchemySecurityRepository:
                 .execution_options(synchronize_session=False)
             )
             await session.commit()
-            return bool(result.rowcount)
+            return bool(changed_rows(result))
 
     async def issue_refresh_token(self, identity: StoredIdentity, expires_in_days: int) -> str:
         raw_token = new_refresh_token()
@@ -184,7 +184,7 @@ class SqlAlchemySecurityRepository:
                 .values(revoked_at=now)
                 .execution_options(synchronize_session=False)
             )
-            if result.rowcount != 1:
+            if changed_rows(result) != 1:
                 await session.rollback()
                 return None
             await session.commit()
@@ -240,3 +240,10 @@ def utc_now() -> datetime:
 
 def as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def changed_rows(result: object) -> int:
+    """Normalize SQLAlchemy's dialect-specific DML row count for strict typing."""
+
+    rowcount = getattr(result, "rowcount", 0)
+    return rowcount if isinstance(rowcount, int) else 0
