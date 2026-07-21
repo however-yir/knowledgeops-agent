@@ -56,7 +56,8 @@ jobs:
             --manifest python/parity/java-baseline-manifest.json
 
       - name: Test
-        run: pytest python
+        working-directory: python
+        run: pytest
 
       - name: Contract gate
         working-directory: python
