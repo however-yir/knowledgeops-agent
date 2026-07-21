@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -7,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from knowledgeops_py.app import create_api_key, create_app
 from knowledgeops_py.config import Settings, load_settings
+from knowledgeops_py.infrastructure.database import create_engine
+from knowledgeops_py.infrastructure.models import Base
 
 AUTH_HEADERS = {"X-API-Key": "test-key", "X-Tenant-ID": "tenant-a"}
 
@@ -51,6 +54,31 @@ def test_auth_token_refresh_and_invalid_key_contract() -> None:
     refreshed = test_client.post("/auth/refresh", headers={"X-Refresh-Token": data["refreshToken"]})
     assert refreshed.status_code == 200
     assert assert_envelope(refreshed.json())["token"].count(".") == 2
+
+
+def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'security.db'}"
+
+    async def initialise_schema() -> None:
+        engine = create_engine(database_url)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        await engine.dispose()
+
+    asyncio.run(initialise_schema())
+    settings = Settings(database_url=database_url, demo_api_key="persistent-admin", demo_tenant_id="tenant-a")
+    with TestClient(create_app(settings)) as first_app:
+        token = assert_envelope(first_app.post("/auth/token", headers={"X-API-Key": "persistent-admin"}).json())
+        issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
+        rotated = assert_envelope(first_app.post("/auth/api-keys/rotate?keyName=persisted", headers={"X-API-Key": "persistent-admin"}).json())
+        assert first_app.post("/auth/token", headers={"X-API-Key": issued["rawApiKey"]}).json()["ok"] == 0
+
+    with TestClient(create_app(settings)) as second_app:
+        new_key_token = assert_envelope(second_app.post("/auth/token", headers={"X-API-Key": rotated["rawApiKey"]}).json())
+        assert new_key_token["tenantId"] == "tenant-a"
+        refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
+        assert refreshed["principal"] == "local-demo"
+        assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0
 
 
 def test_error_response_contains_code_and_trace_id() -> None:

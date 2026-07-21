@@ -15,6 +15,7 @@ class Settings:
     demo_api_key: str = "local-demo-api-key"
     demo_tenant_id: str = "public"
     token_ttl_seconds: int = 3600
+    refresh_token_ttl_days: int = 14
     jwt_secret: str = "local-python-jwt-secret-change-me"
     rate_limit_per_minute: int = 120
     environment: str = "development"
@@ -73,6 +74,7 @@ def load_settings() -> Settings:
         demo_api_key=os.getenv("APP_DEMO_API_KEY", "local-demo-api-key"),
         demo_tenant_id=os.getenv("APP_DEMO_TENANT_ID", "public"),
         token_ttl_seconds=int(os.getenv("APP_TOKEN_TTL_SECONDS", "3600")),
+        refresh_token_ttl_days=int(os.getenv("APP_JWT_REFRESH_EXPIRE_DAYS", "14")),
         jwt_secret=os.getenv("APP_JWT_SECRET", "local-python-jwt-secret-change-me"),
         rate_limit_per_minute=int(os.getenv("APP_RATE_LIMIT_PER_MINUTE", "120")),
         environment=os.getenv("APP_ENV", "development"),

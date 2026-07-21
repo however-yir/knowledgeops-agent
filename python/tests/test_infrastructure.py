@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import pytest
+from redis.exceptions import RedisError
+
 from knowledgeops_py.domain.context import TenantContext
 from knowledgeops_py.domain.ports import (
     ChatProvider,
@@ -26,12 +29,14 @@ from knowledgeops_py.infrastructure.models import (
     TenantBudgetRecord,
     WorkflowTaskRecord,
 )
+from knowledgeops_py.infrastructure.oidc_state import OidcStateUnavailable, RedisOidcStateStore
 from knowledgeops_py.infrastructure.providers import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
     RemoteHttpReranker,
 )
 from knowledgeops_py.infrastructure.queues import MySqlPollingIngestionQueue, RedisStreamsIngestionQueue
+from knowledgeops_py.infrastructure.security_repository import SqlAlchemySecurityRepository, StoredIdentity
 from knowledgeops_py.scripts.java_baseline_manifest import build_manifest
 
 
@@ -160,5 +165,64 @@ def test_redis_streams_and_mysql_skip_locked_queue_adapters() -> None:
             )
         assert await MySqlPollingIngestionQueue(factory).claim() == "sql-job"
         await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_sql_security_repository_persists_rotation_and_single_use_refresh_tokens() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        factory = create_session_factory(engine)
+        first = SqlAlchemySecurityRepository(factory)
+        await first.bootstrap_api_key("demo-secret", "demo", "tenant-a", "ADMIN")
+        assert (await first.authenticate_api_key("demo-secret")) == StoredIdentity("demo", "tenant-a", ("ADMIN",), "api_key")
+
+        issued = await first.issue_api_key("reporter", "USER", "tenant-a", 30)
+        second = SqlAlchemySecurityRepository(factory)
+        assert (await second.authenticate_api_key(issued.raw_key)).tenant_id == "tenant-a"  # type: ignore[union-attr]
+        rotated = await second.rotate_api_key("reporter", "tenant-a", "rotation", 30)
+        assert rotated is not None
+        assert await first.authenticate_api_key(issued.raw_key) is None
+        assert (await first.authenticate_api_key(rotated.raw_key)).roles == ("USER",)  # type: ignore[union-attr]
+
+        refresh = await first.issue_refresh_token(StoredIdentity("alice", "tenant-a", ("USER",), "jwt"), 7)
+        consumed = await second.consume_refresh_token(refresh)
+        assert consumed == StoredIdentity("alice", "tenant-a", ("USER",), "refresh_token")
+        assert await first.consume_refresh_token(refresh) is None
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_redis_oidc_state_store_consumes_once_and_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Client:
+        values: dict[str, str] = {}
+        fail = False
+
+        async def set(self, key: str, value: str, ex: int) -> None:
+            assert ex == 60
+            self.values[key] = value
+
+        async def getdel(self, key: str) -> str | None:
+            if self.fail:
+                raise RedisError("unavailable")
+            return self.values.pop(key, None)
+
+        async def aclose(self) -> None:
+            return None
+
+    client = Client()
+    monkeypatch.setattr("knowledgeops_py.infrastructure.oidc_state.redis.Redis.from_url", lambda *args, **kwargs: client)
+
+    async def exercise() -> None:
+        store = RedisOidcStateStore("redis://example.test")
+        await store.put("exchange", "hashed", {"principal": "alice"}, 60)
+        assert await store.consume("exchange", "hashed") == {"principal": "alice"}
+        assert await store.consume("exchange", "hashed") is None
+        client.fail = True
+        with pytest.raises(OidcStateUnavailable):
+            await store.consume("exchange", "hashed")
 
     asyncio.run(exercise())

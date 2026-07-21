@@ -9,6 +9,7 @@ import re
 import secrets
 import time
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlencode
@@ -45,8 +46,11 @@ from .dto import (
     SessionDto,
     UsageDto,
 )
+from .infrastructure.database import create_engine, create_session_factory
+from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
 from .infrastructure.providers import OpenAICompatibleChatProvider
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
+from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
 from .observability.setup import configure_observability
 
 TENANT_HEADER = "x-tenant-id"
@@ -143,15 +147,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = PlatformStore()
     seed_store(store, active_settings)
     tracer = configure_observability(active_settings.app_name)
+    engine = create_engine(active_settings.database_url) if active_settings.database_url else None
+    security_repository: SecurityRepository | None = (
+        SqlAlchemySecurityRepository(create_session_factory(engine)) if engine is not None else None
+    )
+    oidc_state_store: OidcStateStore | None = RedisOidcStateStore(active_settings.redis_url) if active_settings.is_production else None
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        if isinstance(security_repository, SqlAlchemySecurityRepository):
+            await security_repository.bootstrap_api_key(
+                active_settings.demo_api_key,
+                "local-demo",
+                active_settings.demo_tenant_id,
+                "ADMIN",
+            )
+        try:
+            yield
+        finally:
+            if engine is not None:
+                await engine.dispose()
 
     app = FastAPI(
         title="KnowledgeOps Agent Python Enterprise API",
         version="0.2.0",
         docs_url="/swagger-ui/index.html",
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.settings = active_settings
     app.state.store = store
+    app.state.security_repository = security_repository
+    app.state.oidc_state_store = oidc_state_store
     app.state.tracer = tracer
 
     app.add_middleware(
@@ -181,7 +208,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         trace_id = request.headers.get("x-request-id") or new_id("trace")
         request.state.trace_id = trace_id
         try:
-            ctx = resolve_context(request, store, active_settings, allow_anonymous=True)
+            ctx = await resolve_context(request, store, active_settings, security_repository, allow_anonymous=True)
         except HTTPException:
             ctx = RequestContext(trace_id, normalize_tenant(request.headers.get(TENANT_HEADER)), "anonymous", ["ANONYMOUS"], [], "anonymous")
         request.state.context = ctx
@@ -216,11 +243,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     async def optional_ctx(request: Request) -> RequestContext:
-        return resolve_context(request, store, active_settings, allow_anonymous=True)
+        return await resolve_context(request, store, active_settings, security_repository, allow_anonymous=True)
 
     def require_permissions(*required: str) -> Callable[[Request], RequestContext]:
         async def dependency(request: Request) -> RequestContext:
-            ctx = resolve_context(request, store, active_settings, allow_anonymous=False)
+            ctx = await resolve_context(request, store, active_settings, security_repository, allow_anonymous=False)
             missing = [permission for permission in required if permission not in ctx.permissions]
             if missing:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="permission denied")
@@ -248,67 +275,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(app.openapi(), trace_id=ensure_trace_id(request))
 
     @app.post("/auth/token")
-    def auth_token(request: Request, x_api_key: str | None = Header(default=None), x_tenant_id: str | None = Header(default=None)):
-        identity = authenticate_api_key(store, x_api_key)
+    async def auth_token(request: Request, x_api_key: str | None = Header(default=None), x_tenant_id: str | None = Header(default=None)):
+        identity = await resolve_api_key_identity(store, security_repository, x_api_key)
         if not identity:
             return fail("invalid api key", "AUTH_INVALID_API_KEY", ensure_trace_id(request))
         if x_tenant_id and normalize_tenant(x_tenant_id) != identity.tenant_id:
             return fail("tenant mismatch for api key", "AUTH_TENANT_MISMATCH", ensure_trace_id(request))
-        data = issue_tokens(store, active_settings, identity)
+        data = await issue_tokens(store, active_settings, identity, security_repository)
         return ok(data, trace_id=ensure_trace_id(request))
 
     @app.post("/auth/refresh")
-    def auth_refresh(request: Request, x_refresh_token: str | None = Header(default=None)):
+    async def auth_refresh(request: Request, x_refresh_token: str | None = Header(default=None)):
         if not x_refresh_token:
             return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-        token_hash = sha256_hex(x_refresh_token)
-        if token_hash in store.revoked_refresh_tokens:
-            return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-        record = store.refresh_tokens.pop(token_hash, None)
-        if not record or record["expiresAt"] <= epoch_seconds():
-            return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-        store.revoked_refresh_tokens.add(token_hash)
-        ctx = RequestContext(ensure_trace_id(request), record["tenantId"], record["principal"], record["roles"], permissions_for_roles(record["roles"]), "refresh")
-        return ok(issue_tokens(store, active_settings, ctx), trace_id=ensure_trace_id(request))
+        if security_repository is not None:
+            stored = await security_repository.consume_refresh_token(x_refresh_token)
+            if stored is None:
+                return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
+            identity = identity_from_stored(stored)
+        else:
+            token_hash = sha256_hex(x_refresh_token)
+            if token_hash in store.revoked_refresh_tokens:
+                return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
+            record = store.refresh_tokens.pop(token_hash, None)
+            if not record or record["expiresAt"] <= epoch_seconds():
+                return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
+            store.revoked_refresh_tokens.add(token_hash)
+            identity = Identity(record["principal"], record["tenantId"], record["roles"], permissions_for_roles(record["roles"]), "refresh")
+        return ok(await issue_tokens(store, active_settings, identity, security_repository), trace_id=ensure_trace_id(request))
 
     @app.post("/auth/api-keys")
-    def auth_api_keys(request: Request, keyName: str = Query(..., min_length=1, max_length=120), role: str = Query(default="USER"), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
-        data = create_api_key(store, keyName, role, ctx.tenant_id)
+    async def auth_api_keys(request: Request, keyName: str = Query(..., min_length=1, max_length=120), role: str = Query(default="USER"), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
+        data = await issue_api_key(store, security_repository, keyName, role, ctx.tenant_id)
         return ok(data, trace_id=ensure_trace_id(request))
 
     @app.post("/auth/api-keys/rotate")
-    def auth_api_key_rotate(request: Request, keyName: str = Query(..., min_length=1, max_length=120), reason: str = Query(default="rotation", max_length=240), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
-        data = rotate_api_key(store, keyName, reason, ctx.tenant_id)
+    async def auth_api_key_rotate(request: Request, keyName: str = Query(..., min_length=1, max_length=120), reason: str = Query(default="rotation", max_length=240), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
+        data = await rotate_persistent_api_key(store, security_repository, keyName, reason, ctx.tenant_id)
         return ok(data, msg="rotated", trace_id=ensure_trace_id(request))
 
     @app.post("/auth/api-keys/revoke")
-    def auth_api_key_revoke(request: Request, keyName: str = Query(..., min_length=1, max_length=120), reason: str = Query(default="manual revoke", max_length=240), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
-        revoke_api_key(store, keyName, reason, ctx.tenant_id)
+    async def auth_api_key_revoke(request: Request, keyName: str = Query(..., min_length=1, max_length=120), reason: str = Query(default="manual revoke", max_length=240), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
+        await revoke_persistent_api_key(store, security_repository, keyName, reason, ctx.tenant_id)
         return ok({"keyName": keyName, "tenantId": ctx.tenant_id}, msg="revoked", trace_id=ensure_trace_id(request))
 
     @app.get("/auth/oidc/login")
-    def oidc_login(request: Request, returnTo: str | None = Query(default=None, max_length=2048)):
-        return ok(begin_oidc_login(store, active_settings, returnTo), trace_id=ensure_trace_id(request))
+    async def oidc_login(request: Request, returnTo: str | None = Query(default=None, max_length=2048)):
+        return ok(await begin_oidc_login(store, active_settings, oidc_state_store, returnTo), trace_id=ensure_trace_id(request))
 
     @app.get("/auth/oidc/callback")
-    def oidc_callback(request: Request, code: str = Query(..., min_length=1), state: str = Query(..., min_length=1)):
-        return ok(complete_oidc_callback(store, active_settings, code, state), trace_id=ensure_trace_id(request))
+    async def oidc_callback(request: Request, code: str = Query(..., min_length=1), state: str = Query(..., min_length=1)):
+        return ok(await complete_oidc_callback(store, active_settings, oidc_state_store, code, state), trace_id=ensure_trace_id(request))
 
     @app.post("/auth/oidc/exchange")
     async def oidc_exchange(request: Request):
         payload = await request.json()
         exchange_code = str(payload.get("exchangeCode", ""))
-        identity = consume_oidc_exchange_code(store, exchange_code)
+        identity = await consume_oidc_exchange_code(store, oidc_state_store, exchange_code)
         if not identity:
             return fail("invalid or expired OIDC exchange code", "OIDC_INVALID_EXCHANGE_CODE", ensure_trace_id(request))
-        return ok(issue_tokens(store, active_settings, identity), trace_id=ensure_trace_id(request))
+        return ok(await issue_tokens(store, active_settings, identity, security_repository), trace_id=ensure_trace_id(request))
 
     @app.post("/auth/logout")
-    def logout(request: Request, x_refresh_token: str | None = Header(default=None)):
+    async def logout(request: Request, x_refresh_token: str | None = Header(default=None)):
         if x_refresh_token:
-            token_hash = sha256_hex(x_refresh_token)
-            store.refresh_tokens.pop(token_hash, None)
-            store.revoked_refresh_tokens.add(token_hash)
+            if security_repository is not None:
+                await security_repository.revoke_refresh_token(x_refresh_token)
+            else:
+                token_hash = sha256_hex(x_refresh_token)
+                store.refresh_tokens.pop(token_hash, None)
+                store.revoked_refresh_tokens.add(token_hash)
         return ok({"loggedOut": True}, trace_id=ensure_trace_id(request))
 
     @app.post("/ai/chat", response_model=ChatEnvelope)
@@ -751,13 +787,19 @@ def error_payload(msg: str, code: str, trace_id: str) -> dict[str, Any]:
     return {"ok": 0, "msg": msg, "code": code, "traceId": trace_id}
 
 
-def resolve_context(request: Request, store: PlatformStore, settings: Settings, allow_anonymous: bool) -> RequestContext:
+async def resolve_context(
+    request: Request,
+    store: PlatformStore,
+    settings: Settings,
+    security_repository: SecurityRepository | None,
+    allow_anonymous: bool,
+) -> RequestContext:
     trace_id = ensure_trace_id(request)
     tenant_header = request.headers.get(TENANT_HEADER)
     tenant_id = normalize_tenant(tenant_header)
     bearer = bearer_token(request.headers.get(AUTH_HEADER))
     jwt_identity = verify_access_token(settings, bearer) if bearer else None
-    api_identity = authenticate_api_key(store, request.headers.get(API_KEY_HEADER))
+    api_identity = await resolve_api_key_identity(store, security_repository, request.headers.get(API_KEY_HEADER))
     identity = jwt_identity or api_identity
     if identity:
         if tenant_header and identity.tenant_id != tenant_id:
@@ -818,6 +860,20 @@ def authenticate_api_key(store: PlatformStore, api_key: str | None) -> Identity 
     return Identity(record["keyName"], record["tenantId"], roles, permissions_for_roles(roles), "api_key")
 
 
+async def resolve_api_key_identity(
+    store: PlatformStore, security_repository: SecurityRepository | None, api_key: str | None
+) -> Identity | None:
+    if security_repository is None:
+        return authenticate_api_key(store, api_key)
+    stored = await security_repository.authenticate_api_key(api_key)
+    return identity_from_stored(stored) if stored is not None else None
+
+
+def identity_from_stored(stored: StoredIdentity) -> Identity:
+    roles = list(stored.roles)
+    return Identity(stored.principal, stored.tenant_id, roles, permissions_for_roles(roles), stored.source)
+
+
 def create_api_key(store: PlatformStore, key_name: str, role: str, tenant_id: str) -> ApiKeyData:
     normalized_role = role.upper()
     if normalized_role not in ROLE_PERMISSIONS:
@@ -836,6 +892,31 @@ def create_api_key(store: PlatformStore, key_name: str, role: str, tenant_id: st
     return ApiKeyData(keyName=key_name, tenantId=tenant_id, role=normalized_role, rawApiKey=raw, expiresAt=future_iso(days=30))
 
 
+async def issue_api_key(
+    store: PlatformStore,
+    security_repository: SecurityRepository | None,
+    key_name: str,
+    role: str,
+    tenant_id: str,
+) -> ApiKeyData:
+    normalized_role = role.upper()
+    if normalized_role not in ROLE_PERMISSIONS:
+        raise HTTPException(status_code=422, detail="unsupported api key role")
+    if security_repository is None:
+        return create_api_key(store, key_name, normalized_role, tenant_id)
+    try:
+        issued = await security_repository.issue_api_key(key_name, normalized_role, tenant_id, expires_in_days=30)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ApiKeyData(
+        keyName=issued.key_name,
+        tenantId=issued.tenant_id,
+        role=issued.role,
+        rawApiKey=issued.raw_key,
+        expiresAt=issued.expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
+
+
 def rotate_api_key(store: PlatformStore, key_name: str, reason: str, tenant_id: str) -> ApiKeyData:
     for record in store.api_keys.values():
         if record["keyName"] == key_name and record["tenantId"] == tenant_id and not record.get("revokedAt"):
@@ -844,6 +925,27 @@ def rotate_api_key(store: PlatformStore, key_name: str, reason: str, tenant_id: 
             record["revocationReason"] = reason
             return create_api_key(store, key_name, record["role"], tenant_id)
     raise HTTPException(status_code=404, detail="api key not found")
+
+
+async def rotate_persistent_api_key(
+    store: PlatformStore,
+    security_repository: SecurityRepository | None,
+    key_name: str,
+    reason: str,
+    tenant_id: str,
+) -> ApiKeyData:
+    if security_repository is None:
+        return rotate_api_key(store, key_name, reason, tenant_id)
+    issued = await security_repository.rotate_api_key(key_name, tenant_id, reason, expires_in_days=30)
+    if issued is None:
+        raise HTTPException(status_code=404, detail="api key not found")
+    return ApiKeyData(
+        keyName=issued.key_name,
+        tenantId=issued.tenant_id,
+        role=issued.role,
+        rawApiKey=issued.raw_key,
+        expiresAt=issued.expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
 
 
 def revoke_api_key(store: PlatformStore, key_name: str, reason: str, tenant_id: str) -> None:
@@ -856,18 +958,41 @@ def revoke_api_key(store: PlatformStore, key_name: str, reason: str, tenant_id: 
     raise HTTPException(status_code=404, detail="api key not found")
 
 
-def begin_oidc_login(store: PlatformStore, settings: Settings, return_to: str | None) -> dict[str, str]:
-    metadata = oidc_metadata(settings)
+async def revoke_persistent_api_key(
+    store: PlatformStore,
+    security_repository: SecurityRepository | None,
+    key_name: str,
+    reason: str,
+    tenant_id: str,
+) -> None:
+    if security_repository is None:
+        revoke_api_key(store, key_name, reason, tenant_id)
+        return
+    if not await security_repository.revoke_api_key(key_name, tenant_id, reason):
+        raise HTTPException(status_code=404, detail="api key not found")
+
+
+async def begin_oidc_login(
+    store: PlatformStore, settings: Settings, oidc_state_store: OidcStateStore | None, return_to: str | None
+) -> dict[str, str]:
+    metadata = await oidc_metadata(settings)
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
-    store.oidc_states[state] = {
+    pending = {
         "nonce": nonce,
         "verifier": verifier,
         "returnTo": return_to or "",
         "expiresAt": epoch_seconds() + 600,
     }
+    if oidc_state_store is None:
+        store.oidc_states[state] = pending
+    else:
+        try:
+            await oidc_state_store.put("state", sha256_hex(state), pending, ttl_seconds=600)
+        except OidcStateUnavailable as exc:
+            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
     query = urlencode(
         {
             "response_type": "code",
@@ -883,26 +1008,38 @@ def begin_oidc_login(store: PlatformStore, settings: Settings, return_to: str | 
     return {"authorizationUrl": f"{metadata['authorization_endpoint']}?{query}", "state": state}
 
 
-def complete_oidc_callback(store: PlatformStore, settings: Settings, authorization_code: str, state: str) -> dict[str, str]:
-    pending = store.oidc_states.pop(state, None)
+async def complete_oidc_callback(
+    store: PlatformStore,
+    settings: Settings,
+    oidc_state_store: OidcStateStore | None,
+    authorization_code: str,
+    state: str,
+) -> dict[str, str]:
+    if oidc_state_store is None:
+        pending = store.oidc_states.pop(state, None)
+    else:
+        try:
+            pending = await oidc_state_store.consume("state", sha256_hex(state))
+        except OidcStateUnavailable as exc:
+            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
     if not pending or int(pending["expiresAt"]) <= epoch_seconds():
         raise HTTPException(status_code=400, detail="invalid or expired OIDC state")
-    metadata = oidc_metadata(settings)
-    token_response = httpx.post(
-        metadata["token_endpoint"],
-        data={
-            "grant_type": "authorization_code",
-            "code": authorization_code,
-            "redirect_uri": settings.oidc_redirect_uri,
-            "client_id": settings.oidc_client_id,
-            "client_secret": settings.oidc_client_secret or "",
-            "code_verifier": pending["verifier"],
-        },
-        timeout=10.0,
-    )
+    metadata = await oidc_metadata(settings)
     try:
-        token_response.raise_for_status()
-        tokens = token_response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            token_response = await client.post(
+                metadata["token_endpoint"],
+                data={
+                    "grant_type": "authorization_code",
+                    "code": authorization_code,
+                    "redirect_uri": settings.oidc_redirect_uri,
+                    "client_id": settings.oidc_client_id,
+                    "client_secret": settings.oidc_client_secret or "",
+                    "code_verifier": pending["verifier"],
+                },
+            )
+            token_response.raise_for_status()
+            tokens = token_response.json()
         claims = verify_oidc_id_token(settings, metadata, str(tokens["id_token"]), str(pending["nonce"]))
     except (httpx.HTTPError, KeyError, InvalidTokenError, ValueError) as exc:
         raise HTTPException(status_code=502, detail="OIDC token exchange failed") from exc
@@ -914,28 +1051,58 @@ def complete_oidc_callback(store: PlatformStore, settings: Settings, authorizati
     roles = [role.upper() for role in roles if role.upper() in ROLE_PERMISSIONS] or ["USER"]
     identity = Identity(str(claims["sub"]), normalize_tenant(tenant_id), roles, permissions_for_roles(roles), "oidc")
     exchange_code = secrets.token_urlsafe(32)
-    store.oidc_exchange_codes[sha256_hex(exchange_code)] = {
-        "identity": identity,
+    exchange_payload = {
+        "identity": {
+            "principal": identity.principal,
+            "tenantId": identity.tenant_id,
+            "roles": identity.roles,
+        },
         "expiresAt": epoch_seconds() + 60,
     }
+    if oidc_state_store is None:
+        store.oidc_exchange_codes[sha256_hex(exchange_code)] = {"identity": identity, "expiresAt": exchange_payload["expiresAt"]}
+    else:
+        try:
+            await oidc_state_store.put("exchange", sha256_hex(exchange_code), exchange_payload, ttl_seconds=60)
+        except OidcStateUnavailable as exc:
+            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
     return {"exchangeCode": exchange_code, "returnTo": str(pending["returnTo"])}
 
 
-def consume_oidc_exchange_code(store: PlatformStore, exchange_code: str) -> Identity | None:
-    record = store.oidc_exchange_codes.pop(sha256_hex(exchange_code), None)
+async def consume_oidc_exchange_code(
+    store: PlatformStore, oidc_state_store: OidcStateStore | None, exchange_code: str
+) -> Identity | None:
+    if oidc_state_store is None:
+        record = store.oidc_exchange_codes.pop(sha256_hex(exchange_code), None)
+    else:
+        try:
+            record = await oidc_state_store.consume("exchange", sha256_hex(exchange_code))
+        except OidcStateUnavailable as exc:
+            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
     if not record or int(record["expiresAt"]) <= epoch_seconds():
         return None
-    return record["identity"]
+    identity = record["identity"]
+    if isinstance(identity, Identity):
+        return identity
+    roles = [str(role) for role in identity.get("roles", ["USER"])]
+    return Identity(
+        str(identity["principal"]),
+        normalize_tenant(identity.get("tenantId")),
+        roles,
+        permissions_for_roles(roles),
+        "oidc",
+    )
 
 
-def oidc_metadata(settings: Settings) -> dict[str, Any]:
+async def oidc_metadata(settings: Settings) -> dict[str, Any]:
     if not settings.oidc_issuer_url or not settings.oidc_client_id or not settings.oidc_redirect_uri:
         raise HTTPException(status_code=503, detail="OIDC is not configured")
     issuer = settings.oidc_issuer_url.rstrip("/")
     try:
-        response = httpx.get(f"{issuer}/.well-known/openid-configuration", timeout=10.0)
-        response.raise_for_status()
-        metadata = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{issuer}/.well-known/openid-configuration")
+            response.raise_for_status()
+            metadata = response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail="OIDC discovery is unavailable") from exc
     for required_key in ("authorization_endpoint", "token_endpoint", "jwks_uri", "issuer"):
@@ -959,7 +1126,12 @@ def verify_oidc_id_token(settings: Settings, metadata: dict[str, Any], token: st
     return claims
 
 
-def issue_tokens(store: PlatformStore, settings: Settings, identity: RequestContext | Identity) -> AuthTokenData:
+async def issue_tokens(
+    store: PlatformStore,
+    settings: Settings,
+    identity: RequestContext | Identity,
+    security_repository: SecurityRepository | None,
+) -> AuthTokenData:
     expires_at = epoch_seconds() + settings.token_ttl_seconds
     payload = {
         "sub": identity.principal,
@@ -971,14 +1143,20 @@ def issue_tokens(store: PlatformStore, settings: Settings, identity: RequestCont
         "jti": new_id("jwt"),
     }
     token = sign_payload(settings, payload)
-    refresh = new_id("refresh")
-    store.refresh_tokens[sha256_hex(refresh)] = {
-        "principal": identity.principal,
-        "tenantId": identity.tenant_id,
-        "roles": identity.roles,
-        "expiresAt": epoch_seconds() + 7 * 86400,
-        "createdAt": now_iso(),
-    }
+    if security_repository is None:
+        refresh = new_id("refresh")
+        store.refresh_tokens[sha256_hex(refresh)] = {
+            "principal": identity.principal,
+            "tenantId": identity.tenant_id,
+            "roles": identity.roles,
+            "expiresAt": epoch_seconds() + settings.refresh_token_ttl_days * 86400,
+            "createdAt": now_iso(),
+        }
+    else:
+        refresh = await security_repository.issue_refresh_token(
+            StoredIdentity(identity.principal, identity.tenant_id, tuple(identity.roles), identity.auth_source),
+            settings.refresh_token_ttl_days,
+        )
     return AuthTokenData(
         token=token,
         refreshToken=refresh,
