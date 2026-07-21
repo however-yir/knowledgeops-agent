@@ -1,13 +1,13 @@
 package com.enterprise.iqk.ingestion.queue;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.List;
 
 @Component
-@ConditionalOnMissingBean(IngestionQueue.class)
+@ConditionalOnProperty(prefix = "app.ingestion", name = "queue-backend", havingValue = "db_polling")
 public class NoopIngestionQueue implements IngestionQueue {
     @Override
     public void publishJob(String jobId, String traceId) {
