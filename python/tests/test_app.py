@@ -66,12 +66,28 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         await engine.dispose()
 
     asyncio.run(initialise_schema())
-    settings = Settings(database_url=database_url, demo_api_key="persistent-admin", demo_tenant_id="tenant-a")
+    settings = Settings(
+        database_url=database_url,
+        demo_api_key="persistent-admin",
+        demo_tenant_id="tenant-a",
+        storage_path=str(tmp_path / "uploads"),
+        ingestion_queue_backend="db_polling",
+    )
     with TestClient(create_app(settings)) as first_app:
         token = assert_envelope(first_app.post("/auth/token", headers={"X-API-Key": "persistent-admin"}).json())
         issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
         rotated = assert_envelope(first_app.post("/auth/api-keys/rotate?keyName=persisted", headers={"X-API-Key": "persistent-admin"}).json())
         assert first_app.post("/auth/token", headers={"X-API-Key": issued["rawApiKey"]}).json()["ok"] == 0
+        queued = assert_envelope(
+            first_app.post(
+                "/ingestion/upload/durable-chat",
+                headers={"X-API-Key": "persistent-admin"},
+                files={"file": ("policy.txt", b"Water and shade prevent heat injury.", "text/plain")},
+            ).json()
+        )
+        assert queued["status"] == "QUEUED"
+        assert assert_envelope(first_app.post("/ingestion/jobs/process", headers={"X-API-Key": "persistent-admin"}).json())["processed"] == 1
+        assert assert_envelope(first_app.get(f"/ingestion/jobs/{queued['jobId']}", headers={"X-API-Key": "persistent-admin"}).json())["status"] == "COMPLETED"
 
     with TestClient(create_app(settings)) as second_app:
         new_key_token = assert_envelope(second_app.post("/auth/token", headers={"X-API-Key": rotated["rawApiKey"]}).json())
@@ -79,6 +95,9 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0
+        file_text = second_app.get("/ai/pdf/file/durable-chat", headers={"X-API-Key": "persistent-admin"})
+        assert file_text.status_code == 200
+        assert "Water and shade" in file_text.text
 
 
 def test_error_response_contains_code_and_trace_id() -> None:

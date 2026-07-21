@@ -45,13 +45,35 @@ class IngestionJobRecord(Base, TenantScopedRecord):
     __tablename__ = "py_ingestion_jobs"
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     chat_id: Mapped[str] = mapped_column(String(128), index=True)
+    source_type: Mapped[str] = mapped_column(String(32), default="FILE")
     source_name: Mapped[str] = mapped_column(String(512))
+    file_path: Mapped[str | None] = mapped_column(String(1024))
     status: Mapped[str] = mapped_column(String(32), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(128), unique=True)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     max_retries: Mapped[int] = mapped_column(Integer, default=3)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    trace_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    queue_backend: Mapped[str] = mapped_column(String(32), default="db_polling")
+    error_message: Mapped[str | None] = mapped_column(Text)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class IngestionChunkRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_ingestion_chunks"
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(64), index=True)
+    chat_id: Mapped[str] = mapped_column(String(128), index=True)
+    source_name: Mapped[str] = mapped_column(String(512))
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON)
 
 
 class SessionRecord(Base, TenantScopedRecord):

@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -22,7 +23,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from jwt import InvalidTokenError
 
+from .application.ingestion import IngestionApplicationService
 from .config import Settings, load_settings
+from .domain.context import TenantContext
 from .dto import (
     AgentTraceDto,
     ApiKeyData,
@@ -47,6 +50,8 @@ from .dto import (
     UsageDto,
 )
 from .infrastructure.database import create_engine, create_session_factory
+from .infrastructure.file_store import LocalFileStore
+from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
 from .infrastructure.providers import OpenAICompatibleChatProvider
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
@@ -148,8 +153,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     seed_store(store, active_settings)
     tracer = configure_observability(active_settings.app_name)
     engine = create_engine(active_settings.database_url) if active_settings.database_url else None
+    session_factory = create_session_factory(engine) if engine is not None else None
     security_repository: SecurityRepository | None = (
-        SqlAlchemySecurityRepository(create_session_factory(engine)) if engine is not None else None
+        SqlAlchemySecurityRepository(session_factory) if session_factory is not None else None
+    )
+    ingestion_service = (
+        IngestionApplicationService(
+            SqlAlchemyIngestionRepository(session_factory),
+            LocalFileStore(Path(active_settings.storage_path)),
+            active_settings.ingestion_queue_backend,
+        )
+        if session_factory is not None
+        else None
     )
     oidc_state_store: OidcStateStore | None = RedisOidcStateStore(active_settings.redis_url) if active_settings.is_production else None
 
@@ -179,6 +194,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.store = store
     app.state.security_repository = security_repository
     app.state.oidc_state_store = oidc_state_store
+    app.state.ingestion_service = ingestion_service
     app.state.tracer = tracer
 
     app.add_middleware(
@@ -376,12 +392,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/ingestion/upload/{chatId}")
     async def upload(chatId: str, request: Request, ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_WRITE"))):
         source_name, content = await request_file(request, active_settings)
+        if ingestion_service is not None:
+            job = await ingestion_service.submit(tenant_context(ctx), chatId, source_name, content)
+            return ok(IngestionJobDto(**persisted_public_job(job)), msg="accepted", trace_id=ctx.trace_id)
         job = create_ingestion_job(store, active_settings, ctx, chatId, source_name, content)
         enqueue_and_process(store, active_settings, job["jobId"])
         return ok(IngestionJobDto(**public_job(store.jobs[job["jobId"]])), msg="accepted", trace_id=ctx.trace_id)
 
     @app.get("/ingestion/jobs")
-    def ingestion_jobs(ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ")), chatId: str | None = Query(default=None), limit: int = Query(default=50)):
+    async def ingestion_jobs(ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ")), chatId: str | None = Query(default=None), limit: int = Query(default=50)):
+        if ingestion_service is not None:
+            jobs = await ingestion_service.repository.list_jobs(ctx.tenant_id, chatId, bounded(limit, 1, 200))
+            return ok([IngestionJobDto(**persisted_public_job(job)).model_dump() for job in jobs], trace_id=ctx.trace_id)
         jobs = [
             IngestionJobDto(**job).model_dump()
             for job in store.jobs.values()
@@ -390,7 +412,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(jobs[: bounded(limit, 1, 200)], trace_id=ctx.trace_id)
 
     @app.get("/ingestion/jobs/{jobId}")
-    def ingestion_job(jobId: str, ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ"))):
+    async def ingestion_job(jobId: str, ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ"))):
+        if ingestion_service is not None:
+            job = await ingestion_service.repository.get(ctx.tenant_id, jobId)
+            if job is None:
+                raise HTTPException(status_code=404, detail="job not found")
+            return ok(IngestionJobDto(**persisted_public_job(job)), trace_id=ctx.trace_id)
         job = store.jobs.get(jobId)
         if not job or job["tenantId"] != ctx.tenant_id:
             raise HTTPException(status_code=404, detail="job not found")
@@ -529,14 +556,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(data, trace_id=ctx.trace_id)
 
     @app.get("/ai/pdf/file/{chatId}")
-    def pdf_file(chatId: str, ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
-        chunks = [chunk for chunk in store.chunks if chunk["tenantId"] == ctx.tenant_id and chunk["chatId"] == chatId]
+    async def pdf_file(chatId: str, ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
+        chunks = (
+            await ingestion_service.repository.chunks(ctx.tenant_id, chatId)
+            if ingestion_service is not None
+            else [chunk for chunk in store.chunks if chunk["tenantId"] == ctx.tenant_id and chunk["chatId"] == chatId]
+        )
         if not chunks:
             raise HTTPException(status_code=404, detail="file not found")
         return PlainTextResponse("\n".join(chunk["content"] for chunk in chunks), media_type="text/plain; charset=utf-8")
 
     @app.post("/ingestion/jobs/process")
-    def ingestion_process(ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_WRITE"))):
+    async def ingestion_process(ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_WRITE"))):
+        if ingestion_service is not None:
+            processed = await ingestion_service.process_ready(ctx.tenant_id)
+            return ok({"processed": processed}, trace_id=ctx.trace_id)
         processed = process_pending_jobs(store, active_settings, ctx.tenant_id)
         return ok({"processed": processed}, trace_id=ctx.trace_id)
 
@@ -1431,6 +1465,25 @@ def process_ingestion_job(store: PlatformStore, job_id: str) -> None:
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in job.items() if key not in {"tenantId", "content"}}
+
+
+def persisted_public_job(job: PersistedIngestionJob) -> dict[str, Any]:
+    return {
+        "jobId": job.job_id,
+        "chatId": job.chat_id,
+        "sourceName": job.source_name,
+        "status": job.status,
+        "attemptCount": job.attempt_count,
+        "maxRetries": job.max_retries,
+        "queueBackend": job.queue_backend,
+        "traceId": job.trace_id or "",
+        "createdAt": job.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "updatedAt": job.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def tenant_context(ctx: RequestContext) -> TenantContext:
+    return TenantContext(ctx.trace_id, ctx.tenant_id, ctx.principal, tuple(ctx.roles), tuple(ctx.permissions), ctx.auth_source)
 
 
 async def request_file(request: Request, settings: Settings) -> tuple[str, bytes]:
