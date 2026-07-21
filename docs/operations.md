@@ -52,13 +52,16 @@ Terminal failures enter DLQ stream/queue.
 - Promtail scrapes `logs/*.log` and pushes to Loki
 - Trace and request correlation fields: `trace_id`, `request_id`, `chat_id`
 
-## 6. Nightly Regression
+## 6. Nightly Evaluator Contract Check
 
 ```bash
 python3 scripts/generate_eval_dataset.py
-python3 scripts/generate_eval_predictions.py
-python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
+python3 scripts/generate_eval_contract_fixture.py --dataset evaluation/dataset.large.json --output evaluation/predictions.contract.json
+python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.contract.json --report-dir reports/evaluation-contract --threshold 0.75
 ```
+
+This scheduled job validates the evaluator contract only. Model-quality evidence
+comes from `eval_live_runner.py` plus `run_regression.py --require-live-predictions`.
 
 ## 7. Performance Validation
 

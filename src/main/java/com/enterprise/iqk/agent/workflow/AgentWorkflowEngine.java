@@ -181,8 +181,8 @@ public class AgentWorkflowEngine {
 
     // ── Query ────────────────────────────────────────────────────
 
-    public WorkflowTaskVO getTask(String taskId) {
-        AgentTaskRecord task = taskMapper.findByTaskId(taskId);
+    public WorkflowTaskVO getTask(String tenantId, String taskId) {
+        AgentTaskRecord task = taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
         if (task == null) {
             return null;
         }
@@ -200,7 +200,10 @@ public class AgentWorkflowEngine {
                 .toList();
     }
 
-    public List<WorkflowEventVO> getTaskEvents(String taskId) {
+    public List<WorkflowEventVO> getTaskEvents(String tenantId, String taskId) {
+        if (taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId) == null) {
+            return Collections.emptyList();
+        }
         return eventMapper.findByTaskId(taskId).stream()
                 .map(this::toEventVO)
                 .toList();

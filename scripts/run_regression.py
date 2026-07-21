@@ -59,6 +59,7 @@ def normalize_prediction(raw):
 
     return {
         "id": item.get("id"),
+        "prediction_source": str(item.get("prediction_source", "unknown") or "unknown"),
         "answer": answer,
         "citations": [str(c).strip() for c in citations if str(c).strip()],
         "status": status,
@@ -264,6 +265,7 @@ def main():
     parser.add_argument("--first-token-max-ms", type=float, default=4000)
     parser.add_argument("--failure-max-rate", type=float, default=0.10)
     parser.add_argument("--require-latency", action="store_true", default=False)
+    parser.add_argument("--require-live-predictions", action="store_true", default=False)
     args = parser.parse_args()
 
     dataset = load_json(Path(args.dataset))
@@ -276,6 +278,16 @@ def main():
         for item in raw_predictions:
             normalized = normalize_prediction(item)
             pred_map[str(normalized.get("id", ""))] = normalized
+
+    if args.require_live_predictions:
+        non_live_ids = [
+            str(case.get("id", ""))
+            for case in dataset
+            if pred_map.get(str(case.get("id", "")), {}).get("prediction_source") != "live_api"
+        ]
+        if non_live_ids:
+            preview = ", ".join(non_live_ids[:10])
+            raise SystemExit(f"quality gate requires live_api predictions; rejected cases: {preview}")
 
     case_reports = []
     for case in dataset:
@@ -296,6 +308,7 @@ def main():
             "first_token_max_ms": args.first_token_max_ms,
             "failure_max_rate": args.failure_max_rate,
             "require_latency": args.require_latency,
+            "require_live_predictions": args.require_live_predictions,
         },
         "cases": case_reports,
     }

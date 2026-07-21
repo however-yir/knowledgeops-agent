@@ -16,6 +16,10 @@ Most local examples can use the seeded API key:
 -H "X-API-Key: $API_KEY" -H "X-Tenant-Id: $TENANT_ID"
 ```
 
+When security is enabled, the API key or JWT tenant is authoritative and the
+tenant header cannot switch authorization scope. The header remains in these
+recipes for local demo correlation and must match the API key during token exchange.
+
 For JWT-based calls, set `API_KEY` to the seeded development value from `.env.example`, then exchange the API key first:
 
 ```bash

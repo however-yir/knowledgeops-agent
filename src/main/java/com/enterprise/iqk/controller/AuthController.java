@@ -60,9 +60,9 @@ public class AuthController {
     @PostMapping("/api-keys")
     @PreAuthorize("hasAnyAuthority('PERM_AUTH_KEY_MANAGE','ROLE_ADMIN')")
     public ApiKeyIssueVO issueApiKey(@RequestParam("keyName") String keyName,
-                                     @RequestParam(value = "role", defaultValue = "USER") String roleName,
-                                     @RequestParam(value = "tenantId", required = false) String tenantId) {
-        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.issue(keyName, roleName, tenantId);
+                                     @RequestParam(value = "role", defaultValue = "USER") String roleName) {
+        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.issue(
+                keyName, roleName, TenantContext.currentTenantId());
         return ApiKeyIssueVO.builder()
                 .ok(1)
                 .msg("ok")
@@ -76,9 +76,9 @@ public class AuthController {
     @PostMapping("/api-keys/rotate")
     @PreAuthorize("hasAnyAuthority('PERM_AUTH_KEY_MANAGE','ROLE_ADMIN')")
     public ApiKeyIssueVO rotateApiKey(@RequestParam("keyName") String keyName,
-                                      @RequestParam(value = "reason", defaultValue = "rotation") String reason,
-                                      @RequestParam(value = "tenantId", required = false) String tenantId) {
-        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.rotate(keyName, reason, tenantId);
+                                      @RequestParam(value = "reason", defaultValue = "rotation") String reason) {
+        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.rotate(
+                keyName, reason, TenantContext.currentTenantId());
         return ApiKeyIssueVO.builder()
                 .ok(1)
                 .msg("rotated")
@@ -92,9 +92,8 @@ public class AuthController {
     @PostMapping("/api-keys/revoke")
     @PreAuthorize("hasAnyAuthority('PERM_AUTH_KEY_MANAGE','ROLE_ADMIN')")
     public ApiKeyIssueVO revokeApiKey(@RequestParam("keyName") String keyName,
-                                      @RequestParam(value = "reason", defaultValue = "manual revoke") String reason,
-                                      @RequestParam(value = "tenantId", required = false) String tenantId) {
-        String normalizedTenant = TenantContext.normalize(tenantId);
+                                      @RequestParam(value = "reason", defaultValue = "manual revoke") String reason) {
+        String normalizedTenant = TenantContext.currentTenantId();
         apiKeyLifecycleService.revoke(keyName, reason, normalizedTenant);
         return ApiKeyIssueVO.builder()
                 .ok(1)

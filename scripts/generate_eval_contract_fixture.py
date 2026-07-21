@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""Generate deterministic fixtures for testing the regression evaluator contract.
+
+This script intentionally reads expected fields. Its output must never be used as
+evidence of model quality; live quality gates use eval_live_runner.py instead.
+"""
+
 import argparse
 import json
 from pathlib import Path
@@ -7,7 +13,7 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="evaluation/dataset.large.json")
-    parser.add_argument("--output", default="evaluation/predictions.generated.json")
+    parser.add_argument("--output", default="evaluation/predictions.contract.json")
     args = parser.parse_args()
 
     dataset = json.loads(Path(args.dataset).read_text(encoding="utf-8"))
@@ -22,7 +28,7 @@ def main():
         if expected_citations:
             citations = [str(item) for item in expected_citations if str(item).strip()]
         elif is_rag:
-            citations = [f"source=eval/{case.get('id', index)}.md, chunk=1"]
+            citations = [f"source=contract/{case.get('id', index)}.md, chunk=1"]
         else:
             citations = []
 
@@ -31,6 +37,7 @@ def main():
 
         predictions.append({
             "id": case.get("id"),
+            "prediction_source": "synthetic_contract_fixture",
             "status": "ok",
             "answer": answer,
             "citations": citations,
@@ -40,7 +47,7 @@ def main():
 
     out = Path(args.output)
     out.write_text(json.dumps(predictions, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"written: {out} ({len(predictions)} records)")
+    print(f"written contract fixture: {out} ({len(predictions)} records)")
 
 
 if __name__ == "__main__":

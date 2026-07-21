@@ -186,7 +186,7 @@ def main():
                 "total_latency_ms": None,
             }
 
-        prediction = {"id": case_id}
+        prediction = {"id": case_id, "prediction_source": "live_api"}
         prediction.update(result)
         predictions.append(prediction)
         print(f"[{idx}/{len(dataset)}] {case_id}: {prediction['status']}")

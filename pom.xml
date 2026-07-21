@@ -197,19 +197,6 @@
             <version>${resilience4j.version}</version>
         </dependency>
 
-        <!-- Bucket4j Redis integration for distributed rate limiting -->
-        <dependency>
-            <groupId>com.bucket4j</groupId>
-            <artifactId>bucket4j-redis</artifactId>
-            <version>${bucket4j.version}</version>
-        </dependency>
-
-        <!-- Spring Security OAuth2 Client (for future SSO integration) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-oauth2-client</artifactId>
-        </dependency>
-
         <!-- SpotBugs annotations -->
         <dependency>
             <groupId>com.github.spotbugs</groupId>
@@ -282,17 +269,6 @@
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
-                        <configuration>
-                            <excludes>
-                                <!-- V1 new modules: exclude from coverage until tests are added -->
-                                <exclude>com/enterprise/iqk/agent/workflow/**</exclude>
-                                <exclude>com/enterprise/iqk/agent/research/**</exclude>
-                                <exclude>com/enterprise/iqk/retrieval/**</exclude>
-                                <exclude>com/enterprise/iqk/graph/**</exclude>
-                                <exclude>com/enterprise/iqk/memory/**</exclude>
-                                <exclude>com/enterprise/iqk/rag/HybridRagAnswerService.class</exclude>
-                            </excludes>
-                        </configuration>
                     </execution>
                     <execution>
                         <id>report</id>
@@ -315,7 +291,7 @@
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
-                                            <minimum>0.05</minimum>
+                                            <minimum>0.25</minimum>
                                         </limit>
                                     </limits>
                                 </rule>

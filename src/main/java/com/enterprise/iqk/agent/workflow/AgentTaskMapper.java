@@ -14,6 +14,10 @@ public interface AgentTaskMapper extends BaseMapper<AgentTaskRecord> {
     @Select("SELECT * FROM agent_task WHERE task_id = #{taskId}")
     AgentTaskRecord findByTaskId(@Param("taskId") String taskId);
 
+    @Select("SELECT * FROM agent_task WHERE tenant_id = #{tenantId} AND task_id = #{taskId}")
+    AgentTaskRecord findByTenantAndTaskId(@Param("tenantId") String tenantId,
+                                          @Param("taskId") String taskId);
+
     @Select("SELECT * FROM agent_task WHERE tenant_id = #{tenantId} ORDER BY created_at DESC LIMIT #{limit} OFFSET #{offset}")
     List<AgentTaskRecord> findByTenant(@Param("tenantId") String tenantId,
                                        @Param("offset") long offset,

@@ -5,7 +5,7 @@ KnowledgeOps Agent parity target for Java, TypeScript, and Python.
 
 ## Scope
 
-The Java edition is the production baseline implementation. It keeps the
+The Java edition is the feature baseline and production-oriented prototype. It keeps the
 existing Spring Boot, Spring Security, Spring AI, MyBatis-Plus, Flyway,
 Docker, and observability stack, while exposing compatibility endpoints and
 tests for the shared three-language contract.
@@ -14,7 +14,7 @@ tests for the shared three-language contract.
 
 | Capability | Java status | Evidence |
 |---|---:|---|
-| Auth and tenant isolation | Done | API key, JWT, refresh token, RBAC, `X-Tenant-ID` filters |
+| Auth and tenant isolation | Done | API key, JWT, refresh token, RBAC, identity-derived tenant context |
 | Chat | Done | `/ai/chat` |
 | SSE streaming | Done | `/ai/chat/stream`, `/ai/react/chat/stream` |
 | ReAct Agent | Done | `/ai/react/chat`, trace payloads |
@@ -25,7 +25,7 @@ tests for the shared three-language contract.
 | Feedback and evaluation | Done | `/ai/feedback`, `/ai/evaluation/datasets`, `/ai/evaluation/runs` |
 | Cost governance | Done | `/cost/summary`, `/cost/budget` |
 | Audit logs | Done | `/audit/logs`, audit filter |
-| Rate limiting | Done | Bucket4j filter |
+| Rate limiting | Single instance | Bucket4j in-memory filter; shared Redis backend is not implemented |
 | Health and metrics | Done | `/actuator/health`, `/actuator/prometheus` |
 | Docker local deployment | Done | `Dockerfile`, `docker-compose.yml` |
 | Helm deployment | Done | `helm/knowledgeops-agent` |

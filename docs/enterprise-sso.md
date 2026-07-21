@@ -2,11 +2,13 @@
 
 > Status: 📋 Planned — this document describes the target integration pattern.
 
-## Supported Providers
+## Target Providers
 
-KnowledgeOps Agent supports enterprise SSO via OpenID Connect (OIDC) and SAML 2.0.
+The target design covers OpenID Connect (OIDC) and SAML 2.0. Neither provider is implemented in the current application.
 
-## Configuration
+## Proposed Configuration
+
+The following keys are a design proposal and are not currently bound by application configuration classes.
 
 ```yaml
 app:
@@ -27,7 +29,7 @@ app:
 
 ## User Provisioning
 
-When SSO is enabled:
+After SSO is implemented:
 1. User authenticates via corporate IdP
 2. OIDC/SAML token maps to KnowledgeOps tenant + role
 3. JWT is issued with tenant-scoped claims

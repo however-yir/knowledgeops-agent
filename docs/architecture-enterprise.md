@@ -31,8 +31,8 @@
 - API Key for machine access bootstrap
 - JWT for request-level authn/authz
 - Refresh token rotation
-- Tenant-scoped API key lifecycle (`X-Tenant-Id`)
-- Tenant + principal composite rate limiting
+- Tenant-scoped API key lifecycle derived from the authenticated identity
+- Tenant + principal composite rate limiting (single-instance in-memory buckets)
 - RBAC + route-level permission checks
 - Audit log retention scheduler
 
@@ -48,5 +48,6 @@
 
 - Keep `chatId` stable in clients to preserve conversation continuity
 - Set separate rate limits for chat and ingestion endpoints
+- Use a shared rate-limit backend before horizontally scaling protected endpoints
 - Run periodic regression tests before and after dependency upgrades
 - Keep alert thresholds versioned together with code

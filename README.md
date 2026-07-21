@@ -7,13 +7,13 @@
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
 
-> **Matrix role:** `knowledgeops-agent` is the platform baseline: enterprise Spring AI RAG, agent workflow state, memory, evidence, tenant isolation, security, and observability. Business agents such as [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) build on this layer.
+> **Matrix role:** `knowledgeops-agent` is the platform baseline: enterprise Spring AI RAG, agent workflow state, memory persistence primitives, evidence, tenant isolation, security, and observability. Business agents such as [`tianji-ai-agent`](https://github.com/however-yir/tianji-ai-agent) build on this layer.
 >
 > **Spring AI baseline:** the code is intentionally pinned to `1.0.0-M6` as the verified implementation baseline; migration to the current `1.1.x` stable line is tracked in [docs/spring-ai-upgrade-plan.md](docs/spring-ai-upgrade-plan.md).
 
-KnowledgeOps Agent is a multi-agent enterprise AI platform built on Spring AI. It combines **Agent Workflow Engine**, **Hybrid Retrieval (vector + keyword + graph + web)**, **Knowledge Graph**, **Long/Short-term Memory**, **DeepResearch**, tenant-isolated RAG, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, and Prometheus/Loki/Tempo observability — a complete knowledge operations baseline that is deployable, observable, and verifiable.
+KnowledgeOps Agent is a production-oriented platform prototype built on Spring AI. It combines **Agent Workflow Engine**, **Hybrid Retrieval (vector + keyword + graph + web)**, **Knowledge Graph**, **Long/Short-term Memory persistence**, **DeepResearch**, tenant-isolated RAG, asynchronous PDF ingestion, JWT/API key/RBAC security, audit trails, and Prometheus/Loki/Tempo observability. Capability status and default-path limitations are documented below.
 
-> 基于 Spring AI 构建的多 Agent 企业知识平台：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的生产级 AI 平台工程基线。
+> 基于 Spring AI 构建的多 Agent 企业知识平台原型：覆盖 **Agent 工作流引擎、混合检索（向量+关键词+图谱+Web）、知识图谱、长短期记忆持久化、深度研究、企业 RAG、租户隔离、异步入库、权限审计、全链路可观测**，目标是提供可部署、可运维、可验证的工程基线，而非未经生产验证的成品声明。
 
 ![RAG Evaluation Studio report](docs/assets/evaluation-report-studio.png)
 
@@ -152,11 +152,11 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | Capability | KnowledgeOps Agent | Typical RAG demo | Typical Spring AI sample |
 |---|---|---|---|
 | Deployable full stack | Spring Boot API, Vue console, MySQL, Redis/RabbitMQ, pgvector, Docker Compose | Often API-only or notebook-level | Usually focused on one framework feature |
-| Tenant-aware security | API Key, JWT, refresh tokens, RBAC, tenant headers, audit logs, rate limits | Rarely included | Usually omitted for clarity |
+| Tenant-aware security | API Key, JWT, refresh tokens, RBAC, identity-derived tenant scope, audit logs, rate limits | Rarely included | Usually omitted for clarity |
 | Async ingestion | Redis Stream or RabbitMQ queues, retries, DLQ, idempotency, job status | Often synchronous upload and parse | Usually sample-specific |
-| RAG production path | Tenant-scoped retrieval, citations, chunking, reranking hooks, pgvector indexes | Basic vector lookup | Demonstrates core API usage |
+| RAG production path | Tenant-scoped retrieval, citations, chunking, reranker extension point (identity default), pgvector indexes | Basic vector lookup | Demonstrates core API usage |
 | Observability | Prometheus, Loki, Tempo, Alertmanager, structured logs, runbooks | Usually absent | Minimal or external |
-| Quality gates | Unit tests, integration tests, CI, regression evaluation, k6 load scripts | Manual validation | Varies by example |
+| Quality gates | Full-module JaCoCo gate, MySQL/Flyway startup test, evaluator contract test, live API evaluation, k6 scripts | Manual validation | Varies by example |
 
 ---
 
@@ -165,21 +165,21 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 | 能力域 | 当前实现 |
 |---|---|
 | 多Agent工作流 | AgentWorkflowEngine 状态机（CREATED→PLANNING→SEARCHING→RETRIEVING→JUDGING→REFLECTING→WRITING→DONE），agent_task/step/event 持久化与事件溯源 |
-| DeepResearch 深度研究 | ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent，SSE 流式输出研究过程 |
+| DeepResearch 深度研究 | ResearchPlannerAgent（主题拆解）+ RagResearchAgent + ReportWriterAgent，同步执行并持久化 task/step/event；外部 Web 搜索默认关闭 |
 | 混合检索 | VectorRetriever（pgvector）+ KeywordRetriever（关键词）+ GraphRetriever（知识图谱）+ WebRetriever（外部搜索）= HybridRetrievalService 融合排序 |
 | 证据评分与引用溯源 | EvidenceJudgeService 三维评分（相关性/权威性/时效性），CitationService 编号引用（来源/片段/可信度） |
 | 知识图谱 | MySQL 轻量图谱（kg_entity/kg_relation/kg_fact），支持实体搜索、一跳邻居、事实检索，种子课程图谱数据 |
-| 长短期记忆 | MemoryService 四层记忆：short（会话窗口）、long（用户画像/偏好）、task（任务中间结论）、fact（可引用事实），自动过期清理 |
+| 长短期记忆 | MemoryService + MySQL 四层记忆与自动过期清理；当前未提供 REST Controller，也未自动接入默认 Agent/RAG prompt 链路 |
 | 对话与多模态 | `/ai/chat` 支持文本与附件输入、流式输出 |
 | 检索增强（RAG） | `/ai/pdf/upload/{chatId}` + `/ai/pdf/chat`，按 `tenant_id + chat_id` 检索，支持引用来源输出 |
 | 异步入库流水线 | 队列化 ingestion、租户级幂等键、重试、DLQ、状态查询 |
-| 安全体系 | API Key + JWT + Refresh Token + RBAC + 细粒度权限 + 安全响应头 + CORS 白名单 + 速率限制（Bucket4j Redis） |
+| 安全体系 | API Key + JWT + Refresh Token + RBAC + 认证身份派生租户 + 安全响应头 + CORS 白名单 + 单实例 Bucket4j 内存限流 |
 | 弹性与容错 | Resilience4j CircuitBreaker / Retry / TimeLimiter，模型调用自动降级 |
 | 合规与审计 | 请求审计日志、保留策略、敏感信息脱敏（API Key / Email / 参数级） |
 | Agent Harness | 模型输出→policy→runtime/tool→observation→审计闭环；支持配置化 MCP、trusted workspace、统一 diff 与人工确认 token |
 | 数据持久化 | MySQL 会话与业务数据、HikariCP 连接池调优、pgvector 向量检索（可切 simple） |
 | 可观测性 | Prometheus + Loki + Tempo + Alertmanager + Promtail + Grafana 仪表盘 + OTel 可配置采样 |
-| 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs 静态扫描、OWASP 依赖检查、CycloneDX SBOM、Trivy 容器扫描、JaCoCo 覆盖率、回归评测脚本、压测脚本 |
+| 工程质量 | RAG Evaluation Studio、Flyway 迁移、CI（7-job 流水线）、Checkstyle / PMD / SpotBugs、SBOM、Trivy、全模块 JaCoCo 25% 门禁、真实 API 评测与 evaluator contract 自测 |
 | 容器化 | Docker 多阶段构建、安全加固、docker-compose 资源限制、命名卷持久化 |
 | 前端工程化 | Vue 3 + TypeScript + ESLint + Prettier + vue-tsc 类型检查 |
 
@@ -192,7 +192,7 @@ KnowledgeOps Agent 是 however-yir AI 工程作品矩阵中的 **”多 Agent + 
 - Spring AI 1.0.0-M6
 - Spring Security 6.x（JWT + API Key + RBAC）
 - Resilience4j 2.4.0（CircuitBreaker / Retry / TimeLimiter）
-- Bucket4j + Redis（分布式限流）
+- Bucket4j Core（当前为单实例内存限流；分布式后端尚未实现）
 - MyBatis-Plus 3.5.16
 - MySQL 8.x + HikariCP 连接池
 - Redis 7.x
@@ -419,7 +419,7 @@ docker compose -f docker-compose.observability.yml up -d
 
 ## API 概览
 
-说明：多租户场景建议在请求头统一传递 `X-Tenant-Id`；会话历史、知识检索与入库任务均按租户隔离。
+说明：安全模式下租户来自 API Key/JWT 的认证身份，客户端传入的 `X-Tenant-Id` 不参与资源授权；仅在关闭安全的本地演示模式下使用该 Header 选择演示租户。
 
 ### 会话问答
 
@@ -446,12 +446,12 @@ docker compose -f docker-compose.observability.yml up -d
 - `GET /ai/research/tasks/{taskId}/events`（查询研究事件流）
 - `GET /ai/research/tasks/{taskId}/report`（查询研究报告）
 
-### 混合检索与记忆
+### 混合检索与图谱
 
 - `POST /ai/rag/search`（混合检索：vector + keyword + graph + web）
-- `GET /ai/memory/query`（查询用户长短期记忆）
-- `POST /ai/memory/save`（保存记忆）
 - `GET /ai/graph/search`（知识图谱实体与关系搜索）
+
+> `MemoryService` 当前是内部持久化基础能力，尚未暴露公共 REST API，也未接入默认 Agent/RAG 主链路。
 
 ### 客服流程问答
 
@@ -479,9 +479,9 @@ docker compose -f docker-compose.observability.yml up -d
 
 - `POST /auth/token`（Header: `X-API-Key`，可选 `X-Tenant-Id`）
 - `POST /auth/refresh`（Header: `X-Refresh-Token`）
-- `POST /auth/api-keys`（支持 `tenantId` 参数）
-- `POST /auth/api-keys/rotate`（支持 `tenantId` 参数）
-- `POST /auth/api-keys/revoke`（支持 `tenantId` 参数）
+- `POST /auth/api-keys`（仅管理当前认证租户）
+- `POST /auth/api-keys/rotate`（仅管理当前认证租户）
+- `POST /auth/api-keys/revoke`（仅管理当前认证租户）
 
 ### API 文档
 
@@ -496,9 +496,9 @@ docker compose -f docker-compose.observability.yml up -d
 
 - API Key 与 JWT 双鉴权
 - Refresh Token 生命周期管理
-- 租户隔离（`X-Tenant-Id`，tenant 级 API Key 与审计）
+- 租户隔离（租户来自 API Key/JWT 身份，任务与记忆查询均带 `tenant_id`）
 - RBAC + 权限矩阵（`PERM_*` / `ROLE_*` 细粒度控制）
-- 限流（Bucket4j Redis，tenant + principal 复合维度）
+- 限流（Bucket4j 单实例内存桶，tenant + principal 复合维度）
 - 安全响应头（X-Content-Type-Options / X-Frame-Options / Permissions-Policy）
 - CORS 白名单（可配置 `APP_CORS_ALLOWED_ORIGINS`）
 - 审计日志与保留策略
@@ -557,10 +557,10 @@ docker compose -f docker-compose.observability.yml up -d
 
 ```bash
 # 快速单元/切片测试，不启动 Testcontainers
-mvn test
+mvn clean test
 
 # 集成测试与烟测，包含 Testcontainers
-mvn verify -Pintegration-test
+mvn clean verify -Pintegration-test
 ```
 
 ### 静态分析与安全扫描
@@ -585,9 +585,13 @@ mvn cyclonedx:makeAggregateBom
 ### 回归评测
 
 ```bash
-python3 scripts/generate_eval_dataset.py
-python3 scripts/generate_eval_predictions.py
-python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
+# 对已经启动的真实 API 生成预测
+python3 scripts/eval_live_runner.py --dataset evaluation/dataset.json --output evaluation/predictions.live.json
+python3 scripts/run_regression.py --dataset evaluation/dataset.json --predictions evaluation/predictions.live.json --require-latency --require-live-predictions
+
+# 只验证评测器输入/输出契约，不代表模型质量
+python3 scripts/generate_eval_contract_fixture.py --dataset evaluation/dataset.large.json --output evaluation/predictions.contract.json
+python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.contract.json --report-dir reports/evaluation-contract
 ```
 
 > 内置回归评测之外，如需框架无关、直接对接 HTTP API 的外部评测与 CI 门禁，可搭配 [ragproof](https://github.com/however-yir/ragproof)（recall@k / MRR / faithfulness / 引用溯源指标 + 阈值卡红线）。对接本平台的示例配置见 ragproof 仓库中的 `examples/knowledgeops.yaml`。
@@ -599,10 +603,10 @@ GitHub Actions 工作流：`Intelligent QA Platform CI`（7-job 流水线）
 | Job | 职责 |
 |---|---|
 | code-quality | Checkstyle / PMD / SpotBugs 静态扫描 |
-| build | 编译、单测、集成测试、JaCoCo 覆盖率、CycloneDX SBOM、回归评测 |
+| build | 编译、单测、集成测试、JaCoCo 25% 门禁、CycloneDX SBOM、评测器契约自测 |
 | frontend | ESLint / Prettier / vue-tsc / Vite 构建 |
 | owasp-scan | OWASP 依赖漏洞扫描 |
-| e2e-smoke | 端到端烟测 |
+| e2e-smoke | Docker Compose 启动、健康检查、端到端聊天和真实 API 质量门禁 |
 | trivy-scan | 容器镜像漏洞扫描 |
 | docker | Docker Buildx 构建 + GHCR 推送 |
 
@@ -656,7 +660,7 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] 混合检索（Vector + Keyword + Graph + Web 四路召回融合）
 - [x] 证据评分与引用溯源（三维评分 + 编号引用）
 - [x] 知识图谱（kg_entity/kg_relation/kg_fact + GraphRetriever）
-- [x] 长短期记忆系统（short/long/task/fact 四层记忆）
+- [x] 长短期记忆持久化服务（short/long/task/fact 四层记忆）
 - [x] 安全响应头 + CORS 白名单
 - [x] Resilience4j 熔断/重试/超时
 - [x] 静态分析流水线（Checkstyle / PMD / SpotBugs）
@@ -665,6 +669,8 @@ python3 performance/k6/generate_report.py --summary reports/performance/distribu
 - [x] Grafana 预置仪表盘 + 增强告警规则
 - [ ] tianji-ai-agent KnowledgeOpsClient 端到端联调
 - [ ] 检索重排策略可插拔实现（LLM-as-reranker）
+- [ ] Memory REST API 与默认 Agent/RAG 主链路接入
+- [ ] Redis/其他共享后端的分布式限流
 - [ ] 评测数据集（路由准确率、检索命中率、证据质量）
 - [ ] 企业 SSO（OIDC/SAML）接入
 

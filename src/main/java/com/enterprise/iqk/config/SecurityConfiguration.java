@@ -72,9 +72,9 @@ public class SecurityConfiguration {
             );
         }
 
-        http.addFilterBefore(requestContextFilter, UsernamePasswordAuthenticationFilter.class);
-        http.addFilterAfter(httpMetricsFilter, RequestContextFilter.class);
         http.addFilterBefore(apiKeyOrJwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(requestContextFilter, ApiKeyOrJwtAuthFilter.class);
+        http.addFilterAfter(httpMetricsFilter, RequestContextFilter.class);
         http.addFilterAfter(rateLimitFilter, ApiKeyOrJwtAuthFilter.class);
         http.addFilterAfter(auditLogFilter, RateLimitFilter.class);
         return http.build();

@@ -18,7 +18,7 @@ This repository is one part of a five-project AI engineering portfolio. The matr
 
 The matrix link between KnowledgeOps and tianji is verified by:
 
-1. **Code path**: `KnowledgeOpsClient` in tianji calls KnowledgeOps Agent's REST API (`/ai/rag/search`, `/ai/memory/query`, `/ai/graph/search`)
+1. **Code path**: `KnowledgeOpsClient` in tianji calls implemented KnowledgeOps Agent REST APIs such as `/ai/rag/search` and `/ai/graph/search`; memory enrichment remains a planned integration because MemoryService is not yet exposed as REST.
 2. **Fallback strategy**: When platform is unavailable, tianji agents fall back to local VectorStore + Advisor
 3. **CI evidence**: Both repositories have green CI on `main` branch
 4. **Docker compose**: See `docs/evidence/README.md` for a 2-service + 3-env-var cross-repo Docker Compose
