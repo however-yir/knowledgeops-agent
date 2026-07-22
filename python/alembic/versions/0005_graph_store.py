@@ -17,6 +17,8 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        return
     metadata = sa.MetaData()
     relations = sa.Table(
         "py_graph_relations",
@@ -66,6 +68,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "postgresql":
+        return
     op.drop_table("py_graph_facts")
     op.drop_table("py_graph_relations")
     for column in ("updated_at", "source_id", "description", "aliases"):

@@ -116,6 +116,8 @@ services:
     image: knowledgeops-agent-web:latest
     container_name: knowledgeops-agent-web
     restart: unless-stopped
+    environment:
+      API_UPSTREAM: app:8080
     depends_on:
       app:
         condition: service_healthy

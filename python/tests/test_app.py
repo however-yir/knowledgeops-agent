@@ -485,6 +485,8 @@ def test_extended_java_routes_file_safety_and_production_configuration(monkeypat
     monkeypatch.setenv("APP_JWT_SECRET", "x" * 32)
     monkeypatch.setenv("APP_DEMO_API_KEY", "not-a-default")
     monkeypatch.setenv("APP_DATABASE_URL", "sqlite+aiosqlite:///x")
+    monkeypatch.setenv("APP_VECTOR_BACKEND", "pgvector")
+    monkeypatch.setenv("APP_PGVECTOR_URL", "postgresql+asyncpg://postgres:secret@pgvector/knowledgeops")
     monkeypatch.setenv("APP_REDIS_URL", "redis://x")
     monkeypatch.setenv("APP_RERANKER_BACKEND", "remote")
     monkeypatch.setenv("APP_RERANKER_URL", "https://reranker.example.test")

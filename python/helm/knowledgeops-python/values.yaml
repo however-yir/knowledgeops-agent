@@ -24,6 +24,7 @@ autoscaling:
 config:
   APP_ENV: production
   APP_INGESTION_QUEUE_BACKEND: redis_stream
+  APP_VECTOR_BACKEND: pgvector
   APP_RERANKER_BACKEND: remote
   APP_CORS_ALLOWED_ORIGINS: https://knowledgeops.example.com
 

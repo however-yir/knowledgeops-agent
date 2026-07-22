@@ -10,7 +10,7 @@ from uuid import uuid4
 from pypdf import PdfReader
 
 from knowledgeops_py.domain.context import TenantContext
-from knowledgeops_py.domain.ports import EmbeddingProvider, IngestionQueue
+from knowledgeops_py.domain.ports import EmbeddingProvider, IngestionQueue, VectorStore
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from knowledgeops_py.infrastructure.models import IngestionJobRecord
@@ -23,6 +23,7 @@ class IngestionApplicationService:
     queue_backend: str
     queue: IngestionQueue | None = None
     embedding_provider: EmbeddingProvider | None = None
+    vector_store: VectorStore | None = None
     max_retries: int = 3
     retry_delay_seconds: int = 10
 
@@ -78,6 +79,8 @@ class IngestionApplicationService:
                 raise RuntimeError("ingestion file path is missing")
             content = await self.files.read(job.tenant_id, job.file_path)
             chunks = await self._chunks(job, extract_text(content))
+            if self.vector_store is not None:
+                await self.vector_store.upsert(chunks)
             await self.repository.complete(job.job_id, chunks)
             return await self.repository.get(job.tenant_id, job.job_id)
         except Exception as exc:
@@ -118,7 +121,7 @@ class IngestionApplicationService:
         parts = split_text(text)
         chunks: list[dict[str, Any]] = [
             {
-                "chunk_id": f"chunk_{uuid4().hex[:16]}",
+                "chunk_id": f"chunk_{hashlib.sha256(f'{job.job_id}:{index}'.encode()).hexdigest()[:16]}",
                 "job_id": job.job_id,
                 "tenant_id": job.tenant_id,
                 "chat_id": job.chat_id,

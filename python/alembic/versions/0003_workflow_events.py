@@ -18,11 +18,15 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        return
     WorkflowStepRecord.__table__.create(bind=bind, checkfirst=True)
     WorkflowEventRecord.__table__.create(bind=bind, checkfirst=True)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        return
     WorkflowEventRecord.__table__.drop(bind=bind, checkfirst=True)
     WorkflowStepRecord.__table__.drop(bind=bind, checkfirst=True)

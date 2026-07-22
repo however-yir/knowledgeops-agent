@@ -12,6 +12,8 @@ from knowledgeops_py.config import load_settings
 from knowledgeops_py.infrastructure.database import create_engine, create_session_factory
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository
+from knowledgeops_py.infrastructure.pgvector_store import PgVectorProjection
+from knowledgeops_py.infrastructure.providers import OpenAICompatibleEmbeddingProvider
 from knowledgeops_py.infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 
 
@@ -24,11 +26,23 @@ async def run_worker(once: bool = False) -> None:
     if settings.database_url:
         engine = create_engine(settings.database_url)
         queue = create_ingestion_queue(settings, "worker")
+        embedding_provider = (
+            OpenAICompatibleEmbeddingProvider(settings.model_base_url, settings.model_api_key, settings.embedding_model)
+            if settings.model_base_url and settings.model_api_key
+            else None
+        )
+        vector_store = (
+            PgVectorProjection(settings.pgvector_url, settings.pgvector_dimensions)
+            if settings.vector_backend == "pgvector" and settings.pgvector_url
+            else None
+        )
         service = IngestionApplicationService(
             SqlAlchemyIngestionRepository(create_session_factory(engine)),
             LocalFileStore(Path(settings.storage_path)),
             settings.ingestion_queue_backend,
             queue,
+            embedding_provider=embedding_provider,
+            vector_store=vector_store,
         )
         try:
             if queue is not None:

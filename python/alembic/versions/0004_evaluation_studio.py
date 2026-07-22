@@ -17,6 +17,8 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        return
     metadata = sa.MetaData()
     tables = {
         "py_evaluation_datasets": sa.Table(
@@ -102,6 +104,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "postgresql":
+        return
     op.drop_table("py_evaluation_results")
     op.drop_table("py_evaluation_cases")
     op.drop_table("py_evaluation_datasets")

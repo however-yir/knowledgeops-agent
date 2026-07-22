@@ -25,6 +25,7 @@ class Settings:
     vector_backend: str = "simple"
     database_url: str | None = None
     pgvector_url: str | None = None
+    pgvector_dimensions: int = 1024
     rabbitmq_url: str | None = None
     storage_backend: str = "local"
     storage_path: str = field(default_factory=lambda: str(Path(tempfile.gettempdir()) / "knowledgeops-files"))
@@ -67,6 +68,8 @@ class Settings:
             raise ValueError("APP_DEMO_API_KEY must not use the development default in production")
         if not self.database_url:
             raise ValueError("APP_DATABASE_URL is required in production")
+        if self.vector_backend != "pgvector" or not self.pgvector_url:
+            raise ValueError("APP_VECTOR_BACKEND=pgvector and APP_PGVECTOR_URL are required in production")
         if not self.redis_url:
             raise ValueError("APP_REDIS_URL is required in production")
         if not self.model_base_url or not self.model_api_key:
@@ -75,6 +78,8 @@ class Settings:
             raise ValueError("APP_RERANKER_BACKEND cannot be identity in production")
         if self.reranker_backend == "remote" and not self.reranker_url:
             raise ValueError("APP_RERANKER_URL is required for the remote production reranker")
+        if self.pgvector_dimensions <= 0:
+            raise ValueError("APP_PGVECTOR_DIMENSIONS must be positive")
 
 
 def load_settings() -> Settings:
@@ -95,6 +100,7 @@ def load_settings() -> Settings:
         vector_backend=os.getenv("APP_VECTOR_BACKEND", "simple"),
         database_url=os.getenv("APP_DATABASE_URL"),
         pgvector_url=os.getenv("APP_PGVECTOR_URL"),
+        pgvector_dimensions=int(os.getenv("APP_PGVECTOR_DIMENSIONS", "1024")),
         rabbitmq_url=os.getenv("APP_RABBITMQ_URL"),
         storage_backend=os.getenv("APP_STORAGE_BACKEND", "local"),
         storage_path=os.getenv("APP_STORAGE_PATH", str(Path(tempfile.gettempdir()) / "knowledgeops-files")),

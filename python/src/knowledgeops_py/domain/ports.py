@@ -19,7 +19,11 @@ class Reranker(Protocol):
 
 
 class VectorStore(Protocol):
-    async def search(self, context: TenantContext, chat_id: str, query: str, limit: int) -> list[dict[str, Any]]: ...
+    async def upsert(self, chunks: list[dict[str, Any]]) -> None: ...
+
+    async def search(
+        self, context: TenantContext, chat_id: str, embedding: list[float], limit: int
+    ) -> list[dict[str, Any]]: ...
 
 
 class IngestionQueue(Protocol):

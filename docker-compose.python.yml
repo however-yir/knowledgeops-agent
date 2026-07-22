@@ -1,41 +1,104 @@
 services:
-  python-api:
+  python-migrate:
     build:
       context: ./python
     image: knowledgeops-agent-python:local
-    command: ["knowledgeops-python-api"]
-    environment:
-      HOST: 0.0.0.0
-      PORT: 3001
+    command: ["sh", "-ec", "alembic upgrade head && APP_DATABASE_URL=$${APP_PGVECTOR_URL} alembic upgrade head"]
+    environment: &python-environment
       APP_ENV: development
       APP_DATABASE_URL: mysql+asyncmy://root:${DB_PASSWORD:-root}@mysql:3306/knowledgeops_python
       APP_PGVECTOR_URL: postgresql+asyncpg://postgres:${PGPASSWORD:-postgres}@pgvector:5432/knowledgeops_python
+      APP_VECTOR_BACKEND: pgvector
       APP_REDIS_URL: redis://redis:6379/0
       APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       APP_INGESTION_QUEUE_BACKEND: redis_stream
+      APP_STORAGE_PATH: /var/lib/knowledgeops/files
       APP_CORS_ALLOWED_ORIGINS: http://localhost:8088
-    ports:
-      - "3001:3001"
     depends_on:
       mysql:
         condition: service_healthy
+      pgvector:
+        condition: service_healthy
+
+  python-api:
+    image: knowledgeops-agent-python:local
+    command: ["knowledgeops-python-api"]
+    environment:
+      <<: *python-environment
+      HOST: 0.0.0.0
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - python-files:/var/lib/knowledgeops/files
+    depends_on:
+      python-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3001/actuator/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  python-worker:
+    image: knowledgeops-agent-python:local
+    command: ["knowledgeops-python-worker"]
+    environment: *python-environment
+    volumes:
+      - python-files:/var/lib/knowledgeops/files
+    depends_on:
+      python-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
 
-  python-worker:
-    image: knowledgeops-agent-python:local
-    command: ["knowledgeops-python-worker"]
+  mysql:
+    image: mysql:8.0.36
     environment:
-      APP_ENV: development
-      APP_DATABASE_URL: mysql+asyncmy://root:${DB_PASSWORD:-root}@mysql:3306/knowledgeops_python
-      APP_REDIS_URL: redis://redis:6379/0
-      APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      APP_INGESTION_QUEUE_BACKEND: redis_stream
-    depends_on:
-      python-api:
-        condition: service_started
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: knowledgeops_python
+    ports:
+      - "3306:3306"
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max-connections=200"]
+    volumes:
+      - python-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${DB_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - python-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - python-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   pgvector:
     image: pgvector/pgvector:pg16
@@ -44,8 +107,39 @@ services:
       POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
     ports:
       - "5432:5432"
+    volumes:
+      - python-pgvector-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d knowledgeops_python"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - python-tempo-data:/tmp/tempo
+    ports:
+      - "4319:4318"
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      API_UPSTREAM: python-api:3001
+    ports:
+      - "8088:80"
+    depends_on:
+      python-api:
+        condition: service_healthy
+
+volumes:
+  python-files:
+  python-mysql-data:
+  python-redis-data:
+  python-rabbitmq-data:
+  python-pgvector-data:
+  python-tempo-data:

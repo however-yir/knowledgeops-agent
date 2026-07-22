@@ -34,6 +34,7 @@ from .api.canonical import (
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .config import Settings, load_settings
 from .domain.context import TenantContext
+from .domain.ports import EmbeddingProvider, Reranker, VectorStore
 from .dto import (
     AgentTraceDto,
     ApiKeyData,
@@ -64,6 +65,7 @@ from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
+from .infrastructure.pgvector_store import PgVectorProjection, VectorStoreUnavailable
 from .infrastructure.providers import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
@@ -202,13 +204,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if active_settings.model_base_url and active_settings.model_api_key
         else None
     )
+    vector_store = (
+        PgVectorProjection(active_settings.pgvector_url, active_settings.pgvector_dimensions)
+        if active_settings.vector_backend == "pgvector" and active_settings.pgvector_url
+        else None
+    )
     ingestion_service = (
         IngestionApplicationService(
             SqlAlchemyIngestionRepository(session_factory),
             LocalFileStore(Path(active_settings.storage_path)),
             active_settings.ingestion_queue_backend,
             ingestion_queue,
-            embedding_provider,
+            embedding_provider=embedding_provider,
+            vector_store=vector_store,
         )
         if session_factory is not None
         else None
@@ -255,6 +263,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.graph_repository = graph_repository
     app.state.oidc_state_store = oidc_state_store
     app.state.ingestion_service = ingestion_service
+    app.state.vector_store = vector_store
     app.state.tracer = tracer
 
     app.add_middleware(
@@ -491,6 +500,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
             graph_repository=graph_repository,
             session_repository=session_repository,
+            vector_store=vector_store,
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -620,6 +630,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     active_settings,
                     ingestion_service.repository if ingestion_service is not None else None,
                     graph_repository,
+                    vector_store,
                 ),
                 trace_id=ctx.trace_id,
             )
@@ -640,6 +651,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     active_settings,
                     ingestion_service.repository if ingestion_service is not None else None,
                     graph_repository,
+                    vector_store,
                 ),
                 trace_id=ctx.trace_id,
             )
@@ -876,6 +888,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
             graph_repository=graph_repository,
             session_repository=session_repository,
+            vector_store=vector_store,
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -2319,6 +2332,7 @@ async def rag_response_with_provider(
     graph_repository: SqlAlchemyGraphRepository | None = None,
     session_repository: SqlAlchemySessionRepository | None = None,
     record_session: bool = True,
+    vector_store: VectorStore | None = None,
 ) -> RagResponseDto:
     rag = await retrieve_hybrid(
         store,
@@ -2334,6 +2348,7 @@ async def rag_response_with_provider(
         if settings.reranker_backend == "remote" and settings.reranker_url
         else None,
         settings.is_production,
+        vector_store,
     )
     base = await chat_response_with_provider(
         store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session
@@ -2413,9 +2428,10 @@ async def retrieve_hybrid(
     prompt: str,
     ingestion_repository: SqlAlchemyIngestionRepository | None,
     graph_repository: SqlAlchemyGraphRepository | None,
-    embedding_provider: OpenAICompatibleEmbeddingProvider | None = None,
-    reranker: RemoteHttpReranker | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
+    reranker: Reranker | None = None,
     require_provider_success: bool = False,
+    vector_store: VectorStore | None = None,
 ) -> dict[str, Any]:
     chunks = (
         await ingestion_repository.chunks(tenant_id, chat_id)
@@ -2431,6 +2447,8 @@ async def retrieve_hybrid(
         embedding_provider,
         reranker,
         require_provider_success,
+        vector_store=vector_store,
+        chat_id=chat_id,
     )
 
 
@@ -2438,9 +2456,11 @@ async def retrieve_chunks_with_semantics(
     chunks: list[dict[str, Any]],
     prompt: str,
     context: TenantContext,
-    embedding_provider: OpenAICompatibleEmbeddingProvider | None,
-    reranker: RemoteHttpReranker | None,
+    embedding_provider: EmbeddingProvider | None,
+    reranker: Reranker | None,
     require_provider_success: bool,
+    vector_store: VectorStore | None = None,
+    chat_id: str = "",
 ) -> dict[str, Any]:
     lexical = retrieve_chunks(chunks, prompt)
     if embedding_provider is None:
@@ -2453,7 +2473,16 @@ async def retrieve_chunks_with_semantics(
             for chunk in chunks
             if isinstance(chunk.get("embedding"), list)
         ]
-    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        if vector_store is not None and query_embedding:
+            records = await vector_store.search(context, chat_id, query_embedding, limit=5)
+            semantic_hits.extend(
+                (float(record["score"]), vector_record_to_chunk(record))
+                for record in records
+                if record.get("tenant_id") == context.tenant_id
+                and record.get("chat_id") == chat_id
+                and isinstance(record.get("score"), (float, int))
+            )
+    except (httpx.HTTPError, ValueError, TypeError, VectorStoreUnavailable) as exc:
         if require_provider_success:
             raise HTTPException(status_code=502, detail="embedding provider request failed") from exc
         return lexical
@@ -2480,11 +2509,24 @@ async def retrieve_chunks_with_semantics(
         "evidence": [chunk["content"] for chunk in selected],
         "retrievalStats": {
             **lexical["retrievalStats"],
-            "vectorMatches": len(semantic_hits),
+            "vectorMatches": len({str(chunk["chunkId"]) for _, chunk in semantic_hits}),
             "hybridMatches": len(unique),
             "evidenceAccepted": len(selected),
             "refused": len(selected) == 0,
         },
+    }
+
+
+def vector_record_to_chunk(record: dict[str, Any]) -> dict[str, Any]:
+    source_name = str(record["source_name"])
+    return {
+        "chunkId": str(record["chunk_id"]),
+        "tenantId": str(record["tenant_id"]),
+        "chatId": str(record["chat_id"]),
+        "sourceName": source_name,
+        "title": source_name,
+        "chunkIndex": int(record["chunk_index"]),
+        "content": str(record["content"]),
     }
 
 
@@ -2804,6 +2846,7 @@ async def create_persisted_eval_run(
     settings: Settings,
     ingestion_repository: SqlAlchemyIngestionRepository | None,
     graph_repository: SqlAlchemyGraphRepository | None,
+    vector_store: VectorStore | None = None,
 ) -> dict[str, Any]:
     dataset_id = payload.datasetId or "default"
     dataset = await repository.get_dataset(ctx.tenant_id, dataset_id)
@@ -2829,6 +2872,7 @@ async def create_persisted_eval_run(
                 ingestion_repository=ingestion_repository,
                 graph_repository=graph_repository,
                 record_session=False,
+                vector_store=vector_store,
             )
             answer = response.answer
             if not answer:

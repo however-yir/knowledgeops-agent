@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -187,6 +188,59 @@ def test_semantic_retrieval_merges_vectors_and_applies_reranker() -> None:
     assert result["retrievalStats"]["vectorMatches"] == 2
 
 
+def test_pgvector_retrieval_merges_only_the_authenticated_tenant_and_chat() -> None:
+    class Embeddings:
+        async def embed(self, context: TenantContext, texts: list[str]) -> list[list[float]]:
+            assert context.tenant_id == "tenant-a" and texts == ["heat safety"]
+            return [[1.0, 0.0]]
+
+    class Vectors:
+        async def upsert(self, chunks: list[dict[str, object]]) -> None:
+            raise AssertionError(f"retrieval must not upsert: {chunks}")
+
+        async def search(
+            self, context: TenantContext, chat_id: str, embedding: list[float], limit: int
+        ) -> list[dict[str, object]]:
+            assert context.tenant_id == "tenant-a" and chat_id == "chat-a"
+            assert embedding == [1.0, 0.0] and limit == 5
+            return [
+                {
+                    "chunk_id": "vector-a",
+                    "tenant_id": "tenant-a",
+                    "chat_id": "chat-a",
+                    "source_name": "policy.txt",
+                    "chunk_index": 0,
+                    "content": "Heat safety requires water and shade.",
+                    "score": 0.92,
+                },
+                {
+                    "chunk_id": "foreign",
+                    "tenant_id": "tenant-b",
+                    "chat_id": "chat-a",
+                    "source_name": "other.txt",
+                    "chunk_index": 0,
+                    "content": "This result must not cross tenant scope.",
+                    "score": 0.99,
+                },
+            ]
+
+    result = asyncio.run(
+        retrieve_chunks_with_semantics(
+            [{"chunkId": "lexical", "sourceName": "notes", "title": "notes", "content": "unrelated"}],
+            "heat safety",
+            TenantContext("trace", "tenant-a", "alice", (), (), "jwt"),
+            Embeddings(),  # type: ignore[arg-type]
+            None,
+            True,
+            vector_store=Vectors(),  # type: ignore[arg-type]
+            chat_id="chat-a",
+        )
+    )
+
+    assert [citation.chunkId for citation in result["citations"]] == ["vector-a"]
+    assert result["retrievalStats"]["vectorMatches"] == 1
+
+
 def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
     class Connection:
         def __init__(self) -> None:
@@ -223,7 +277,7 @@ def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkey
         return connection
 
     monkeypatch.setattr("knowledgeops_py.infrastructure.pgvector_store.asyncpg.connect", connect)
-    projection = PgVectorProjection("postgresql+asyncpg://postgres:secret@pgvector/knowledgeops")
+    projection = PgVectorProjection("postgresql+asyncpg://postgres:secret@pgvector/knowledgeops", dimensions=2)
     context = TenantContext("trace", "tenant-a", "alice", (), (), "jwt")
 
     async def exercise() -> None:
@@ -249,8 +303,11 @@ def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkey
     assert connection.closed
     assert asyncpg_url("postgresql+asyncpg://db") == "postgresql://db"
     assert vector_literal([1, 0.5]) == "[1.0,0.5]"
+    assert vector_literal([1, 0.5], dimensions=2) == "[1.0,0.5]"
     with pytest.raises(ValueError, match="non-empty"):
         vector_literal([])
+    with pytest.raises(ValueError, match="2 dimensions"):
+        vector_literal([1], dimensions=2)
 
 
 def test_redis_streams_and_mysql_skip_locked_queue_adapters() -> None:
@@ -568,6 +625,18 @@ def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tm
 
             return no_messages()
 
+    class RecordingVectorStore:
+        def __init__(self) -> None:
+            self.upserts: list[list[dict[str, object]]] = []
+
+        async def upsert(self, chunks: list[dict[str, object]]) -> None:
+            self.upserts.append(chunks)
+
+        async def search(
+            self, context: TenantContext, chat_id: str, embedding: list[float], limit: int
+        ) -> list[dict[str, object]]:
+            return []
+
     async def exercise() -> None:
         engine = create_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as connection:
@@ -575,12 +644,14 @@ def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tm
         repository = SqlAlchemyIngestionRepository(create_session_factory(engine))
         files = LocalFileStore(tmp_path / "uploads")
         queue = RecordingQueue()
+        vectors = RecordingVectorStore()
         service = IngestionApplicationService(
             repository,
             files,
             "db_polling",
             queue,
             embedding_provider=RecordingEmbeddingProvider(),
+            vector_store=vectors,  # type: ignore[arg-type]
             max_retries=2,
             retry_delay_seconds=1,
         )
@@ -595,6 +666,8 @@ def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tm
         chunks = await repository.chunks("tenant-a", "chat-a")
         assert chunks[0]["content"].startswith("Water")
         assert chunks[0]["embedding"] == [1.0, 0.5]
+        assert vectors.upserts[0][0]["chunk_id"] == f"chunk_{hashlib.sha256(f'{submitted.job_id}:0'.encode()).hexdigest()[:16]}"
+        assert vectors.upserts[0][0]["embedding"] == [1.0, 0.5]
         reloaded = await repository.get("tenant-a", submitted.job_id)
         assert reloaded is not None and reloaded.file_path == submitted.file_path
         assert (await repository.list_jobs("tenant-a", "chat-a", 10))[0].job_id == submitted.job_id

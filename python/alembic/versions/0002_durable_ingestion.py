@@ -19,6 +19,8 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        return
     inspector = sa.inspect(bind)
     existing_columns = {column["name"] for column in inspector.get_columns("py_ingestion_jobs")}
     additions = [
@@ -40,6 +42,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        return
     inspector = sa.inspect(bind)
     if "py_ingestion_chunks" in inspector.get_table_names():
         IngestionChunkRecord.__table__.drop(bind=bind, checkfirst=True)
