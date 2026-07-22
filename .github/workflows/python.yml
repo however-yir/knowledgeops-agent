@@ -132,10 +132,11 @@ jobs:
         env:
           COMPOSE_PROJECT_NAME: knowledgeops-contract-${{ github.run_id }}
         run: |
-          docker compose -f docker-compose.contract.yml up --build -d java-api python-migrate
+          docker compose -f docker-compose.contract.yml up --build -d --wait --wait-timeout 180 java-api
+          docker compose -f docker-compose.contract.yml up --build -d python-migrate
           docker compose -f docker-compose.contract.yml wait python-migrate
-          docker compose -f docker-compose.contract.yml up -d python-api
-          docker compose -f docker-compose.contract.yml up --abort-on-container-exit --exit-code-from contract contract
+          docker compose -f docker-compose.contract.yml up -d --wait --wait-timeout 180 python-api
+          docker compose -f docker-compose.contract.yml up --no-deps --abort-on-container-exit --exit-code-from contract contract
 
       - name: Collect cross-runtime logs
         if: always()
