@@ -117,10 +117,10 @@ async function readinessOk() {
     const response = await fetch(`${baseUrl}/actuator/health/readiness`, { headers: requestHeaders(false) });
     const json = await response.json();
     return response.ok
-      && json?.data?.status === "UP"
-      && json?.data?.components?.enabled === true
-      && json?.data?.components?.database === "UP"
-      && json?.data?.components?.persistence === "UP";
+      && json?.status === "UP"
+      && json?.components?.enabled === true
+      && json?.components?.database === "UP"
+      && json?.components?.persistence === "UP";
   } catch {
     return false;
   }

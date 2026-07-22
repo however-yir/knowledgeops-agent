@@ -1,0 +1,59 @@
+title = "knowledgeops-agent gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Allow documented test and CI placeholder JWT secrets only"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''(?:^|.*/)\.env\.example$''',
+    '''(?:^|.*/)\.github/workflows/typescript\.yml$''',
+    '''(?:^|.*/)typescript/\.env\.example$''',
+    '''(?:^|.*/)typescript/apps/api/src/config/env\.spec\.ts$''',
+    '''(?:^|.*/)typescript/apps/api/src/config/env\.ts$''',
+    '''(?:^|.*/)typescript/docker-compose\.yml$''',
+    '''(?:^|.*/)typescript/scripts/container-security-smoke\.mjs$''',
+    '''(?:^|.*/)typescript/scripts/database-integration\.mjs$'''
+  ]
+  regexes = [
+    '''replace_with_32_bytes_min_secret''',
+    '''0123456789abcdef0123456789abcdef''',
+    '''dev-only-change-me-secret''',
+    '''ci-render-secret-at-least-32-bytes''',
+    '''ci-container-security-secret-at-least-32-bytes''',
+    '''ci-database-integration-secret-at-least-32-bytes'''
+  ]
+
+  [[rules.allowlists]]
+  description = "Allow documented idempotency placeholder only"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''(?:^|.*/)docs/demo-script\.md$'''
+  ]
+  regexes = [
+    '''X-Idempotency-Key:\s+heat-safety-policy-v1'''
+  ]
+
+[[rules]]
+id = "curl-auth-header"
+
+  [[rules.allowlists]]
+  description = "Allow documented curl placeholder credentials only"
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''(?:^|.*/)docs/demo-script\.md$''',
+    '''(?:^|.*/)docs/getting-started\.md$''',
+    '''(?:^|.*/)docs/api-recipes\.md$'''
+  ]
+  regexes = [
+    '''X-Idempotency-Key:\s+heat-safety-policy-v1''',
+    '''X-API-Key:\s+<local-demo-api-key>''',
+    '''X-Idempotency-Key:\s+demo-rag-001'''
+  ]

@@ -11,8 +11,8 @@ const chatId = `e2e-${Date.now()}`;
 const server = await ensureServer();
 
 try {
-  await expectJson("health", "/actuator/health", { status: "UP" }, "GET");
-  await expectJson("TypeScript health alias", "/health", { status: "UP" }, "GET");
+  await expectRawJson("health", "/actuator/health", { status: "UP" });
+  await expectRawJson("TypeScript health alias", "/health", { status: "UP" });
   await expectOpenApi();
   await upload();
   assertFields("chat", await expectOk("chat", "/ai/react/chat", { prompt: "heat safety", chatId }), ["answer", "model", "usage", "traceId"]);
@@ -51,6 +51,17 @@ async function expectPrometheusAlias() {
   }
 }
 
+async function expectRawJson(label, path, shape) {
+  const response = await fetch(`${baseUrl}${path}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${label} failed: ${response.status} ${text}`);
+  }
+  const json = text ? JSON.parse(text) : null;
+  assertShape(label, json, shape);
+  return json;
+}
+
 async function upload() {
   const content = await readFile(join(root, "..", "demo-data", "heat-safety-policy.txt"));
   const form = new FormData();
@@ -60,7 +71,9 @@ async function upload() {
     throw new Error(`upload failed: ${response.status} ${await response.text()}`);
   }
   const json = await response.json();
-  assertEnvelope("upload", json);
+  if (json?.ok !== 1 || json?.msg !== "accepted" || typeof json?.job?.jobId !== "string") {
+    throw new Error(`upload expected accepted job response: ${JSON.stringify(json)}`);
+  }
 }
 
 async function expectOk(label, path, body) {
@@ -79,9 +92,8 @@ async function expectJson(label, path, bodyOrShape, method = "POST") {
     throw new Error(`${label} failed: ${response.status} ${text}`);
   }
   const json = text ? JSON.parse(text) : null;
-  const payload = assertEnvelope(label, json);
-  assertShape(label, payload, hasBody ? undefined : bodyOrShape);
-  return payload;
+  assertShape(label, json, hasBody ? undefined : bodyOrShape);
+  return json;
 }
 
 async function expectSse(label, path, body) {

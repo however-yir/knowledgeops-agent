@@ -68,7 +68,7 @@ async function waitForReadiness() {
     try {
       const response = await fetch(`http://127.0.0.1:${hostPort}/actuator/health/readiness`, { headers: { "x-api-key": apiKey } });
       const json = await response.json();
-      if (response.ok && json?.data?.components?.database === "UP" && json?.data?.components?.persistence === "UP") return;
+      if (response.ok && json?.components?.database === "UP" && json?.components?.persistence === "UP") return;
     } catch {
       // Retry until the bounded deadline while the image initializes.
     }
