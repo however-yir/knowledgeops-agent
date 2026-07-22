@@ -31,6 +31,8 @@ from knowledgeops_py.infrastructure.models import (
     RefreshTokenRecord,
     SessionRecord,
     TenantBudgetRecord,
+    WorkflowEventRecord,
+    WorkflowStepRecord,
     WorkflowTaskRecord,
 )
 from knowledgeops_py.infrastructure.oidc_state import OidcStateUnavailable, RedisOidcStateStore
@@ -42,6 +44,7 @@ from knowledgeops_py.infrastructure.providers import (
 from knowledgeops_py.infrastructure.queues import MySqlPollingIngestionQueue, RedisStreamsIngestionQueue
 from knowledgeops_py.infrastructure.security_repository import SqlAlchemySecurityRepository, StoredIdentity
 from knowledgeops_py.infrastructure.session_repository import SqlAlchemySessionRepository
+from knowledgeops_py.infrastructure.workflow_repository import SqlAlchemyWorkflowRepository
 from knowledgeops_py.scripts.java_baseline_manifest import build_manifest
 
 
@@ -71,7 +74,20 @@ def test_async_database_metadata_and_transaction_scope() -> None:
         await engine.dispose()
 
     asyncio.run(exercise())
-    assert {ApiKeyRecord, RefreshTokenRecord, IngestionJobRecord, SessionRecord, AuditLogRecord, TenantBudgetRecord, MemoryRecord, GraphEntityRecord, WorkflowTaskRecord, EvaluationRunRecord}
+    assert {
+        ApiKeyRecord,
+        RefreshTokenRecord,
+        IngestionJobRecord,
+        SessionRecord,
+        AuditLogRecord,
+        TenantBudgetRecord,
+        MemoryRecord,
+        GraphEntityRecord,
+        WorkflowTaskRecord,
+        WorkflowStepRecord,
+        WorkflowEventRecord,
+        EvaluationRunRecord,
+    }
 
 
 def test_fixed_java_baseline_manifest_is_generated_from_the_requested_sha() -> None:
@@ -267,6 +283,35 @@ def test_sql_session_repository_persists_messages_flags_and_tenant_boundary() ->
             await repository.set_flag("tenant-a", "session-1", "invalid", True)
         new_turn = await repository.append_turn("tenant-a", "session-2", "chat-2", "next", "saved", "balanced")
         assert new_turn is not None and new_turn["messages"][1]["content"] == "saved"
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_sql_workflow_repository_persists_tasks_steps_events_and_tenant_boundary() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemyWorkflowRepository(create_session_factory(engine))
+        task = await repository.create_completed(
+            "tenant-a",
+            "REACT",
+            "find evidence",
+            "quality",
+            "chat-a",
+            "grounded answer",
+            [{"thoughtSummary": "retrieve", "action": "hybrid_retrieval", "actionInput": {"q": "evidence"}, "observation": {"hits": 1}}],
+            [{"type": "EVIDENCE_JUDGED", "payload": {"accepted": 1}}],
+        )
+        assert task["status"] == "DONE" and task["steps"][0]["action"] == "hybrid_retrieval"
+        assert {event["type"] for event in task["events"]} >= {"TASK_CREATED", "STEP_COMPLETED", "EVIDENCE_JUDGED", "TASK_COMPLETED"}
+        assert (await repository.get("tenant-a", task["taskId"]))["finalOutput"] == "grounded answer"  # type: ignore[index]
+        assert len(await repository.list_tasks("tenant-a", 10)) == 1
+        assert await repository.get("tenant-b", task["taskId"]) is None
+        assert await repository.events("tenant-b", task["taskId"]) is None
+        simple = await repository.create_completed("tenant-a", "RESEARCH", "topic", "quality", "", "report", [], None)
+        assert [event["type"] for event in simple["events"]] == ["TASK_CREATED", "TASK_COMPLETED"]
         await engine.dispose()
 
     asyncio.run(exercise())

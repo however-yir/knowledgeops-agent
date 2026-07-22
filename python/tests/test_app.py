@@ -73,6 +73,8 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         storage_path=str(tmp_path / "uploads"),
         ingestion_queue_backend="db_polling",
     )
+    workflow_task_id = ""
+    research_task_id = ""
     with TestClient(create_app(settings)) as first_app:
         token = assert_envelope(first_app.post("/auth/token", headers={"X-API-Key": "persistent-admin"}).json())
         issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
@@ -85,6 +87,16 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
                 json={"chatId": "durable-chat", "prompt": "Persist this conversation.", "modelProfile": "balanced"},
             ).json()
         )
+        workflow_task_id = assert_envelope(
+            first_app.post(
+                "/ai/workflow/react/chat",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"chatId": "durable-chat", "prompt": "Persist a workflow.", "modelProfile": "balanced"},
+            ).json()
+        )["taskId"]
+        research_task_id = assert_envelope(
+            first_app.post("/ai/research/tasks", headers={"X-API-Key": "persistent-admin"}, json={"topic": "heat safety"}).json()
+        )["taskId"]
         queued = assert_envelope(
             first_app.post(
                 "/ingestion/upload/durable-chat",
@@ -103,6 +115,11 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         assert durable_session["messages"][0]["content"] == "Persist this conversation."
         pinned = assert_envelope(second_app.post("/ai/sessions/durable-chat/pin?value=true", headers={"X-API-Key": "persistent-admin"}).json())
         assert pinned["pinned"] is True
+        workflow = assert_envelope(second_app.get(f"/ai/workflow/tasks/{workflow_task_id}", headers={"X-API-Key": "persistent-admin"}).json())
+        assert workflow["status"] == "DONE" and workflow["steps"]
+        assert assert_envelope(second_app.get(f"/ai/workflow/tasks/{workflow_task_id}/events", headers={"X-API-Key": "persistent-admin"}).json())
+        research_report = second_app.get(f"/ai/research/tasks/{research_task_id}/report", headers={"X-API-Key": "persistent-admin"})
+        assert research_report.status_code == 200 and "heat safety" in research_report.text
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0

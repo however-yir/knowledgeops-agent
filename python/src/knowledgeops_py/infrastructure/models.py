@@ -132,6 +132,31 @@ class WorkflowTaskRecord(Base, TenantScopedRecord):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class WorkflowStepRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_workflow_steps"
+    step_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(64), index=True)
+    agent_name: Mapped[str] = mapped_column(String(64), default="planner")
+    status: Mapped[str] = mapped_column(String(32), default="COMPLETED")
+    step_order: Mapped[int] = mapped_column(Integer, default=0)
+    thought: Mapped[str | None] = mapped_column(Text)
+    action: Mapped[str | None] = mapped_column(String(64))
+    action_input: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    observation: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    model_profile: Mapped[str | None] = mapped_column(String(32))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WorkflowEventRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_workflow_events"
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(64), index=True)
+    step_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    event_type: Mapped[str] = mapped_column(String(32), index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
 class EvaluationRunRecord(Base, TenantScopedRecord):
     __tablename__ = "py_evaluation_runs"
     run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
