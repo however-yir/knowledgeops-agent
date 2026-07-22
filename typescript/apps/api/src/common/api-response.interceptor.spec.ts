@@ -37,5 +37,6 @@ describe("ApiResponseInterceptor", () => {
     await expect(result).resolves.toBe(value);
     expect(store.waitForPersistence).toHaveBeenCalledOnce();
     expect(header).toHaveBeenCalledWith("X-Trace-ID", expect.any(String));
+    expect(header).toHaveBeenCalledWith("X-Tenant-ID", "public");
   });
 });

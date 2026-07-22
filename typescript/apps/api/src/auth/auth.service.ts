@@ -117,31 +117,31 @@ export class AuthService {
   exchangeApiKey(apiKey: string | undefined, tenantHeader: string | undefined): AuthTokenResponse {
     const identity = this.authenticateApiKey(apiKey);
     if (!identity) {
-      return { ok: 0, msg: "invalid api key" };
+      return invalidTokenResponse("invalid api key");
     }
     if (tenantHeader && normalizeTenant(tenantHeader) !== identity.tenantId) {
-      return { ok: 0, msg: "tenant mismatch for api key" };
+      return invalidTokenResponse("tenant mismatch for api key");
     }
     return this.issueTokens(identity.principal, identity.roles, identity.tenantId);
   }
 
-  async refresh(refreshToken: string | undefined): Promise<AuthTokenResponse> {
+  async refresh(refreshToken: string | null | undefined): Promise<AuthTokenResponse> {
     if (!refreshToken) {
-      return { ok: 0, msg: "invalid refresh token" };
+      return invalidTokenResponse("invalid refresh token");
     }
     const tokenHash = sha256Hex(refreshToken);
     const record = this.store.refreshTokens.get(tokenHash);
     if (!record || record.revokedAt || Date.parse(record.expiresAt) <= Date.now()) {
-      return { ok: 0, msg: "invalid refresh token" };
+      return invalidTokenResponse("invalid refresh token");
     }
     const replacement = this.buildTokens(record.principal, record.roles, record.tenantId);
     if (this.persistence) {
       const consumed = await this.persistence.rotateRefreshToken(tokenHash, replacement.record);
       if (!consumed) {
-        return { ok: 0, msg: "invalid refresh token" };
+        return invalidTokenResponse("invalid refresh token");
       }
     } else if (!this.store.refreshTokens.delete(tokenHash)) {
-      return { ok: 0, msg: "invalid refresh token" };
+      return invalidTokenResponse("invalid refresh token");
     }
     this.store.refreshTokens.delete(tokenHash);
     this.store.refreshTokens.set(replacement.record.tokenHash, replacement.record);
@@ -244,6 +244,7 @@ export class AuthService {
         refreshToken,
         tenantId,
         expiresInSeconds: env.APP_JWT_EXPIRE_MINUTES * 60,
+        refreshExpiresAt,
         refreshWillExpireSoon: Date.parse(refreshExpiresAt) < Date.now() + 2 * 24 * 60 * 60 * 1000
       }
     };
@@ -252,4 +253,17 @@ export class AuthService {
   private permissionsForRoles(roles: string[]): string[] {
     return [...new Set(roles.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
   }
+}
+
+function invalidTokenResponse(msg: string): AuthTokenResponse {
+  return {
+    ok: 0,
+    msg,
+    token: null,
+    refreshToken: null,
+    tenantId: null,
+    expiresInSeconds: null,
+    refreshExpiresAt: null,
+    refreshWillExpireSoon: null
+  };
 }

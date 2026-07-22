@@ -8,7 +8,12 @@ import { PrismaPersistenceService } from "../platform/prisma.persistence.service
 export class HealthController {
   constructor(@Optional() private readonly persistence?: PrismaPersistenceService) {}
 
-  @Get(["actuator/health", "health", "actuator/health/liveness"])
+  @Get("actuator/health")
+  actuatorHealth(): ApiHealth & { groups: string[] } {
+    return { status: "UP", groups: ["liveness", "readiness"] };
+  }
+
+  @Get(["health", "actuator/health/liveness"])
   health(): ApiHealth {
     return { status: "UP" };
   }

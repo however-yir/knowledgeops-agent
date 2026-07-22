@@ -13,11 +13,12 @@ export interface ApiHealth {
 export interface AuthTokenResponse {
   ok: number;
   msg: string;
-  token?: string;
-  refreshToken?: string;
-  tenantId?: string;
-  expiresInSeconds?: number;
-  refreshWillExpireSoon?: boolean;
+  token?: string | null;
+  refreshToken?: string | null;
+  tenantId?: string | null;
+  expiresInSeconds?: number | null;
+  refreshExpiresAt?: string | null;
+  refreshWillExpireSoon?: boolean | null;
 }
 
 export interface ApiKeyIssueResponse {

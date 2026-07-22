@@ -18,7 +18,16 @@ describe("AuthService", () => {
   it("keeps invalid keys distinct from tenant mismatches", () => {
     const service = new AuthService(new PlatformStore());
 
-    expect(service.exchangeApiKey("bad-key", "public")).toMatchObject({ ok: 0, msg: "invalid api key" });
+    expect(service.exchangeApiKey("bad-key", "public")).toEqual({
+      ok: 0,
+      msg: "invalid api key",
+      token: null,
+      refreshToken: null,
+      tenantId: null,
+      expiresInSeconds: null,
+      refreshExpiresAt: null,
+      refreshWillExpireSoon: null
+    });
     expect(service.exchangeApiKey("local-demo-api-key", "other")).toMatchObject({ ok: 0, msg: "tenant mismatch for api key" });
   });
 
