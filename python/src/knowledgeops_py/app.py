@@ -15,7 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -33,6 +33,7 @@ from .api.harness_routes import register_harness_routes
 from .api.ingestion_routes import register_ingestion_routes
 from .api.knowledge_routes import register_knowledge_routes
 from .api.operations_routes import register_operations_routes
+from .api.rag_routes import register_rag_routes
 from .api.research_routes import register_research_routes
 from .api.session_routes import register_session_routes
 from .api.system_routes import register_system_routes
@@ -57,7 +58,6 @@ from .dto import (
     CostSummaryDto,
     EvaluationRunRequestDto,
     FeedbackRequestDto,
-    RagEnvelope,
     RagResponseDto,
     RetrievalStatsDto,
     UsageDto,
@@ -452,62 +452,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         to_sse=to_sse,
         to_sse_error=to_sse_error,
     )
-
-    @app.post("/ai/pdf/chat", response_model=RagEnvelope)
-    async def pdf_chat(
-        payload: ChatRequestDto | None = None,
-        prompt: str | None = Query(default=None),
-        chatId: str | None = Query(default=None),
-        modelProfile: str | None = Query(default=None),
-        ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
-        payload = chat_request_payload(payload, prompt, chatId, modelProfile)
-        data = await rag_response_with_provider(
-            store,
-            ctx,
-            payload,
-            require_evidence=True,
-            settings=active_settings,
-            ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
-            graph_repository=graph_repository,
-            session_repository=session_repository,
-            vector_store=vector_store,
-            memory_service=memory_service,
-        )
-        return ok(data, trace_id=ctx.trace_id)
+    register_rag_routes(
+        app,
+        store=store,
+        settings=active_settings,
+        ingestion_service=ingestion_service,
+        graph_repository=graph_repository,
+        session_repository=session_repository,
+        vector_store=vector_store,
+        memory_service=memory_service,
+        require_permissions=require_permissions,
+        ok=ok,
+        chat_request_payload=chat_request_payload,
+        rag_response_with_provider=rag_response_with_provider,
+    )
 
     @app.post("/ai/feedback")
     def feedback(payload: FeedbackRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_FEEDBACK_WRITE"))):
         record = payload.model_dump() | {"tenantId": ctx.tenant_id, "principal": ctx.principal, "createdAt": now_iso()}
         store.feedback.append(record)
         return ok(record, msg="saved", trace_id=ctx.trace_id)
-
-    @app.get("/ai/pdf/chat")
-    async def pdf_chat_get(prompt: str = Query(..., min_length=1), chatId: str = Query(..., min_length=1), ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
-        data = await rag_response_with_provider(
-            store,
-            ctx,
-            ChatRequestDto(chatId=chatId, prompt=prompt),
-            require_evidence=True,
-            settings=active_settings,
-            ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
-            graph_repository=graph_repository,
-            session_repository=session_repository,
-            vector_store=vector_store,
-            memory_service=memory_service,
-        )
-        return ok(data, trace_id=ctx.trace_id)
-
-    @app.get("/ai/pdf/file/{chatId}")
-    async def pdf_file(chatId: str, ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
-        chunks = (
-            await ingestion_service.repository.chunks(ctx.tenant_id, chatId)
-            if ingestion_service is not None
-            else [chunk for chunk in store.chunks if chunk["tenantId"] == ctx.tenant_id and chunk["chatId"] == chatId]
-        )
-        if not chunks:
-            raise HTTPException(status_code=404, detail="file not found")
-        return PlainTextResponse("\n".join(chunk["content"] for chunk in chunks), media_type="text/plain; charset=utf-8")
 
     def research_callbacks(ctx: RequestContext, model_profile: str):
         async def plan(research_topic: str) -> list[str]:
