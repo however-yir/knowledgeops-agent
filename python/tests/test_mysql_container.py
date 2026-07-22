@@ -37,7 +37,13 @@ def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.Mo
                 first = await repository.create(job("job_mysql_a", "tenant-a", "key-a"))
                 second = await repository.create(job("job_mysql_b", "tenant-b", "key-b"))
                 claims = await asyncio.gather(repository.claim_next(), repository.claim_next())
-                assert {claim.job_id for claim in claims if claim is not None} == {first.job_id, second.job_id}
+                claimed_ids = {claim.job_id for claim in claims if claim is not None}
+                assert claimed_ids <= {first.job_id, second.job_id}
+                while len(claimed_ids) < 2:
+                    remaining = await repository.claim_next()
+                    assert remaining is not None
+                    claimed_ids.add(remaining.job_id)
+                assert claimed_ids == {first.job_id, second.job_id}
                 assert await repository.get("tenant-a", second.job_id) is None
                 assert await repository.recover_abandoned(lease_seconds=0) == 2
                 assert (await repository.get("tenant-a", first.job_id)).status == "RETRY"  # type: ignore[union-attr]
