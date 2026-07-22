@@ -26,8 +26,8 @@ try {
     "-e", "MYSQL_DATABASE=knowledgeops_agent", "-e", "MYSQL_ROOT_PASSWORD=root", "mysql:8.4@sha256:c592c15aaf4a1961e15d82eb31ea5987dda862d1c4b1e93424438c0e91dc1f8d");
   await waitForMysql();
 
-  docker("run", "--rm", "--network", network, ...appEnv, image, "pnpm", "db:migrate");
-  docker("run", "--rm", "--network", network, ...appEnv, "-e", "APP_BOOTSTRAP_DEMO_KEY=true", image, "pnpm", "db:seed-demo");
+  docker("run", "--rm", "--network", network, ...appEnv, image, "node", "scripts/prisma-migrate.mjs");
+  docker("run", "--rm", "--network", network, ...appEnv, "-e", "APP_BOOTSTRAP_DEMO_KEY=true", image, "node", "scripts/bootstrap-demo-key.mjs");
   docker("run", "-d", "--name", appContainer, "--network", network,
     "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
     "--security-opt", "no-new-privileges=true", "--cap-drop", "ALL",

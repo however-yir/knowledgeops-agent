@@ -13,6 +13,7 @@ const apiDir = join(root, "apps", "api");
 const schemaPath = join(root, "prisma", "schema.prisma");
 const requireFromApi = createRequire(join(apiDir, "package.json"));
 const { PrismaClient } = requireFromApi("@prisma/client");
+const prismaCliPath = requireFromApi.resolve("prisma/build/index.js");
 const javaMigrations = [
   "0001_java_v1",
   "0002_java_v2",
@@ -76,7 +77,7 @@ runPrisma(apiDir, ["migrate", "deploy", "--schema", schemaPath]);
 console.log("prisma migration deploy ok");
 
 function runPrisma(cwd, args) {
-  const result = spawnSync("pnpm", ["exec", "prisma", ...args], {
+  const result = spawnSync(process.execPath, [prismaCliPath, ...args], {
     cwd,
     env: process.env,
     stdio: "inherit"

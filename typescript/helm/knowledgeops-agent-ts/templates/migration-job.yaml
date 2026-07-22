@@ -25,7 +25,7 @@ spec:
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pnpm", "db:migrate"]
+          command: ["node", "scripts/prisma-migrate.mjs"]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:

@@ -25,7 +25,21 @@ RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/scripts scripts
-RUN addgroup -S app && adduser -S app -G app \
+RUN rm -rf \
+    /app/package.json \
+    /app/pnpm-lock.yaml \
+    /app/pnpm-workspace.yaml \
+    /root/.cache/node/corepack \
+    /root/.local/share/pnpm \
+    /root/.pnpm-store \
+    /usr/local/bin/corepack \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /usr/local/bin/pnpm \
+    /usr/local/bin/pnpx \
+    /usr/local/lib/node_modules/corepack \
+    /usr/local/lib/node_modules/npm \
+  && addgroup -S app && adduser -S app -G app \
   && mkdir -p /app/data/uploads \
   && chown -R app:app /app
 USER app

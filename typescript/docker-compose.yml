@@ -56,7 +56,7 @@ services:
     environment:
       <<: *app-environment
       APP_BOOTSTRAP_DEMO_KEY: "true"
-    command: ["sh", "-c", "pnpm db:migrate && pnpm db:seed-demo"]
+    command: ["sh", "-c", "node scripts/prisma-migrate.mjs && node scripts/bootstrap-demo-key.mjs"]
     depends_on:
       mysql:
         condition: service_healthy
