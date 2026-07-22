@@ -19,7 +19,27 @@ from knowledgeops_py.infrastructure.models import IngestionJobRecord
 def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
     try:
-        with MySqlContainer("mysql:8.4", username="knowledgeops", password="knowledgeops", dbname="knowledgeops") as container:
+        with MySqlContainer(
+            "mysql:8.4",
+            username="knowledgeops",
+            password="knowledgeops",
+            root_password="knowledgeops-root",
+            dbname="knowledgeops",
+        ) as container:
+            grant = container.exec(
+                [
+                    "mysql",
+                    "--protocol=socket",
+                    "-uroot",
+                    "-pknowledgeops-root",
+                    "-e",
+                    "CREATE USER IF NOT EXISTS 'knowledgeops'@'%' IDENTIFIED BY 'knowledgeops'; "
+                    "ALTER USER 'knowledgeops'@'%' IDENTIFIED BY 'knowledgeops'; "
+                    "GRANT ALL PRIVILEGES ON `knowledgeops`.* TO 'knowledgeops'@'%'; "
+                    "FLUSH PRIVILEGES;",
+                ]
+            )
+            assert grant.exit_code == 0, grant.output.decode()
             database_url = str(make_url(container.get_connection_url()).set(drivername="mysql+asyncmy"))
             monkeypatch.setenv("APP_DATABASE_URL", database_url)
             command.upgrade(Config(str(Path(__file__).resolve().parents[1] / "alembic.ini")), "head")
