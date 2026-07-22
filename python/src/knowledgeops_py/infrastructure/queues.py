@@ -108,9 +108,17 @@ class RabbitMqIngestionQueue:
         try:
             async with queue.iterator() as iterator:
                 async for message in iterator:
-                    async with message.process(requeue=False):
+                    try:
                         payload = json.loads(message.body)
                         yield str(payload["jobId"])
+                    except (asyncio.CancelledError, GeneratorExit):
+                        await message.nack(requeue=True)
+                        raise
+                    except Exception:
+                        await message.reject(requeue=False)
+                        raise
+                    else:
+                        await message.ack()
         finally:
             await connection.close()
 

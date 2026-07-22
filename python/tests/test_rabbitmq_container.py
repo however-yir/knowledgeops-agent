@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import AsyncGenerator
+from typing import cast
 from urllib.parse import quote
 
 import aio_pika
 import pytest
-from docker.errors import DockerException
-from testcontainers.rabbitmq import RabbitMqContainer
+from docker.errors import DockerException  # type: ignore[import-untyped]
+from testcontainers.rabbitmq import RabbitMqContainer  # type: ignore[import-untyped]
 
 from knowledgeops_py.domain.context import TenantContext
 from knowledgeops_py.infrastructure.queues import RabbitMqIngestionQueue
@@ -28,6 +30,10 @@ def test_rabbitmq_queue_persists_delivery_and_routes_decode_failures_to_dlq(monk
                 context = TenantContext("trace", "tenant-a", "worker", (), (), "worker")
                 await queue.publish(context, "job-rabbit")
 
+                consumer = cast(AsyncGenerator[str, None], queue.consume())
+                assert await anext(consumer) == "job-rabbit"
+                await consumer.aclose()
+
                 connection = await aio_pika.connect_robust(queue.url)
                 try:
                     channel = await connection.channel()
@@ -40,7 +46,7 @@ def test_rabbitmq_queue_persists_delivery_and_routes_decode_failures_to_dlq(monk
                 finally:
                     await connection.close()
 
-                consumer = queue.consume()
+                consumer = cast(AsyncGenerator[str, None], queue.consume())
                 with pytest.raises(json.JSONDecodeError):
                     await anext(consumer)
                 await consumer.aclose()
