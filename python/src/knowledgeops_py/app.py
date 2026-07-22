@@ -32,6 +32,13 @@ from .api.knowledge_routes import register_knowledge_routes
 from .api.operations_routes import register_operations_routes
 from .api.payloads import chat_request_payload, error_payload, fail, ok
 from .api.rag_routes import register_rag_routes
+from .api.request_runtime import (
+    TENANT_HEADER,
+    enforce_rate_limit,
+    ensure_trace_id,
+    resolve_context,
+    should_rate_limit,
+)
 from .api.research_routes import register_research_routes
 from .api.session_routes import register_session_routes
 from .api.sse import to_sse as encode_sse
@@ -44,7 +51,6 @@ from .application.harness import CanonicalHarnessApplicationService, harness_err
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
 from .application.research import DeepResearchApplicationService
-from .application.security import bearer_token
 from .application.workflow import ReactWorkflowApplicationService
 from .config import Settings, load_settings
 from .domain.context import TenantContext
@@ -77,16 +83,12 @@ from .infrastructure.providers import (
     create_reranker,
 )
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
-from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository
 from .infrastructure.session_repository import SqlAlchemySessionRepository
 from .infrastructure.workflow_repository import SqlAlchemyWorkflowRepository
 from .infrastructure.workspace_runtime import WorkspaceRuntime
 from .observability.setup import configure_observability
 
-TENANT_HEADER = "x-tenant-id"
-API_KEY_HEADER = "x-api-key"
-AUTH_HEADER = "authorization"
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or load_settings()
@@ -768,54 +770,6 @@ def require_workflow_task(store: PlatformStore, ctx: RequestContext, task_id: st
         raise HTTPException(status_code=404, detail="task not found")
     return task
 
-
-async def resolve_context(
-    request: Request,
-    auth_service: AuthApplicationService,
-    allow_anonymous: bool,
-) -> RequestContext:
-    trace_id = ensure_trace_id(request)
-    tenant_header = request.headers.get(TENANT_HEADER)
-    tenant_id = normalize_tenant(tenant_header)
-    bearer = bearer_token(request.headers.get(AUTH_HEADER))
-    identity = await auth_service.resolve_identity(bearer, request.headers.get(API_KEY_HEADER))
-    if identity:
-        if tenant_header and identity.tenant_id != tenant_id:
-            raise HTTPException(status_code=403, detail="tenant mismatch")
-        return RequestContext(trace_id, identity.tenant_id, identity.principal, identity.roles, identity.permissions, identity.auth_source)
-    if not allow_anonymous:
-        raise HTTPException(status_code=401, detail="authentication required")
-    return RequestContext(trace_id, tenant_id, "anonymous", ["ANONYMOUS"], [], "anonymous")
-
-
-def ensure_trace_id(request: Request) -> str:
-    trace_id = getattr(request.state, "trace_id", None)
-    if not trace_id:
-        trace_id = request.headers.get("x-request-id") or new_id("trace")
-        request.state.trace_id = trace_id
-    return trace_id
-
-
-async def enforce_rate_limit(store: PlatformStore, settings: Settings, ctx: RequestContext) -> None:
-    key = f"{ctx.tenant_id}:{ctx.principal}"
-    if settings.is_production:
-        try:
-            allowed = await RedisTokenBucket(settings.redis_url, settings.rate_limit_per_minute).allow(key)
-        except RateLimitUnavailable as exc:
-            raise HTTPException(status_code=503, detail="rate limiter unavailable") from exc
-        if not allowed:
-            raise HTTPException(status_code=429, detail="rate limit exceeded")
-        return
-    now = time.time()
-    window = [timestamp for timestamp in store.rate_limits.get(key, []) if now - timestamp < 60]
-    if len(window) >= settings.rate_limit_per_minute:
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
-    window.append(now)
-    store.rate_limits[key] = window
-
-
-def should_rate_limit(path: str) -> bool:
-    return not path.startswith(("/actuator", "/health", "/metrics", "/v3/api-docs"))
 
 
 def chat_response(
