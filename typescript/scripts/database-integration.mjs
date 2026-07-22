@@ -102,10 +102,11 @@ async function assertSessions(sessionIds, phase) {
     headers: requestHeaders(false)
   });
   const json = await response.json();
-  if (!response.ok || json?.ok !== 1 || !Array.isArray(json?.data?.items)) {
+  const items = Array.isArray(json?.items) ? json.items : json?.ok === 1 && Array.isArray(json?.data?.items) ? json.data.items : undefined;
+  if (!response.ok || !items) {
     throw new Error(`session list ${phase} failed: ${response.status} ${JSON.stringify(json)}`);
   }
-  const observed = new Set(json.data.items.map((item) => item.id));
+  const observed = new Set(items.map((item) => item.id));
   const missing = sessionIds.filter((sessionId) => !observed.has(sessionId));
   if (missing.length > 0) {
     throw new Error(`session list ${phase} missing ${missing.join(", ")}`);

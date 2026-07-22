@@ -94,7 +94,7 @@ services:
   knowledgeops-worker-ts:
     <<: *app-base
     container_name: knowledgeops-worker-ts
-    command: ["pnpm", "--filter", "@knowledgeops/api", "start:worker"]
+    command: ["node", "apps/api/dist/worker.main.js"]
     environment:
       <<: *app-environment
       APP_REDIS_CONSUMER_NAME: worker-compose-1

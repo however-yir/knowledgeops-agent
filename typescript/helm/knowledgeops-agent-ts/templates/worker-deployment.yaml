@@ -27,7 +27,7 @@ spec:
         - name: worker
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pnpm", "--filter", "@knowledgeops/api", "start:worker"]
+          command: ["node", "apps/api/dist/worker.main.js"]
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           envFrom:
