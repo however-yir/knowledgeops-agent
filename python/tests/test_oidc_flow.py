@@ -13,6 +13,7 @@ from jwt import InvalidTokenError
 
 import knowledgeops_py.app as app_module
 import knowledgeops_py.application.oidc as oidc_module
+from knowledgeops_py.application.authentication import AuthApplicationService, AuthenticationError
 from knowledgeops_py.config import Settings
 
 
@@ -43,6 +44,7 @@ def test_oidc_authorization_code_pkce_flow_is_one_time(monkeypatch: pytest.Monke
         oidc_redirect_uri="https://app.example.test/auth/callback",
     )
     store = app_module.PlatformStore()
+    auth_service = AuthApplicationService(store, settings, None, None)
     metadata = {
         "authorization_endpoint": "https://idp.example.test/authorize",
         "token_endpoint": "https://idp.example.test/token",
@@ -64,7 +66,7 @@ def test_oidc_authorization_code_pkce_flow_is_one_time(monkeypatch: pytest.Monke
     monkeypatch.setattr(oidc_module.httpx, "AsyncClient", lambda **_: FakeOidcClient())
 
     async def exercise() -> None:
-        login = await app_module.begin_oidc_login(store, settings, None, "/console")
+        login = await auth_service.begin_oidc_login("/console")
         params = parse_qs(urlparse(login["authorizationUrl"]).query)
         state = login["state"]
         pending = store.oidc_states[state]
@@ -80,14 +82,15 @@ def test_oidc_authorization_code_pkce_flow_is_one_time(monkeypatch: pytest.Monke
             "code_challenge_method": ["S256"],
         }
 
-        callback = await app_module.complete_oidc_callback(store, settings, None, "authorization-code", state)
+        callback = await auth_service.complete_oidc_callback("authorization-code", state)
         assert callback["returnTo"] == "/console"
         assert observed_nonce == [pending["nonce"]]
-        identity = await app_module.consume_oidc_exchange_code(store, None, callback["exchangeCode"])
-        assert identity is not None and identity.principal == "alice" and identity.tenant_id == "tenant-a"
-        assert await app_module.consume_oidc_exchange_code(store, None, callback["exchangeCode"]) is None
+        token = await auth_service.exchange_oidc_code(callback["exchangeCode"])
+        assert token.principal == "alice" and token.tenantId == "tenant-a"
         with pytest.raises(HTTPException, match="invalid or expired OIDC state"):
-            await app_module.complete_oidc_callback(store, settings, None, "authorization-code", state)
+            await auth_service.complete_oidc_callback("authorization-code", state)
+        with pytest.raises(AuthenticationError, match="invalid or expired OIDC exchange code"):
+            await auth_service.exchange_oidc_code(callback["exchangeCode"])
 
     asyncio.run(exercise())
 

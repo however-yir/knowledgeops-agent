@@ -6,7 +6,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from knowledgeops_py.app import create_api_key, create_app, score_evaluation_case
+from knowledgeops_py.app import create_app, score_evaluation_case
 from knowledgeops_py.config import Settings, load_settings
 from knowledgeops_py.infrastructure.database import create_engine
 from knowledgeops_py.infrastructure.models import Base
@@ -420,7 +420,7 @@ def test_admin_key_lifecycle_and_tenant_write_boundaries() -> None:
         test_client.post("/cost/budget", headers=headers, json={"tenantId": "other-tenant", "monthlyBudgetUsd": 39}).json()
     )
     assert budget["tenantId"] == "tenant-a"
-    other_key = create_api_key(app.state.store, "other", "ADMIN", "tenant-b")
+    other_key = asyncio.run(app.state.auth_service.issue_api_key("other", "ADMIN", "tenant-b"))
     other_headers = {"X-API-Key": other_key.rawApiKey, "X-Tenant-ID": "tenant-b"}
     denied = test_client.get("/cost/summary", headers={"X-API-Key": other_key.rawApiKey, "X-Tenant-ID": "tenant-a"})
     assert denied.status_code == 403

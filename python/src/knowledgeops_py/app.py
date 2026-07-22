@@ -16,10 +16,11 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from .api.auth_routes import register_auth_routes
 from .api.canonical import (
     canonicalize_response,
     is_legacy_request,
@@ -28,22 +29,12 @@ from .api.canonical import (
     react_trace_payload,
 )
 from .api.system_routes import register_system_routes
+from .application.authentication import AuthApplicationService
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
-from .application.oidc import OidcFlowError
-from .application.oidc import begin_oidc_login as begin_oidc_login_flow
-from .application.oidc import complete_oidc_callback as complete_oidc_callback_flow
-from .application.oidc import consume_oidc_exchange_code as consume_oidc_exchange_code_flow
 from .application.research import DeepResearchApplicationService, ResearchNotResumable
-from .application.security import (
-    ROLE_PERMISSIONS,
-    Identity,
-    bearer_token,
-    permissions_for_roles,
-    sign_payload,
-    verify_access_token,
-)
+from .application.security import bearer_token
 from .application.sessions import (
     SessionBranchValidationError,
     compare_session_branches,
@@ -56,10 +47,8 @@ from .domain.context import TenantContext
 from .domain.ports import EmbeddingProvider, OidcStateStore, Reranker, VectorStore
 from .dto import (
     AgentTraceDto,
-    ApiKeyData,
     AuditLogDto,
     AuditLogsEnvelope,
-    AuthTokenData,
     BudgetUpdateDto,
     ChatEnvelope,
     ChatRequestDto,
@@ -93,7 +82,7 @@ from .infrastructure.providers import (
 )
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
-from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
+from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository
 from .infrastructure.session_repository import SqlAlchemySessionRepository
 from .infrastructure.workflow_repository import SqlAlchemyWorkflowRepository
 from .infrastructure.workspace_runtime import WorkspaceRuntime
@@ -192,6 +181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else None
     )
     oidc_state_store: OidcStateStore | None = RedisOidcStateStore(active_settings.redis_url) if active_settings.is_production else None
+    auth_service = AuthApplicationService(store, active_settings, security_repository, oidc_state_store)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -235,6 +225,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.evaluation_repository = evaluation_repository
     app.state.graph_repository = graph_repository
     app.state.oidc_state_store = oidc_state_store
+    app.state.auth_service = auth_service
     app.state.ingestion_service = ingestion_service
     app.state.vector_store = vector_store
     app.state.embedding_provider = embedding_provider
@@ -266,7 +257,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         trace_id = request.headers.get("x-request-id") or new_id("trace")
         request.state.trace_id = trace_id
         try:
-            ctx = await resolve_context(request, store, active_settings, security_repository, allow_anonymous=True)
+            ctx = await resolve_context(request, auth_service, allow_anonymous=True)
         except HTTPException:
             ctx = RequestContext(trace_id, normalize_tenant(request.headers.get(TENANT_HEADER)), "anonymous", ["ANONYMOUS"], [], "anonymous")
         request.state.context = ctx
@@ -304,11 +295,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await canonicalize_response(request, response)
 
     async def optional_ctx(request: Request) -> RequestContext:
-        return await resolve_context(request, store, active_settings, security_repository, allow_anonymous=True)
+        return await resolve_context(request, auth_service, allow_anonymous=True)
 
     def require_permissions(*required: str) -> Callable[[Request], RequestContext]:
         async def dependency(request: Request) -> RequestContext:
-            ctx = await resolve_context(request, store, active_settings, security_repository, allow_anonymous=False)
+            ctx = await resolve_context(request, auth_service, allow_anonymous=False)
             missing = [permission for permission in required if permission not in ctx.permissions]
             if missing:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="permission denied")
@@ -325,79 +316,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ok=ok,
         prometheus_text=prometheus_text,
     )
-
-    @app.post("/auth/token")
-    async def auth_token(request: Request, x_api_key: str | None = Header(default=None), x_tenant_id: str | None = Header(default=None)):
-        identity = await resolve_api_key_identity(store, security_repository, x_api_key)
-        if not identity:
-            return fail("invalid api key", "AUTH_INVALID_API_KEY", ensure_trace_id(request))
-        if x_tenant_id and normalize_tenant(x_tenant_id) != identity.tenant_id:
-            return fail("tenant mismatch for api key", "AUTH_TENANT_MISMATCH", ensure_trace_id(request))
-        data = await issue_tokens(store, active_settings, identity, security_repository)
-        return ok(data, trace_id=ensure_trace_id(request))
-
-    @app.post("/auth/refresh")
-    async def auth_refresh(request: Request, x_refresh_token: str | None = Header(default=None)):
-        if not x_refresh_token:
-            return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-        if security_repository is not None:
-            stored = await security_repository.consume_refresh_token(x_refresh_token)
-            if stored is None:
-                return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-            identity = identity_from_stored(stored)
-        else:
-            token_hash = sha256_hex(x_refresh_token)
-            if token_hash in store.revoked_refresh_tokens:
-                return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-            record = store.refresh_tokens.pop(token_hash, None)
-            if not record or record["expiresAt"] <= epoch_seconds():
-                return fail("invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN", ensure_trace_id(request))
-            store.revoked_refresh_tokens.add(token_hash)
-            identity = Identity(record["principal"], record["tenantId"], record["roles"], permissions_for_roles(record["roles"]), "refresh")
-        return ok(await issue_tokens(store, active_settings, identity, security_repository), trace_id=ensure_trace_id(request))
-
-    @app.post("/auth/api-keys")
-    async def auth_api_keys(request: Request, keyName: str = Query(..., min_length=1, max_length=120), role: str = Query(default="USER"), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
-        data = await issue_api_key(store, security_repository, keyName, role, ctx.tenant_id)
-        return ok(data, trace_id=ensure_trace_id(request))
-
-    @app.post("/auth/api-keys/rotate")
-    async def auth_api_key_rotate(request: Request, keyName: str = Query(..., min_length=1, max_length=120), reason: str = Query(default="rotation", max_length=240), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
-        data = await rotate_persistent_api_key(store, security_repository, keyName, reason, ctx.tenant_id)
-        return ok(data, msg="rotated", trace_id=ensure_trace_id(request))
-
-    @app.post("/auth/api-keys/revoke")
-    async def auth_api_key_revoke(request: Request, keyName: str = Query(..., min_length=1, max_length=120), reason: str = Query(default="manual revoke", max_length=240), ctx: RequestContext = Depends(require_permissions("PERM_AUTH_KEY_MANAGE"))):
-        await revoke_persistent_api_key(store, security_repository, keyName, reason, ctx.tenant_id)
-        return ok({"keyName": keyName, "tenantId": ctx.tenant_id}, msg="revoked", trace_id=ensure_trace_id(request))
-
-    @app.get("/auth/oidc/login")
-    async def oidc_login(request: Request, returnTo: str | None = Query(default=None, max_length=2048)):
-        return ok(await begin_oidc_login(store, active_settings, oidc_state_store, returnTo), trace_id=ensure_trace_id(request))
-
-    @app.get("/auth/oidc/callback")
-    async def oidc_callback(request: Request, code: str = Query(..., min_length=1), state: str = Query(..., min_length=1)):
-        return ok(await complete_oidc_callback(store, active_settings, oidc_state_store, code, state), trace_id=ensure_trace_id(request))
-
-    @app.post("/auth/oidc/exchange")
-    async def oidc_exchange(request: Request):
-        payload = await request.json()
-        exchange_code = str(payload.get("exchangeCode", ""))
-        identity = await consume_oidc_exchange_code(store, oidc_state_store, exchange_code)
-        if not identity:
-            return fail("invalid or expired OIDC exchange code", "OIDC_INVALID_EXCHANGE_CODE", ensure_trace_id(request))
-        return ok(await issue_tokens(store, active_settings, identity, security_repository), trace_id=ensure_trace_id(request))
-
-    @app.post("/auth/logout")
-    async def logout(request: Request, x_refresh_token: str | None = Header(default=None)):
-        if x_refresh_token:
-            if security_repository is not None:
-                await security_repository.revoke_refresh_token(x_refresh_token)
-            else:
-                token_hash = sha256_hex(x_refresh_token)
-                store.refresh_tokens.pop(token_hash, None)
-                store.revoked_refresh_tokens.add(token_hash)
-        return ok({"loggedOut": True}, trace_id=ensure_trace_id(request))
+    register_auth_routes(
+        app,
+        auth_service=auth_service,
+        ensure_trace_id=ensure_trace_id,
+        require_permissions=require_permissions,
+        ok=ok,
+        fail=fail,
+    )
 
     @app.post("/ai/chat", response_model=ChatEnvelope)
     async def ai_chat(
@@ -1770,18 +1696,14 @@ def chat_request_payload(
 
 async def resolve_context(
     request: Request,
-    store: PlatformStore,
-    settings: Settings,
-    security_repository: SecurityRepository | None,
+    auth_service: AuthApplicationService,
     allow_anonymous: bool,
 ) -> RequestContext:
     trace_id = ensure_trace_id(request)
     tenant_header = request.headers.get(TENANT_HEADER)
     tenant_id = normalize_tenant(tenant_header)
     bearer = bearer_token(request.headers.get(AUTH_HEADER))
-    jwt_identity = verify_access_token(settings, bearer) if bearer else None
-    api_identity = await resolve_api_key_identity(store, security_repository, request.headers.get(API_KEY_HEADER))
-    identity = jwt_identity or api_identity
+    identity = await auth_service.resolve_identity(bearer, request.headers.get(API_KEY_HEADER))
     if identity:
         if tenant_header and identity.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail="tenant mismatch")
@@ -1819,209 +1741,6 @@ async def enforce_rate_limit(store: PlatformStore, settings: Settings, ctx: Requ
 
 def should_rate_limit(path: str) -> bool:
     return not path.startswith(("/actuator", "/health", "/metrics", "/v3/api-docs"))
-
-
-def authenticate_api_key(store: PlatformStore, api_key: str | None) -> Identity | None:
-    if not api_key:
-        return None
-    record = store.api_keys.get(sha256_hex(api_key.strip()))
-    if not record or not record["enabled"] or record.get("revokedAt") or record.get("expiresAt", "9999") <= now_iso():
-        return None
-    record["lastUsedAt"] = now_iso()
-    roles = [record["role"]]
-    return Identity(record["keyName"], record["tenantId"], roles, permissions_for_roles(roles), "api_key")
-
-
-async def resolve_api_key_identity(
-    store: PlatformStore, security_repository: SecurityRepository | None, api_key: str | None
-) -> Identity | None:
-    if security_repository is None:
-        return authenticate_api_key(store, api_key)
-    stored = await security_repository.authenticate_api_key(api_key)
-    return identity_from_stored(stored) if stored is not None else None
-
-
-def identity_from_stored(stored: StoredIdentity) -> Identity:
-    roles = list(stored.roles)
-    return Identity(stored.principal, stored.tenant_id, roles, permissions_for_roles(roles), stored.source)
-
-
-def create_api_key(store: PlatformStore, key_name: str, role: str, tenant_id: str) -> ApiKeyData:
-    normalized_role = role.upper()
-    if normalized_role not in ROLE_PERMISSIONS:
-        raise HTTPException(status_code=422, detail="unsupported api key role")
-    raw = "koa_" + uuid4().hex + uuid4().hex[:16]
-    store.api_keys[sha256_hex(raw)] = {
-        "keyHash": sha256_hex(raw),
-        "keyName": key_name,
-        "role": normalized_role,
-        "tenantId": tenant_id,
-        "enabled": True,
-        "expiresAt": future_iso(days=30),
-        "createdAt": now_iso(),
-        "updatedAt": now_iso(),
-    }
-    return ApiKeyData(keyName=key_name, tenantId=tenant_id, role=normalized_role, rawApiKey=raw, expiresAt=future_iso(days=30))
-
-
-async def issue_api_key(
-    store: PlatformStore,
-    security_repository: SecurityRepository | None,
-    key_name: str,
-    role: str,
-    tenant_id: str,
-) -> ApiKeyData:
-    normalized_role = role.upper()
-    if normalized_role not in ROLE_PERMISSIONS:
-        raise HTTPException(status_code=422, detail="unsupported api key role")
-    if security_repository is None:
-        return create_api_key(store, key_name, normalized_role, tenant_id)
-    try:
-        issued = await security_repository.issue_api_key(key_name, normalized_role, tenant_id, expires_in_days=30)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return ApiKeyData(
-        keyName=issued.key_name,
-        tenantId=issued.tenant_id,
-        role=issued.role,
-        rawApiKey=issued.raw_key,
-        expiresAt=issued.expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    )
-
-
-def rotate_api_key(store: PlatformStore, key_name: str, reason: str, tenant_id: str) -> ApiKeyData:
-    for record in store.api_keys.values():
-        if record["keyName"] == key_name and record["tenantId"] == tenant_id and not record.get("revokedAt"):
-            record["enabled"] = False
-            record["revokedAt"] = now_iso()
-            record["revocationReason"] = reason
-            return create_api_key(store, key_name, record["role"], tenant_id)
-    raise HTTPException(status_code=404, detail="api key not found")
-
-
-async def rotate_persistent_api_key(
-    store: PlatformStore,
-    security_repository: SecurityRepository | None,
-    key_name: str,
-    reason: str,
-    tenant_id: str,
-) -> ApiKeyData:
-    if security_repository is None:
-        return rotate_api_key(store, key_name, reason, tenant_id)
-    issued = await security_repository.rotate_api_key(key_name, tenant_id, reason, expires_in_days=30)
-    if issued is None:
-        raise HTTPException(status_code=404, detail="api key not found")
-    return ApiKeyData(
-        keyName=issued.key_name,
-        tenantId=issued.tenant_id,
-        role=issued.role,
-        rawApiKey=issued.raw_key,
-        expiresAt=issued.expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    )
-
-
-def revoke_api_key(store: PlatformStore, key_name: str, reason: str, tenant_id: str) -> None:
-    for record in store.api_keys.values():
-        if record["keyName"] == key_name and record["tenantId"] == tenant_id and not record.get("revokedAt"):
-            record["enabled"] = False
-            record["revokedAt"] = now_iso()
-            record["revocationReason"] = reason
-            return
-    raise HTTPException(status_code=404, detail="api key not found")
-
-
-async def revoke_persistent_api_key(
-    store: PlatformStore,
-    security_repository: SecurityRepository | None,
-    key_name: str,
-    reason: str,
-    tenant_id: str,
-) -> None:
-    if security_repository is None:
-        revoke_api_key(store, key_name, reason, tenant_id)
-        return
-    if not await security_repository.revoke_api_key(key_name, tenant_id, reason):
-        raise HTTPException(status_code=404, detail="api key not found")
-
-
-async def begin_oidc_login(
-    store: PlatformStore, settings: Settings, oidc_state_store: OidcStateStore | None, return_to: str | None
-) -> dict[str, str]:
-    try:
-        return await begin_oidc_login_flow(store.oidc_states, settings, oidc_state_store, return_to)
-    except OidcFlowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-
-
-async def complete_oidc_callback(
-    store: PlatformStore,
-    settings: Settings,
-    oidc_state_store: OidcStateStore | None,
-    authorization_code: str,
-    state: str,
-) -> dict[str, str]:
-    try:
-        return await complete_oidc_callback_flow(
-            store.oidc_states,
-            store.oidc_exchange_codes,
-            settings,
-            oidc_state_store,
-            authorization_code,
-            state,
-        )
-    except OidcFlowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-
-
-async def consume_oidc_exchange_code(
-    store: PlatformStore, oidc_state_store: OidcStateStore | None, exchange_code: str
-) -> Identity | None:
-    try:
-        return await consume_oidc_exchange_code_flow(store.oidc_exchange_codes, oidc_state_store, exchange_code)
-    except OidcFlowError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-
-
-async def issue_tokens(
-    store: PlatformStore,
-    settings: Settings,
-    identity: RequestContext | Identity,
-    security_repository: SecurityRepository | None,
-) -> AuthTokenData:
-    expires_at = epoch_seconds() + settings.token_ttl_seconds
-    payload = {
-        "sub": identity.principal,
-        "tenantId": identity.tenant_id,
-        "roles": identity.roles,
-        "permissions": identity.permissions,
-        "exp": expires_at,
-        "iat": epoch_seconds(),
-        "jti": new_id("jwt"),
-    }
-    token = sign_payload(settings, payload)
-    if security_repository is None:
-        refresh = new_id("refresh")
-        store.refresh_tokens[sha256_hex(refresh)] = {
-            "principal": identity.principal,
-            "tenantId": identity.tenant_id,
-            "roles": identity.roles,
-            "expiresAt": epoch_seconds() + settings.refresh_token_ttl_days * 86400,
-            "createdAt": now_iso(),
-        }
-    else:
-        refresh = await security_repository.issue_refresh_token(
-            StoredIdentity(identity.principal, identity.tenant_id, tuple(identity.roles), identity.auth_source),
-            settings.refresh_token_ttl_days,
-        )
-    return AuthTokenData(
-        token=token,
-        refreshToken=refresh,
-        expiresInSeconds=settings.token_ttl_seconds,
-        tenantId=identity.tenant_id,
-        principal=identity.principal,
-        roles=identity.roles,
-        permissions=identity.permissions,
-    )
 
 
 def chat_response(
