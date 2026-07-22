@@ -47,6 +47,7 @@ from .api.system_routes import register_system_routes
 from .api.workflow_execution_routes import register_workflow_execution_routes
 from .api.workflow_task_routes import register_workflow_task_routes
 from .application.authentication import AuthApplicationService
+from .application.costs import cost_summary_data, record_provider_usage
 from .application.evaluation_scoring import score_evaluation_case
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
@@ -64,7 +65,6 @@ from .dto import (
     ChatRequestDto,
     ChatResponseDto,
     CitationDto,
-    CostSummaryDto,
     EvaluationRunRequestDto,
     RagResponseDto,
     RetrievalStatsDto,
@@ -1479,42 +1479,8 @@ def parse_optional_date(value: Any) -> date | None:
         raise HTTPException(status_code=422, detail="date must use ISO-8601 YYYY-MM-DD") from exc
 
 
-def cost_summary_data(store: PlatformStore, tenant_id: str) -> CostSummaryDto:
-    usage = store.usage.get(tenant_id, {"monthCostUsd": 0.0, "requestCount": 0, "inputTokens": 0, "outputTokens": 0})
-    budget = store.budgets.get(tenant_id, {"monthlyBudgetUsd": 25.0, "hardLimitEnabled": False})
-    month_cost = float(usage.get("monthCostUsd", 0.0))
-    monthly_budget = float(budget.get("monthlyBudgetUsd", 25.0))
-    request_count = int(usage.get("requestCount", 0))
-    input_tokens = int(usage.get("inputTokens", 0))
-    output_tokens = int(usage.get("outputTokens", 0))
-    return CostSummaryDto(
-        tenantId=tenant_id,
-        month=date.today().strftime("%Y-%m"),
-        monthCostUsd=round4(month_cost),
-        monthlyBudgetUsd=round4(monthly_budget),
-        hardLimitEnabled=bool(budget.get("hardLimitEnabled", False)),
-        monthRequestCount=request_count,
-        monthInputTokens=input_tokens,
-        monthOutputTokens=output_tokens,
-        todayCostUsd=round4(month_cost),
-        todayRequestCount=request_count,
-        budgetRemainingUsd=round4(max(0.0, monthly_budget - month_cost)),
-        budgetExceeded=month_cost > monthly_budget,
-    )
-
-
 def usage_for(store: PlatformStore, tenant_id: str, prompt: str, answer: str) -> UsageDto:
     return record_provider_usage(store, tenant_id, estimate_tokens(prompt), estimate_tokens(answer))
-
-
-def record_provider_usage(store: PlatformStore, tenant_id: str, input_tokens: int, output_tokens: int) -> UsageDto:
-    cost = round4(input_tokens * 0.000001 + output_tokens * 0.000002)
-    usage = store.usage.setdefault(tenant_id, {"monthCostUsd": 0.0, "requestCount": 0, "inputTokens": 0, "outputTokens": 0})
-    usage["monthCostUsd"] = round4(float(usage["monthCostUsd"]) + cost)
-    usage["requestCount"] += 1
-    usage["inputTokens"] = int(usage.get("inputTokens", 0)) + input_tokens
-    usage["outputTokens"] = int(usage.get("outputTokens", 0)) + output_tokens
-    return UsageDto(inputTokens=input_tokens, outputTokens=output_tokens, totalTokens=input_tokens + output_tokens, estimatedCostUsd=cost)
 
 
 def select_audit_fields(log: dict[str, Any]) -> dict[str, Any]:
