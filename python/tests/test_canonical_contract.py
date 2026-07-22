@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
+import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from knowledgeops_py.app import create_app
+from knowledgeops_py.app import PlatformStore, RequestContext, chat_response_with_provider, create_app
 from knowledgeops_py.config import Settings
+from knowledgeops_py.dto import ChatRequestDto
 
 AUTH_HEADERS = {"X-API-Key": "test-key", "X-Tenant-ID": "tenant-a"}
 
@@ -442,6 +445,51 @@ def test_canonical_react_sse_returns_java_error_event_for_provider_failure(
     assert json.loads([line.removeprefix("data: ") for line in response.text.splitlines() if line.startswith("data: ")][0]) == {
         "message": "model provider request failed"
     }
+
+
+@pytest.mark.parametrize("mode", ["react", "workflow"])
+def test_production_react_provider_failure_uses_java_planner_fallback(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    class FailingProvider:
+        async def complete(self, *args: object) -> dict[str, object]:
+            request = httpx.Request("POST", "https://provider.example.test/chat/completions")
+            raise httpx.HTTPStatusError("provider unavailable", request=request, response=httpx.Response(503, request=request))
+
+    monkeypatch.setattr("knowledgeops_py.app.create_chat_provider", lambda _settings: FailingProvider())
+    response = asyncio.run(
+        chat_response_with_provider(
+            PlatformStore(),
+            RequestContext("trace", "tenant-a", "tester", ["USER"], [], "api_key"),
+            ChatRequestDto(chatId="fallback", prompt="contract provider failure", modelProfile="balanced"),
+            mode,
+            False,
+            Settings(environment="production"),
+        )
+    )
+
+    assert response.answer == f"KnowledgeOps Python {mode} answer: contract provider failure"
+
+
+def test_production_standard_chat_still_reports_provider_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FailingProvider:
+        async def complete(self, *args: object) -> dict[str, object]:
+            request = httpx.Request("POST", "https://provider.example.test/chat/completions")
+            raise httpx.HTTPStatusError("provider unavailable", request=request, response=httpx.Response(503, request=request))
+
+    monkeypatch.setattr("knowledgeops_py.app.create_chat_provider", lambda _settings: FailingProvider())
+
+    with pytest.raises(HTTPException, match="model provider request failed"):
+        asyncio.run(
+            chat_response_with_provider(
+                PlatformStore(),
+                RequestContext("trace", "tenant-a", "tester", ["USER"], [], "api_key"),
+                ChatRequestDto(chatId="failure", prompt="provider failure", modelProfile="balanced"),
+                "chat",
+                False,
+                Settings(environment="production"),
+            )
+        )
 
 
 def test_canonical_chat_stream_is_raw_text_while_python_v1_keeps_named_events() -> None:

@@ -2095,7 +2095,7 @@ async def chat_response_with_provider(
         try:
             completion = await provider.complete(tenant_context(ctx), grounded_prompt, request.modelProfile)
         except (httpx.HTTPError, ValueError) as exc:
-            if settings.is_production:
+            if settings.is_production and mode not in {"react", "workflow"}:
                 raise HTTPException(status_code=502, detail="model provider request failed") from exc
         else:
             response.answer = str(completion["answer"])
