@@ -42,6 +42,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3.13-management
+    user: "0:0"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 3s
