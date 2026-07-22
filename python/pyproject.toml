@@ -35,7 +35,7 @@ test = [
   "httpx>=0.27,<1",
   "pytest>=9.0.3,<10",
   "pytest-cov>=6.0,<7",
-  "testcontainers[postgres]>=4.9,<5"
+  "testcontainers[postgres,rabbitmq]>=4.9,<5"
 ]
 local-reranker = [
   "sentence-transformers>=3.4,<6"

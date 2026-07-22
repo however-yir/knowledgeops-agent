@@ -73,16 +73,19 @@ class RabbitMqIngestionQueue:
     queue_name: str = "knowledgeops.ingestion"
     dead_letter_queue: str = "knowledgeops.ingestion.dlq"
 
+    async def declare_queue(self, channel: aio_pika.abc.AbstractChannel) -> aio_pika.abc.AbstractQueue:
+        dead_letter = await channel.declare_queue(self.dead_letter_queue, durable=True)
+        return await channel.declare_queue(
+            self.queue_name,
+            durable=True,
+            arguments={"x-dead-letter-exchange": "", "x-dead-letter-routing-key": dead_letter.name},
+        )
+
     async def publish(self, context: TenantContext, job_id: str) -> None:
         connection = await aio_pika.connect_robust(self.url)
         try:
             channel = await connection.channel(publisher_confirms=True)
-            dead_letter = await channel.declare_queue(self.dead_letter_queue, durable=True)
-            queue = await channel.declare_queue(
-                self.queue_name,
-                durable=True,
-                arguments={"x-dead-letter-exchange": "", "x-dead-letter-routing-key": dead_letter.name},
-            )
+            queue = await self.declare_queue(channel)
             body = json.dumps({"jobId": job_id, "tenantId": context.tenant_id}).encode()
             await channel.default_exchange.publish(aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), queue.name)
         finally:
@@ -101,7 +104,7 @@ class RabbitMqIngestionQueue:
     async def consume(self) -> AsyncIterator[str]:
         connection = await aio_pika.connect_robust(self.url)
         channel = await connection.channel()
-        queue = await channel.declare_queue(self.queue_name, durable=True)
+        queue = await self.declare_queue(channel)
         try:
             async with queue.iterator() as iterator:
                 async for message in iterator:
