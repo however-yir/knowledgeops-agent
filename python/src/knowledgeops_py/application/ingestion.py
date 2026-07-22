@@ -60,6 +60,9 @@ class IngestionApplicationService:
         job = await self.repository.claim(job_id)
         if job is None:
             return None
+        return await self.process_claimed(job)
+
+    async def process_claimed(self, job: PersistedIngestionJob) -> PersistedIngestionJob | None:
         try:
             if not job.file_path:
                 raise RuntimeError("ingestion file path is missing")
@@ -72,10 +75,27 @@ class IngestionApplicationService:
 
     async def process_ready(self, tenant_id: str | None = None, limit: int = 100) -> int:
         processed = 0
-        for job_id in await self.repository.ready_job_ids(tenant_id, limit):
-            if await self.process(job_id) is not None:
+        while processed < limit:
+            job = await self.repository.claim_next(tenant_id)
+            if job is None:
+                break
+            if await self.process_claimed(job) is not None:
                 processed += 1
         return processed
+
+    async def publish_ready(self, include_queued: bool = False, limit: int = 100) -> int:
+        """Wake a broker worker for durable jobs; the database claim still de-duplicates delivery."""
+        if self.queue is None:
+            return 0
+        statuses = ("QUEUED", "RETRY") if include_queued else ("RETRY",)
+        jobs = await self.repository.ready_jobs(None, limit, statuses)
+        for job in jobs:
+            context = TenantContext(job.trace_id or "", job.tenant_id, "worker", (), (), "worker")
+            await self.queue.publish(context, job.job_id)
+        return len(jobs)
+
+    async def recover_abandoned(self, lease_seconds: int = 300) -> int:
+        return await self.repository.recover_abandoned(lease_seconds)
 
     async def process_message(self, job_id: str) -> PersistedIngestionJob | None:
         job = await self.process(job_id)

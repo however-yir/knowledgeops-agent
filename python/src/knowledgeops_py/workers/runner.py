@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import signal
+from contextlib import suppress
 from pathlib import Path
 
 from knowledgeops_py.app import create_app, process_pending_jobs
@@ -31,11 +32,44 @@ async def run_worker(once: bool = False) -> None:
         )
         try:
             if queue is not None:
-                async for job_id in queue.consume():
-                    await service.process_message(job_id)
-                    if once or stopping.is_set():
-                        return
+                await service.recover_abandoned()
+                if once:
+                    await service.process_ready()
+                    return
+
+                async def republish_retries() -> None:
+                    await service.publish_ready(include_queued=True)
+                    while not stopping.is_set():
+                        await service.recover_abandoned()
+                        await service.publish_ready()
+                        try:
+                            await asyncio.wait_for(stopping.wait(), timeout=1.0)
+                        except TimeoutError:
+                            pass
+
+                async def consume_messages() -> None:
+                    async for job_id in queue.consume():
+                        await service.process_message(job_id)
+                        if stopping.is_set():
+                            return
+
+                retry_task = asyncio.create_task(republish_retries())
+                consumer_task = asyncio.create_task(consume_messages())
+                stop_task = asyncio.create_task(stopping.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        {retry_task, consumer_task, stop_task}, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    for task in done - {stop_task}:
+                        task.result()
+                finally:
+                    for task in (retry_task, consumer_task, stop_task):
+                        task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await asyncio.gather(retry_task, consumer_task, stop_task)
+                return
             while not stopping.is_set():
+                await service.recover_abandoned()
                 processed = await service.process_ready()
                 if once:
                     return

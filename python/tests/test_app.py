@@ -98,6 +98,14 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         file_text = second_app.get("/ai/pdf/file/durable-chat", headers={"X-API-Key": "persistent-admin"})
         assert file_text.status_code == 200
         assert "Water and shade" in file_text.text
+        rag = assert_envelope(
+            second_app.post(
+                "/ai/pdf/chat",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"chatId": "durable-chat", "prompt": "What prevents heat injury?", "modelProfile": "balanced"},
+            ).json()
+        )
+        assert "Water and shade" in rag["evidence"][0]
 
 
 def test_error_response_contains_code_and_trace_id() -> None:

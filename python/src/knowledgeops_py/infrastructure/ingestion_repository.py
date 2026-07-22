@@ -78,12 +78,20 @@ class SqlAlchemyIngestionRepository:
             return [job for record in records if (job := to_job(record)) is not None]
 
     async def ready_job_ids(self, tenant_id: str | None, limit: int) -> list[str]:
+        return [job.job_id for job in await self.ready_jobs(tenant_id, limit)]
+
+    async def ready_jobs(
+        self,
+        tenant_id: str | None,
+        limit: int,
+        statuses: tuple[str, ...] = ("QUEUED", "RETRY"),
+    ) -> list[PersistedIngestionJob]:
         now = utc_now()
         async with self.sessions() as session:
             statement = (
-                select(IngestionJobRecord.job_id)
+                select(IngestionJobRecord)
                 .where(
-                    IngestionJobRecord.status.in_(("QUEUED", "RETRY")),
+                    IngestionJobRecord.status.in_(statuses),
                     (IngestionJobRecord.next_retry_at.is_(None)) | (IngestionJobRecord.next_retry_at <= now),
                 )
                 .order_by(IngestionJobRecord.created_at)
@@ -91,7 +99,7 @@ class SqlAlchemyIngestionRepository:
             )
             if tenant_id:
                 statement = statement.where(IngestionJobRecord.tenant_id == tenant_id)
-            return list((await session.scalars(statement)).all())
+            return [job for record in (await session.scalars(statement)).all() if (job := to_job(record)) is not None]
 
     async def claim(self, job_id: str) -> PersistedIngestionJob | None:
         now = utc_now()
@@ -112,6 +120,59 @@ class SqlAlchemyIngestionRepository:
             record = await session.scalar(select(IngestionJobRecord).where(IngestionJobRecord.job_id == job_id))
             await session.commit()
             return to_job(record)
+
+    async def claim_next(self, tenant_id: str | None = None) -> PersistedIngestionJob | None:
+        """Claim one ready job using the database's row lock as the worker lease."""
+        now = utc_now()
+        async with self.sessions() as session:
+            statement = (
+                select(IngestionJobRecord)
+                .where(
+                    IngestionJobRecord.status.in_(("QUEUED", "RETRY")),
+                    (IngestionJobRecord.next_retry_at.is_(None)) | (IngestionJobRecord.next_retry_at <= now),
+                )
+                .order_by(IngestionJobRecord.created_at)
+                .with_for_update(skip_locked=True)
+                .limit(1)
+            )
+            if tenant_id:
+                statement = statement.where(IngestionJobRecord.tenant_id == tenant_id)
+            record = (await session.scalars(statement)).first()
+            if record is None:
+                await session.rollback()
+                return None
+            record.status = "RUNNING"
+            record.attempt_count += 1
+            record.started_at = now
+            record.updated_at = now
+            await session.commit()
+            return to_job(record)
+
+    async def recover_abandoned(self, lease_seconds: int, tenant_id: str | None = None) -> int:
+        """Return jobs whose worker lease expired to RETRY, or terminal FAILED."""
+        now = utc_now()
+        cutoff = now - timedelta(seconds=max(0, lease_seconds))
+        async with self.sessions() as session:
+            statement = (
+                select(IngestionJobRecord)
+                .where(
+                    IngestionJobRecord.status == "RUNNING",
+                    (IngestionJobRecord.started_at.is_(None)) | (IngestionJobRecord.started_at <= cutoff),
+                )
+                .with_for_update(skip_locked=True)
+            )
+            if tenant_id:
+                statement = statement.where(IngestionJobRecord.tenant_id == tenant_id)
+            records = (await session.scalars(statement)).all()
+            for record in records:
+                retry = record.attempt_count < record.max_retries
+                record.status = "RETRY" if retry else "FAILED"
+                record.error_message = "worker lease expired"
+                record.next_retry_at = now if retry else None
+                record.finished_at = now if not retry else None
+                record.updated_at = now
+            await session.commit()
+            return len(records)
 
     async def complete(self, job_id: str, chunks: list[dict[str, Any]]) -> None:
         now = utc_now()

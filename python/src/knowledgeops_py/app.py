@@ -389,7 +389,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/ai/pdf/chat", response_model=RagEnvelope)
     async def pdf_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await rag_response_with_provider(store, ctx, payload, require_evidence=True, settings=active_settings)
+        data = await rag_response_with_provider(
+            store,
+            ctx,
+            payload,
+            require_evidence=True,
+            settings=active_settings,
+            ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+        )
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/pdf/upload/{chatId}")
@@ -556,7 +563,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/ai/pdf/chat")
     async def pdf_chat_get(prompt: str = Query(..., min_length=1), chatId: str = Query(..., min_length=1), ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
-        data = await rag_response_with_provider(store, ctx, ChatRequestDto(chatId=chatId, prompt=prompt), require_evidence=True, settings=active_settings)
+        data = await rag_response_with_provider(
+            store,
+            ctx,
+            ChatRequestDto(chatId=chatId, prompt=prompt),
+            require_evidence=True,
+            settings=active_settings,
+            ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+        )
         return ok(data, trace_id=ctx.trace_id)
 
     @app.get("/ai/pdf/file/{chatId}")
@@ -1232,8 +1246,15 @@ def permissions_for_roles(roles: list[str]) -> list[str]:
     return sorted({permission for role in roles for permission in ROLE_PERMISSIONS.get(role, [])})
 
 
-def chat_response(store: PlatformStore, ctx: RequestContext, request: ChatRequestDto, mode: str, require_evidence: bool) -> ChatResponseDto:
-    rag = retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
+def chat_response(
+    store: PlatformStore,
+    ctx: RequestContext,
+    request: ChatRequestDto,
+    mode: str,
+    require_evidence: bool,
+    rag: dict[str, Any] | None = None,
+) -> ChatResponseDto:
+    rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
     model = route_model(request.modelProfile, mode)
     answer = (
         refusal_answer(request.prompt)
@@ -1259,11 +1280,12 @@ async def chat_response_with_provider(
     mode: str,
     require_evidence: bool,
     settings: Settings,
+    rag: dict[str, Any] | None = None,
 ) -> ChatResponseDto:
-    response = chat_response(store, ctx, request, mode, require_evidence)
+    rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
+    response = chat_response(store, ctx, request, mode, require_evidence, rag)
     if not settings.model_base_url or not settings.model_api_key:
         return response
-    rag = retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
     if require_evidence and not rag["evidence"]:
         return response
     grounded_prompt = request.prompt
@@ -1285,9 +1307,15 @@ async def chat_response_with_provider(
     return response
 
 
-def rag_response(store: PlatformStore, ctx: RequestContext, request: ChatRequestDto, require_evidence: bool) -> RagResponseDto:
-    rag = retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
-    base = chat_response(store, ctx, request, "rag", require_evidence=require_evidence)
+def rag_response(
+    store: PlatformStore,
+    ctx: RequestContext,
+    request: ChatRequestDto,
+    require_evidence: bool,
+    rag: dict[str, Any] | None = None,
+) -> RagResponseDto:
+    rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
+    base = chat_response(store, ctx, request, "rag", require_evidence=require_evidence, rag=rag)
     stats = RetrievalStatsDto(**rag["retrievalStats"])
     return RagResponseDto(
         answer=base.answer,
@@ -1307,9 +1335,14 @@ async def rag_response_with_provider(
     request: ChatRequestDto,
     require_evidence: bool,
     settings: Settings,
+    ingestion_repository: SqlAlchemyIngestionRepository | None = None,
 ) -> RagResponseDto:
-    rag = retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
-    base = await chat_response_with_provider(store, ctx, request, "rag", require_evidence, settings)
+    rag = (
+        await retrieve_persisted(ingestion_repository, ctx.tenant_id, request.chatId, request.prompt)
+        if ingestion_repository is not None
+        else retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
+    )
+    base = await chat_response_with_provider(store, ctx, request, "rag", require_evidence, settings, rag)
     return RagResponseDto(
         answer=base.answer,
         model=base.model,
@@ -1365,16 +1398,29 @@ def refusal_answer(prompt: str) -> str:
 
 
 def retrieve(store: PlatformStore, tenant_id: str, chat_id: str, prompt: str) -> dict[str, Any]:
+    chunks = [chunk for chunk in store.chunks if chunk["tenantId"] == tenant_id and chunk["chatId"] == chat_id]
+    return retrieve_chunks(chunks, prompt)
+
+
+async def retrieve_persisted(
+    repository: SqlAlchemyIngestionRepository,
+    tenant_id: str,
+    chat_id: str,
+    prompt: str,
+) -> dict[str, Any]:
+    return retrieve_chunks(await repository.chunks(tenant_id, chat_id), prompt)
+
+
+def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]:
     tokens = set(tokenize(prompt))
     keyword_hits = []
     vector_hits = []
-    for chunk in store.chunks:
-        if chunk["tenantId"] != tenant_id or chunk["chatId"] != chat_id:
-            continue
-        overlap = len(tokens.intersection(chunk["tokens"]))
+    for chunk in chunks:
+        chunk_tokens = set(chunk.get("tokens", tokenize(chunk["content"])))
+        overlap = len(tokens.intersection(chunk_tokens))
         if overlap:
             keyword_hits.append((overlap, chunk))
-            vector_hits.append((cosine_like(tokens, chunk["tokens"]), chunk))
+            vector_hits.append((cosine_like(tokens, chunk_tokens), chunk))
     candidates: dict[str, tuple[float, dict[str, Any]]] = {}
     for score, chunk in keyword_hits:
         candidates[chunk["chunkId"]] = (float(score), chunk)

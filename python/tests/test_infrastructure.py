@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -232,13 +233,35 @@ def test_redis_oidc_state_store_consumes_once_and_fails_closed(monkeypatch: pyte
 
 
 def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tmp_path: Path) -> None:
+    class RecordingQueue:
+        def __init__(self) -> None:
+            self.published: list[str] = []
+            self.dead_letters: list[str] = []
+
+        async def publish(self, context: TenantContext, job_id: str) -> None:
+            assert context.tenant_id == "tenant-a"
+            self.published.append(job_id)
+
+        async def publish_dead_letter(self, context: TenantContext, job_id: str, reason: str) -> None:
+            assert context.tenant_id == "tenant-a"
+            assert reason
+            self.dead_letters.append(job_id)
+
+        def consume(self) -> AsyncIterator[str]:
+            async def no_messages() -> AsyncIterator[str]:
+                if False:
+                    yield "unreachable"
+
+            return no_messages()
+
     async def exercise() -> None:
         engine = create_engine("sqlite+aiosqlite:///:memory:")
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         repository = SqlAlchemyIngestionRepository(create_session_factory(engine))
         files = LocalFileStore(tmp_path / "uploads")
-        service = IngestionApplicationService(repository, files, "db_polling", max_retries=2, retry_delay_seconds=1)
+        queue = RecordingQueue()
+        service = IngestionApplicationService(repository, files, "db_polling", queue, max_retries=2, retry_delay_seconds=1)
         context = TenantContext("trace", "tenant-a", "alice", ("USER",), ("PERM_INGESTION_WRITE",), "jwt")
 
         submitted = await service.submit(context, "chat-a", "policy.txt", b"Water, rest, and shade prevent heat injury.")
@@ -253,9 +276,14 @@ def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tm
         assert reloaded is not None and reloaded.file_path == submitted.file_path
         assert (await repository.list_jobs("tenant-a", "chat-a", 10))[0].job_id == submitted.job_id
 
-        failed = await service.submit(context, "chat-a", "broken.txt", b"\xff")
-        retry = await service.process(failed.job_id)
-        assert retry is not None and retry.status == "RETRY" and retry.attempt_count == 1
+        abandoned = await service.submit(context, "chat-a", "broken.txt", b"\xff")
+        assert await repository.claim(abandoned.job_id) is not None
+        assert await repository.recover_abandoned(lease_seconds=0) == 1
+        assert await service.publish_ready() == 1
+        assert queue.published[-1] == abandoned.job_id
+        failed = await service.process_message(abandoned.job_id)
+        assert failed is not None and failed.status == "FAILED" and failed.attempt_count == 2
+        assert queue.dead_letters == [abandoned.job_id]
         with pytest.raises(ValueError, match="escapes tenant storage root"):
             await files.read("tenant-a", "/etc/passwd")
         await engine.dispose()
