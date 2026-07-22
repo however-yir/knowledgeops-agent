@@ -9,6 +9,7 @@ import pytest
 from redis.exceptions import RedisError
 
 from knowledgeops_py.app import retrieve_chunks_with_semantics
+from knowledgeops_py.application.evaluation_reporting import evaluation_comparison_data, evaluation_report_markdown
 from knowledgeops_py.application.ingestion import IngestionApplicationService
 from knowledgeops_py.application.memory import MemoryApplicationService, memory_context
 from knowledgeops_py.application.research import (
@@ -89,6 +90,16 @@ def test_research_text_rules_normalize_questions_and_evidence() -> None:
     assert questions == ["Heat risk", "Hydration"]
     assert research_evidence_text(findings) == "[1] Heat risk: Use water."
     assert fallback_research_report("Safety", findings) == "# Safety\n\n\n\n## Findings\n\n### Heat risk\n\nUse water.\n\n[1]\n"
+
+
+def test_evaluation_reporting_rules_select_runs_and_preserve_java_status() -> None:
+    old = {"runId": "old", "createdAt": "2026-01-01"}
+    new = {"runId": "new", "createdAt": "2026-01-02"}
+    result = {"caseId": "case-1", "status": "SUCCESS", "score": 0.8, "retrievalHit": 1.0, "citationCoverage": 0.5, "answerFaithfulness": 0.75, "latencyMs": 12}
+    report = evaluation_report_markdown({"runId": "new", "datasetId": "dataset", "tenantId": "tenant", "modelProfile": "balanced", "status": "COMPLETED", "metrics": {"runScore": 0.8, "avgLatencyMs": 12}, "results": [result]})
+
+    assert evaluation_comparison_data({"baselineRunId": "old"}, [old, new]) == {"dataset": {"baselineRunId": "old"}, "baseline": old, "current": new}
+    assert "- Status: `SUCCESS`" in report and "| Run Score | 80.00% |" in report and "| `case-1` | SUCCESS | 80.00% |" in report
 
 
 def test_async_database_metadata_and_transaction_scope() -> None:
