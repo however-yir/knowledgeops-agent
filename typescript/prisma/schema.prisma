@@ -167,6 +167,11 @@ model IngestionJob {
   maxRetries     Int       @default(3) @map("max_retries")
   errorMessage   String?   @map("error_message") @db.VarChar(1024)
   nextRetryAt    DateTime? @map("next_retry_at")
+  contentHash    String?   @map("content_hash") @db.VarChar(64)
+  rawText        String?   @map("raw_text") @db.LongText
+  leaseOwner     String?   @map("lease_owner") @db.VarChar(128)
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  version        Int       @default(0)
   startedAt      DateTime? @map("started_at")
   finishedAt     DateTime? @map("finished_at")
   createdAt      DateTime  @map("created_at")
@@ -177,6 +182,7 @@ model IngestionJob {
   @@index([chatId, createdAt], map: "idx_ingestion_chat_created")
   @@index([tenantId, chatId, createdAt], map: "idx_ingestion_tenant_chat_created")
   @@index([tenantId, status, nextRetryAt], map: "idx_ingestion_tenant_status_next_retry")
+  @@index([status, leaseExpiresAt], map: "idx_ingestion_status_lease")
   @@map("ingestion_job")
 }
 
@@ -527,6 +533,7 @@ model KnowledgeChunk {
 model HarnessEvent {
   id          BigInt   @id @default(autoincrement())
   eventId     String   @unique(map: "uk_harness_event_id") @map("event_id") @db.VarChar(64)
+  tenantId    String   @default("public") @map("tenant_id") @db.VarChar(64)
   action      String   @db.VarChar(64)
   source      String   @db.VarChar(64)
   status      String   @db.VarChar(32)
@@ -535,6 +542,7 @@ model HarnessEvent {
   createdAt   DateTime @map("created_at")
 
   @@index([action, status], map: "idx_harness_event_action_status")
+  @@index([tenantId, createdAt], map: "idx_harness_event_tenant_created")
   @@index([createdAt], map: "idx_harness_event_created")
   @@map("harness_event")
 }

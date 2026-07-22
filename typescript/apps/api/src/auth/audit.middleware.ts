@@ -4,7 +4,7 @@ import type { ServerResponse } from "node:http";
 
 import { newId, nowIso } from "../common/ids.js";
 import type { RequestWithContext } from "../common/request-context.js";
-import { normalizeTenant, TENANT_HEADER } from "../common/tenant.js";
+import { normalizeTenant } from "../common/tenant.js";
 import { PlatformStore } from "../platform/platform.store.js";
 
 @Injectable()
@@ -20,13 +20,11 @@ export class AuditLogMiddleware implements NestMiddleware {
         return;
       }
       const request = req as RequestWithContext;
-      const tenantHeader = req.headers[TENANT_HEADER] ?? req.headers["x-tenant-id"];
-      const tenant = Array.isArray(tenantHeader) ? tenantHeader[0] : tenantHeader;
       this.store.auditLogs.push({
         id: this.store.auditLogs.length + 1,
         requestId: headerValue(req.headers["x-request-id"]) ?? newId("req"),
         traceId: headerValue(req.headers["x-trace-id"]) ?? "",
-        tenantId: normalizeTenant(request.context?.tenantId ?? tenant),
+        tenantId: normalizeTenant(request.context?.tenantId),
         userIdentity: request.context?.identity?.principal ?? "anonymous",
         method: req.method,
         path,

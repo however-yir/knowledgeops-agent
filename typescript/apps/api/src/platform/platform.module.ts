@@ -10,6 +10,6 @@ import { BusinessToolsService } from "./business-tools.service.js";
 @Global()
 @Module({
   providers: [PlatformStore, MetricsService, ModelRouterService, TenantCostService, PrismaPersistenceService, BusinessToolsService],
-  exports: [PlatformStore, MetricsService, ModelRouterService, TenantCostService, BusinessToolsService]
+  exports: [PlatformStore, MetricsService, ModelRouterService, TenantCostService, PrismaPersistenceService, BusinessToolsService]
 })
 export class PlatformModule {}

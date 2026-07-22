@@ -22,15 +22,28 @@ describe("AuthService", () => {
     expect(service.exchangeApiKey("local-demo-api-key", "other")).toMatchObject({ ok: 0, msg: "tenant mismatch for api key" });
   });
 
-  it("rotates refresh tokens and revokes the consumed token", () => {
+  it("rotates refresh tokens and revokes the consumed token", async () => {
     const service = new AuthService(new PlatformStore());
     const issued = service.exchangeApiKey("local-demo-api-key", "public");
 
-    const refreshed = service.refresh(issued.refreshToken);
+    const refreshed = await service.refresh(issued.refreshToken);
 
     expect(refreshed.ok).toBe(1);
     expect(refreshed.refreshToken).toBeTruthy();
-    expect(service.refresh(issued.refreshToken)).toMatchObject({ ok: 0, msg: "invalid refresh token" });
+    await expect(service.refresh(issued.refreshToken)).resolves.toMatchObject({ ok: 0, msg: "invalid refresh token" });
+  });
+
+  it("allows only one concurrent refresh consumer", async () => {
+    const service = new AuthService(new PlatformStore());
+    const issued = service.exchangeApiKey("local-demo-api-key", "public");
+
+    const results = await Promise.all([
+      service.refresh(issued.refreshToken),
+      service.refresh(issued.refreshToken)
+    ]);
+
+    expect(results.filter((result) => result.ok === 1)).toHaveLength(1);
+    expect(results.filter((result) => result.ok === 0)).toHaveLength(1);
   });
 
   it("invalidates the old API key when rotating a named key", () => {

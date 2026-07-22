@@ -53,6 +53,9 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@6.0.3)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -69,9 +72,6 @@ importers:
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
-      prisma:
-        specifier: ^6.19.3
-        version: 6.19.3(typescript@6.0.3)
       tsx:
         specifier: ^4.21.0
         version: 4.22.3

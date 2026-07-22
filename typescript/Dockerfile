@@ -9,7 +9,9 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY apps apps
 COPY packages packages
-RUN pnpm build
+COPY prisma prisma
+COPY scripts scripts
+RUN pnpm db:generate && pnpm build
 
 FROM node:24-alpine AS runtime
 WORKDIR /app
@@ -21,6 +23,8 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/packages/shared/dist packages/shared/dist
+COPY --from=build /app/prisma prisma
+COPY --from=build /app/scripts scripts
 RUN addgroup -S app && adduser -S app -G app \
   && mkdir -p /app/data/uploads \
   && chown -R app:app /app

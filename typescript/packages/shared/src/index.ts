@@ -152,6 +152,7 @@ export interface SessionBranch {
 
 export interface SessionState {
   id: string;
+  tenantId?: string;
   title: string;
   updatedAt: number;
   modelProfile: string;

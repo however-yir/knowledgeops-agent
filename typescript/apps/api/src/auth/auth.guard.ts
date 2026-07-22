@@ -21,6 +21,9 @@ export class AuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<FastifyRequest>() as RequestWithContext;
     request.context = request.context ?? this.resolveContext(request);
+    if (request.context.authenticationError) {
+      throw new UnauthorizedException(request.context.authenticationError);
+    }
     if (!env.APP_SECURITY_ENABLED) {
       return true;
     }
@@ -47,11 +50,15 @@ export class AuthGuard implements CanActivate {
     const identity = rawBearer
       ? this.authService.parseJwt(rawBearer)
       : rawApiKey
-        ? this.authService.authenticateApiKey(rawApiKey, typeof headerTenant === "string" ? headerTenant : undefined)
+        ? this.authService.authenticateApiKey(rawApiKey)
         : undefined;
+    const normalizedHeaderTenant = typeof headerTenant === "string" ? normalizeTenant(headerTenant) : undefined;
     return {
-      tenantId: normalizeTenant(identity?.tenantId ?? headerTenant),
-      identity
+      tenantId: normalizeTenant(identity?.tenantId ?? normalizedHeaderTenant),
+      identity,
+      authenticationError: identity && normalizedHeaderTenant && normalizedHeaderTenant !== identity.tenantId
+        ? "tenant header does not match authenticated tenant"
+        : undefined
     };
   }
 }

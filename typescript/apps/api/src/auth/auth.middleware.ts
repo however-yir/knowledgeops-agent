@@ -20,11 +20,15 @@ export class AuthContextMiddleware implements NestMiddleware {
     const identity = rawBearer
       ? this.authService.parseJwt(rawBearer)
       : rawApiKey
-        ? this.authService.authenticateApiKey(rawApiKey, typeof headerTenant === "string" ? headerTenant : undefined)
+        ? this.authService.authenticateApiKey(rawApiKey)
         : undefined;
+    const normalizedHeaderTenant = typeof headerTenant === "string" ? normalizeTenant(headerTenant) : undefined;
     request.context = {
-      tenantId: normalizeTenant(identity?.tenantId ?? headerTenant),
-      identity
+      tenantId: normalizeTenant(identity?.tenantId ?? normalizedHeaderTenant),
+      identity,
+      authenticationError: identity && normalizedHeaderTenant && normalizedHeaderTenant !== identity.tenantId
+        ? "tenant header does not match authenticated tenant"
+        : undefined
     };
     next();
   }

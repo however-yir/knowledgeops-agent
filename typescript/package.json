@@ -5,7 +5,10 @@
   "scripts": {
     "build": "pnpm -r build",
     "contract:diff": "node scripts/contract-diff.mjs",
+    "contract:inventory": "node scripts/contract-inventory.mjs",
     "db:generate": "pnpm --filter @knowledgeops/api exec prisma generate --schema ../../prisma/schema.prisma",
+    "db:migrate": "node scripts/prisma-migrate.mjs",
+    "db:seed-demo": "node scripts/bootstrap-demo-key.mjs",
     "db:validate": "node scripts/check-prisma-schema.mjs",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
     "frontend:contract": "node scripts/frontend-contract-smoke.mjs",
@@ -16,7 +19,7 @@
     "perf:smoke": "node scripts/perf-smoke.mjs",
     "security:defaults": "node scripts/security-defaults.mjs",
     "sbom": "node scripts/sbom.mjs",
-    "prod:gate": "pnpm parity && pnpm db:validate && pnpm contract:diff && pnpm frontend:contract && pnpm migration:readiness && pnpm maturity:gate && pnpm security:defaults && pnpm e2e:smoke && pnpm perf:smoke",
+    "prod:gate": "pnpm parity && pnpm contract:inventory && pnpm db:validate && pnpm frontend:contract && pnpm migration:readiness && pnpm maturity:gate && pnpm security:defaults && pnpm e2e:smoke && pnpm perf:smoke",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @knowledgeops/shared build && pnpm -r test"
   },
@@ -28,7 +31,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@nestjs/core",
-      "esbuild"
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
     ]
   }
 }

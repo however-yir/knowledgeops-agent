@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Header, Headers, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, Param, Post, Query } from "@nestjs/common";
 
 import { newId, nowIso } from "../common/ids.js";
-import { normalizeTenant, TENANT_HEADER } from "../common/tenant.js";
+import { TenantId } from "../common/tenant-id.decorator.js";
+import { normalizeTenant } from "../common/tenant.js";
 import { MetricsService } from "../platform/metrics.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
 import { TenantCostService } from "../platform/tenant-cost.service.js";
@@ -15,21 +16,24 @@ export class OperationsController {
   ) {}
 
   @Get("cost/summary")
-  costSummary(@Headers(TENANT_HEADER) tenantHeader: string | undefined) {
-    return this.costService.summary(tenantHeader);
+  costSummary(@TenantId() tenantId: string) {
+    return this.costService.summary(tenantId);
   }
 
   @Post("cost/budget")
-  updateBudget(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { tenantId?: string; monthlyBudgetUsd?: number; hardLimitEnabled?: boolean }) {
-    const payload = body ?? {};
-    return this.costService.updateBudget({ ...payload, tenantId: payload.tenantId ?? tenantHeader });
+  updateBudget(
+    @TenantId() tenantId: string,
+    @Body() body: { tenantId?: string; monthlyBudgetUsd?: number; hardLimitEnabled?: boolean }
+  ) {
+    return this.costService.updateBudget({ ...(body ?? {}), tenantId });
   }
 
   @Get("audit/logs")
-  auditLogs(@Query("limit") limit = "50", @Query("tenantId") tenantId?: string) {
+  auditLogs(@TenantId() tenantId: string, @Query("limit") limit = "50") {
+    const tenant = normalizeTenant(tenantId);
     const bounded = Math.max(1, Math.min(Number(limit), 200));
     return this.store.auditLogs
-      .filter((log) => !tenantId || log.tenantId === tenantId)
+      .filter((log) => log.tenantId === tenant)
       .slice(-bounded)
       .reverse()
       .map((log) => ({
@@ -50,15 +54,15 @@ export class OperationsController {
 
   @Get("ai/memory/items")
   memory(
-    @Headers(TENANT_HEADER) tenantHeader: string | undefined,
+    @TenantId() tenantId: string,
     @Query("userId") userId = "anonymous",
     @Query("type") type?: string,
     @Query("limit") limit = "20"
   ) {
-    const tenantId = normalizeTenant(tenantHeader);
+    const tenant = normalizeTenant(tenantId);
     const now = Date.now();
     return this.store.memoryItems
-      .filter((item) => item.tenantId === tenantId && item.userId === userId)
+      .filter((item) => item.tenantId === tenant && item.userId === userId)
       .filter((item) => !type || item.type === type)
       .filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -66,7 +70,7 @@ export class OperationsController {
   }
 
   @Post("ai/memory/items")
-  addMemory(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: {
+  addMemory(@TenantId() tenantId: string, @Body() body: {
     userId?: string;
     type?: string;
     content?: string;
@@ -81,7 +85,7 @@ export class OperationsController {
     const now = nowIso();
     const item = {
       memoryId: newId("mem"),
-      tenantId: normalizeTenant(tenantHeader),
+      tenantId: normalizeTenant(tenantId),
       userId: body.userId?.trim() || "anonymous",
       type: body.type?.trim() || "long",
       content: body.content.trim(),
@@ -99,58 +103,68 @@ export class OperationsController {
   }
 
   @Delete("ai/memory/items/:memoryId")
-  deleteMemory(@Param("memoryId") memoryId: string) {
-    const index = this.store.memoryItems.findIndex((item) => item.memoryId === memoryId);
+  deleteMemory(@TenantId() tenantId: string, @Param("memoryId") memoryId: string) {
+    const tenant = normalizeTenant(tenantId);
+    const index = this.store.memoryItems.findIndex((item) => item.tenantId === tenant && item.memoryId === memoryId);
     if (index < 0) {
       return { ok: 0, msg: "memory not found" };
     }
     this.store.memoryItems.splice(index, 1);
+    this.store.markMemoryDeleted(memoryId);
     appendMemoryEvent(this.store, memoryId, "DELETE", "manual deletion");
     this.store.persist();
     return { ok: 1, msg: "deleted" };
   }
 
   @Get("ai/memory/items/:memoryId/events")
-  memoryEvents(@Param("memoryId") memoryId: string) {
-    return this.store.memoryEvents.get(memoryId) ?? [];
+  memoryEvents(@TenantId() tenantId: string, @Param("memoryId") memoryId: string) {
+    const tenant = normalizeTenant(tenantId);
+    const owned = this.store.memoryItems.some((item) => item.tenantId === tenant && item.memoryId === memoryId);
+    return owned ? this.store.memoryEvents.get(memoryId) ?? [] : [];
   }
 
   @Get("ai/memory/context")
   memoryContext(
-    @Headers(TENANT_HEADER) tenantHeader: string | undefined,
+    @TenantId() tenantId: string,
     @Query("userId") userId = "anonymous",
     @Query("prompt") prompt = "",
     @Query("limit") limit = "8"
   ) {
-    const tenantId = normalizeTenant(tenantHeader);
+    const tenant = normalizeTenant(tenantId);
     const now = Date.now();
     const tokens = prompt.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     const items = this.store.memoryItems
-      .filter((item) => item.tenantId === tenantId && item.userId === userId)
+      .filter((item) => item.tenantId === tenant && item.userId === userId)
       .filter((item) => !item.expiresAt || Date.parse(item.expiresAt) > now)
       .map((item) => ({
         ...item,
-        relevance: clamp(tokens.filter((token) => item.content.toLowerCase().includes(token)).length / Math.max(1, tokens.length) + item.confidence * 0.2, 0, 1)
+        relevance: clamp(
+          tokens.filter((token) => item.content.toLowerCase().includes(token)).length / Math.max(1, tokens.length)
+            + item.confidence * 0.2,
+          0,
+          1
+        )
       }))
       .sort((a, b) => b.relevance - a.relevance || b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, Math.max(1, Math.min(Number(limit), 50)));
     return {
       userId,
-      tenantId,
+      tenantId: tenant,
       items,
       snapshot: items.map((item) => `[${item.type}:${item.confidence}] ${item.content}`).join("\n")
     };
   }
 
   @Post("ai/memory/cleanup")
-  cleanupMemory(@Headers(TENANT_HEADER) tenantHeader: string | undefined) {
-    const tenantId = normalizeTenant(tenantHeader);
+  cleanupMemory(@TenantId() tenantId: string) {
+    const tenant = normalizeTenant(tenantId);
     const before = this.store.memoryItems.length;
     const now = Date.now();
     for (let index = this.store.memoryItems.length - 1; index >= 0; index -= 1) {
       const item = this.store.memoryItems[index];
-      if (item.tenantId === tenantId && item.expiresAt && Date.parse(item.expiresAt) <= now) {
+      if (item.tenantId === tenant && item.expiresAt && Date.parse(item.expiresAt) <= now) {
         this.store.memoryItems.splice(index, 1);
+        this.store.markMemoryDeleted(item.memoryId);
         appendMemoryEvent(this.store, item.memoryId, "EXPIRE", "retention cleanup");
       }
     }
@@ -159,18 +173,23 @@ export class OperationsController {
   }
 
   @Get("ai/graph/entities")
-  graphEntities(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Query("q") query = "", @Query("type") type?: string, @Query("limit") limit = "50") {
-    const tenantId = normalizeTenant(tenantHeader);
+  graphEntities(
+    @TenantId() tenantId: string,
+    @Query("q") query = "",
+    @Query("type") type?: string,
+    @Query("limit") limit = "50"
+  ) {
+    const tenant = normalizeTenant(tenantId);
     const normalized = query.trim().toLowerCase();
     return this.store.graphEntities
-      .filter((entity) => entity.tenantId === tenantId)
+      .filter((entity) => entity.tenantId === tenant)
       .filter((entity) => !type || entity.type === type)
       .filter((entity) => !normalized || `${entity.name} ${entity.description ?? ""} ${entity.aliases.join(" ")}`.toLowerCase().includes(normalized))
       .slice(0, Math.max(1, Math.min(Number(limit), 100)));
   }
 
   @Post("ai/graph/entities")
-  addGraphEntity(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: {
+  addGraphEntity(@TenantId() tenantId: string, @Body() body: {
     name?: string;
     type?: string;
     description?: string;
@@ -183,7 +202,7 @@ export class OperationsController {
     const now = nowIso();
     const entity = {
       entityId: newId("kgent"),
-      tenantId: normalizeTenant(tenantHeader),
+      tenantId: normalizeTenant(tenantId),
       name: body.name.trim(),
       type: body.type?.trim() || "UNKNOWN",
       description: body.description,
@@ -198,20 +217,26 @@ export class OperationsController {
   }
 
   @Post("ai/graph/relations")
-  addGraphRelation(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: {
+  addGraphRelation(@TenantId() tenantId: string, @Body() body: {
     sourceEntityId?: string;
     targetEntityId?: string;
     relationType?: string;
     weight?: number;
     metadata?: Record<string, unknown>;
   }) {
+    const tenant = normalizeTenant(tenantId);
     if (!body.sourceEntityId || !body.targetEntityId) {
       return { ok: 0, msg: "sourceEntityId and targetEntityId are required" };
+    }
+    const sourceOwned = this.store.graphEntities.some((item) => item.tenantId === tenant && item.entityId === body.sourceEntityId);
+    const targetOwned = this.store.graphEntities.some((item) => item.tenantId === tenant && item.entityId === body.targetEntityId);
+    if (!sourceOwned || !targetOwned) {
+      return { ok: 0, msg: "graph entity not found" };
     }
     const now = nowIso();
     const relation = {
       relationId: newId("kgrel"),
-      tenantId: normalizeTenant(tenantHeader),
+      tenantId: tenant,
       sourceEntityId: body.sourceEntityId,
       targetEntityId: body.targetEntityId,
       relationType: body.relationType || "RELATED_TO",
@@ -226,20 +251,24 @@ export class OperationsController {
   }
 
   @Get("ai/graph/entities/:entityId/neighbors")
-  graphNeighbors(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("entityId") entityId: string, @Query("limit") limit = "50") {
-    const tenantId = normalizeTenant(tenantHeader);
+  graphNeighbors(@TenantId() tenantId: string, @Param("entityId") entityId: string, @Query("limit") limit = "50") {
+    const tenant = normalizeTenant(tenantId);
+    const owned = this.store.graphEntities.some((entity) => entity.tenantId === tenant && entity.entityId === entityId);
+    if (!owned) {
+      return { entityId, relations: [], entities: [] };
+    }
     const max = Math.max(1, Math.min(Number(limit), 100));
     const relations = this.store.graphRelations
-      .filter((relation) => relation.tenantId === tenantId && (relation.sourceEntityId === entityId || relation.targetEntityId === entityId))
+      .filter((relation) => relation.tenantId === tenant && (relation.sourceEntityId === entityId || relation.targetEntityId === entityId))
       .sort((a, b) => b.weight - a.weight)
       .slice(0, max);
     const entityIds = new Set(relations.flatMap((relation) => [relation.sourceEntityId, relation.targetEntityId]));
-    const entities = this.store.graphEntities.filter((entity) => entity.tenantId === tenantId && entityIds.has(entity.entityId));
+    const entities = this.store.graphEntities.filter((entity) => entity.tenantId === tenant && entityIds.has(entity.entityId));
     return { entityId, relations, entities };
   }
 
   @Post("ai/graph/facts")
-  addGraphFact(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: {
+  addGraphFact(@TenantId() tenantId: string, @Body() body: {
     subject?: string;
     predicate?: string;
     object?: string;
@@ -253,7 +282,7 @@ export class OperationsController {
     const now = nowIso();
     const fact = {
       factId: newId("kgfact"),
-      tenantId: normalizeTenant(tenantHeader),
+      tenantId: normalizeTenant(tenantId),
       subject: body.subject.trim(),
       predicate: body.predicate.trim(),
       object: body.object.trim(),
@@ -270,17 +299,17 @@ export class OperationsController {
 
   @Get("ai/graph/facts")
   graphFacts(
-    @Headers(TENANT_HEADER) tenantHeader: string | undefined,
+    @TenantId() tenantId: string,
     @Query("q") query = "",
     @Query("predicate") predicate?: string,
     @Query("minConfidence") minConfidence = "0",
     @Query("limit") limit = "50"
   ) {
-    const tenantId = normalizeTenant(tenantHeader);
+    const tenant = normalizeTenant(tenantId);
     const normalized = query.trim().toLowerCase();
     const min = clamp(Number(minConfidence), 0, 1);
     return this.store.graphFacts
-      .filter((fact) => fact.tenantId === tenantId)
+      .filter((fact) => fact.tenantId === tenant)
       .filter((fact) => !predicate || fact.predicate === predicate)
       .filter((fact) => fact.confidence >= min)
       .filter((fact) => !normalized || `${fact.subject} ${fact.predicate} ${fact.object}`.toLowerCase().includes(normalized))

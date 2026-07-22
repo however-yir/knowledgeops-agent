@@ -3,7 +3,7 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  APP_SECURITY_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
+  APP_SECURITY_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(true),
   APP_JWT_SECRET: z.string().min(16).default("dev-only-change-me-secret"),
   APP_JWT_EXPIRE_MINUTES: z.coerce.number().int().min(1).default(120),
   APP_REFRESH_EXPIRE_DAYS: z.coerce.number().int().min(1).default(14),
@@ -67,6 +67,8 @@ const envSchema = z.object({
   APP_WORKFLOW_ASYNC_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_WORKFLOW_WORKER_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
   APP_MCP_HTTP_ALLOWLIST: z.string().default(""),
+  APP_AGENT_HARNESS_TRUSTED_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
+  APP_WORKSPACE_WRITE_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_WORKSPACE_SHELL_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_WORKSPACE_ALLOWED_COMMANDS: z.string().default("pwd,ls,rg,git"),
   APP_WORKSPACE_ALLOWED_GIT_SUBCOMMANDS: z.string().default("status,diff,show,log"),
@@ -97,3 +99,32 @@ const envSchema = z.object({
 export const env = envSchema.parse(process.env);
 
 export type AppEnv = typeof env;
+
+const FORBIDDEN_JWT_SECRETS = new Set([
+  "dev-only-change-me-secret",
+  "replace_with_32_bytes_min_secret",
+  "replace-me-with-real-secret",
+  "change-me",
+  "changeme"
+]);
+
+export function validateRuntimeConfig(config: AppEnv = env): void {
+  if (config.NODE_ENV !== "production") {
+    return;
+  }
+  if (!config.APP_SECURITY_ENABLED) {
+    throw new Error("APP_SECURITY_ENABLED must be true in production");
+  }
+  if (!config.APP_PRISMA_ENABLED || !config.DATABASE_URL.trim()) {
+    throw new Error("APP_PRISMA_ENABLED and DATABASE_URL are required in production");
+  }
+  if (Buffer.byteLength(config.APP_JWT_SECRET, "utf8") < 32 || FORBIDDEN_JWT_SECRETS.has(config.APP_JWT_SECRET)) {
+    throw new Error("APP_JWT_SECRET must be at least 32 bytes and must not use a placeholder in production");
+  }
+  if (config.APP_WORKSPACE_WRITE_ENABLED && !config.APP_AGENT_HARNESS_TRUSTED_ENABLED) {
+    throw new Error("APP_WORKSPACE_WRITE_ENABLED requires APP_AGENT_HARNESS_TRUSTED_ENABLED");
+  }
+  if (config.APP_WORKSPACE_SHELL_ENABLED && !config.APP_AGENT_HARNESS_TRUSTED_ENABLED) {
+    throw new Error("APP_WORKSPACE_SHELL_ENABLED requires APP_AGENT_HARNESS_TRUSTED_ENABLED");
+  }
+}

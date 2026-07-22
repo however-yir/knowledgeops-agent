@@ -242,6 +242,7 @@ export interface KgFactRecord {
 
 export interface HarnessEventRecord {
   eventId: string;
+  tenantId: string;
   action: string;
   source: string;
   status: string;
@@ -309,6 +310,8 @@ interface PersistedState {
 @Injectable()
 export class PlatformStore {
   private readonly persistenceSinks: Array<() => void | Promise<void>> = [];
+  private persistenceTail: Promise<void> = Promise.resolve();
+  private persistenceFailure: Error | undefined;
 
   readonly apiKeys = new Map<string, ApiKeyRecord>();
   readonly refreshTokens = new Map<string, RefreshTokenRecord>();
@@ -326,6 +329,7 @@ export class PlatformStore {
   readonly auditLogs: Array<Record<string, unknown>> = [];
   readonly memoryItems: MemoryItemRecord[] = [];
   readonly memoryEvents = new Map<string, MemoryEventRecord[]>();
+  readonly deletedMemoryIds = new Set<string>();
   readonly graphEntities: KgEntityRecord[] = [];
   readonly graphRelations: KgRelationRecord[] = [];
   readonly graphFacts: KgFactRecord[] = [];
@@ -359,8 +363,9 @@ export class PlatformStore {
     if (env.NODE_ENV === "test") {
       return;
     }
-    mkdirSync(dirname(env.APP_STATE_FILE), { recursive: true });
-    writeFileSync(env.APP_STATE_FILE, JSON.stringify({
+    if (!env.APP_PRISMA_ENABLED) {
+      mkdirSync(dirname(env.APP_STATE_FILE), { recursive: true });
+      writeFileSync(env.APP_STATE_FILE, JSON.stringify({
       apiKeys: [...this.apiKeys.values()],
       refreshTokens: [...this.refreshTokens.values()],
       ingestionJobs: [...this.ingestionJobs.values()],
@@ -389,15 +394,40 @@ export class PlatformStore {
       courses: this.courses,
       schools: this.schools,
       courseReservations: this.courseReservations,
-      metrics: Object.fromEntries(this.metrics.entries())
-    } satisfies PersistedState, null, 2));
-    for (const sink of this.persistenceSinks) {
-      void Promise.resolve(sink()).catch(() => undefined);
+        metrics: Object.fromEntries(this.metrics.entries())
+      } satisfies PersistedState, null, 2));
+    }
+    if (this.persistenceSinks.length > 0) {
+      this.persistenceTail = this.persistenceTail
+        .then(async () => {
+          for (const sink of this.persistenceSinks) {
+            await sink();
+          }
+          this.persistenceFailure = undefined;
+        })
+        .catch((error: unknown) => {
+          this.persistenceFailure = error instanceof Error ? error : new Error(String(error));
+        });
     }
   }
 
   registerPersistenceSink(sink: () => void | Promise<void>): void {
     this.persistenceSinks.push(sink);
+  }
+
+  async waitForPersistence(): Promise<void> {
+    await this.persistenceTail;
+    if (this.persistenceFailure) {
+      throw this.persistenceFailure;
+    }
+  }
+
+  persistenceHealthy(): boolean {
+    return !this.persistenceFailure;
+  }
+
+  markMemoryDeleted(memoryId: string): void {
+    this.deletedMemoryIds.add(memoryId);
   }
 
   incrementMetric(name: string, labels: Record<string, string | number | boolean | undefined> = {}, value = 1): void {
@@ -406,7 +436,7 @@ export class PlatformStore {
   }
 
   private load(): void {
-    if (env.NODE_ENV === "test" || !existsSync(env.APP_STATE_FILE)) {
+    if (env.NODE_ENV === "test" || env.APP_PRISMA_ENABLED || !existsSync(env.APP_STATE_FILE)) {
       return;
     }
     const raw = readState(env.APP_STATE_FILE);
@@ -423,7 +453,7 @@ export class PlatformStore {
       metadata: chunk.metadata ?? {},
       tokenSet: tokenize(chunk.content)
     }));
-    raw.sessions?.forEach((session) => this.sessions.set(session.id, session));
+    raw.sessions?.forEach((session) => this.sessions.set(sessionKey(session.tenantId ?? "public", session.id), session));
     raw.workflowTasks?.forEach((task) => this.workflowTasks.set(task.taskId, task));
     raw.workflowSteps?.forEach(([taskId, steps]) => this.workflowSteps.set(taskId, steps));
     raw.workflowEvents?.forEach(([taskId, events]) => this.workflowEvents.set(taskId, events));
@@ -474,6 +504,10 @@ export function sha256Hex(value: string): string {
 
 export function historyKey(tenantId: string, type: string, chatId: string): string {
   return `${tenantId}:${type}:${chatId}`;
+}
+
+export function sessionKey(tenantId: string, sessionId: string): string {
+  return `${tenantId}:${sessionId}`;
 }
 
 export function tenantUsageKey(tenantId: string, usageDate: string): string {

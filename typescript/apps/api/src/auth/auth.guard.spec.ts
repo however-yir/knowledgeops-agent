@@ -17,7 +17,7 @@ describe("AuthGuard", () => {
 
       expect(guard.canActivate(contextFor("GET", "/cost/summary", "local-demo-api-key"))).toBe(true);
       expect(() => guard.canActivate(contextFor("POST", "/cost/budget", "bad-key"))).toThrow("authentication required");
-      expect(() => guard.canActivate(contextFor("POST", "/cost/budget", "local-demo-api-key", "other"))).toThrow("authentication required");
+      expect(() => guard.canActivate(contextFor("POST", "/cost/budget", "local-demo-api-key", "other"))).toThrow("tenant header does not match authenticated tenant");
       expect(guard.canActivate(contextFor("GET", "/actuator/prometheus", opsKey))).toBe(true);
       expect(() => guard.canActivate(contextFor("POST", "/cost/budget", opsKey))).toThrow("insufficient permission");
     } finally {

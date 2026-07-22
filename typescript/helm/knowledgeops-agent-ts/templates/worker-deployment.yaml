@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "knowledgeops-agent-ts.fullname" . }}-worker
+  labels:
+    {{- include "knowledgeops-agent-ts.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.workerReplicaCount }}
+  selector:
+    matchLabels:
+      {{- include "knowledgeops-agent-ts.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "knowledgeops-agent-ts.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "knowledgeops-agent-ts.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pnpm", "--filter", "@knowledgeops/api", "start:worker"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "knowledgeops-agent-ts.fullname" . }}-config
+            - secretRef:
+                name: {{ include "knowledgeops-agent-ts.fullname" . }}
+          env:
+            - name: APP_INGESTION_WORKER_ENABLED
+              value: "true"
+            - name: APP_WORKFLOW_ASYNC_ENABLED
+              value: "true"
+            - name: APP_AUDIT_RETENTION_WORKER_ENABLED
+              value: "true"
+          resources:
+            {{- toYaml .Values.workerResources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          emptyDir: {}

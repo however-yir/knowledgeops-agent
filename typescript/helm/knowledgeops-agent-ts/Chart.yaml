@@ -1,0 +1,11 @@
+apiVersion: v2
+name: knowledgeops-agent-ts
+description: KnowledgeOps Agent TypeScript API and worker
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - rag
+  - nestjs
+  - knowledgeops

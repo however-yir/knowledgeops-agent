@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
+import { TenantId } from "../common/tenant-id.decorator.js";
 import { env } from "../config/env.js";
 import { BusinessToolsService } from "../platform/business-tools.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
@@ -157,26 +158,34 @@ export class HarnessController {
   }
 
   @Post("actions/preview")
-  preview(@Body() request: Record<string, unknown>) {
+  preview(@TenantId() tenantId: string, @Body() request: Record<string, unknown>) {
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const trustedRequest = { ...request, tenantId };
+    const decision = evaluatePolicy(trustedRequest);
+    if (!decision.allowed) {
+      return {
+        ok: 0,
+        action: request.action ?? "unknown",
+        preview: { status: "blocked", request: trustedRequest, decision }
+      };
+    }
     const token = newId("ta");
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    const decision = evaluatePolicy(request);
-    this.store.trustedActions.set(token, { ...request, expiresAt, decision });
+    this.store.trustedActions.set(token, { ...trustedRequest, expiresAt, decision });
     this.store.persist();
     return {
-      ok: decision.allowed ? 1 : 0,
+      ok: 1,
       token,
       action: request.action ?? "unknown",
       expiresAt,
-      preview: { status: decision.allowed ? "pending_confirmation" : "blocked", request, decision }
+      preview: { status: "pending_confirmation", request: trustedRequest, decision }
     };
   }
 
   @Post("actions/execute/:token")
-  async execute(@Param("token") token: string) {
+  async execute(@TenantId() tenantId: string, @Param("token") token: string) {
     const started = Date.now();
     const request = this.store.trustedActions.get(token);
-    if (!request) {
+    if (!request || request.tenantId !== tenantId) {
       return { status: "not_found", source: "trusted-action" };
     }
     this.store.trustedActions.delete(token);
@@ -200,7 +209,10 @@ export class HarnessController {
   }
 
   private async executeAction(request: Record<string, unknown>) {
-    const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
+    const input: Record<string, unknown> = {
+      ...((request.actionInput as Record<string, unknown> | undefined) ?? request),
+      tenantId: request.tenantId
+    };
     if (request.action === "query_school") {
       return {
         source: "builtin",
@@ -411,6 +423,7 @@ export class HarnessController {
   private record(request: Record<string, unknown>, source: string, status: string, latencyMs: number, observation: unknown) {
     this.store.harnessEvents.push({
       eventId: newId("hevt"),
+      tenantId: String(request.tenantId ?? "public"),
       action: String(request.action ?? "unknown"),
       source,
       status,
@@ -432,13 +445,31 @@ function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; m
   if (!action) {
     return { allowed: false, message: "action is required", riskLevel: "unknown" };
   }
-  if (["workspace_list_files", "workspace_read_file", "workspace_search_text", "workspace_diff", "workspace_propose_patch", "workspace_apply_patch"].includes(action)) {
+  const trustedActions = new Set([
+    "mcp_call",
+    "workspace_list_files",
+    "workspace_read_file",
+    "workspace_search_text",
+    "workspace_propose_patch",
+    "workspace_apply_patch",
+    "workspace_run_shell"
+  ]);
+  if (!trustedActions.has(action)) {
+    return { allowed: false, message: `action does not require trusted runtime: ${action}`, riskLevel: "unknown" };
+  }
+  if (!env.APP_AGENT_HARNESS_TRUSTED_ENABLED) {
+    return { allowed: false, message: "trusted runtime is disabled", riskLevel: "blocked" };
+  }
+  if (["workspace_list_files", "workspace_read_file", "workspace_search_text", "workspace_propose_patch", "workspace_apply_patch"].includes(action)) {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
     try {
       resolveWorkspacePath(String(input.path ?? (action === "workspace_list_files" || action === "workspace_search_text" ? "." : "")));
     } catch (error) {
       return { allowed: false, message: error instanceof Error ? error.message : String(error), riskLevel: "blocked" };
     }
+  }
+  if (action === "workspace_apply_patch" && !env.APP_WORKSPACE_WRITE_ENABLED) {
+    return { allowed: false, message: "workspace writes are disabled", riskLevel: "write" };
   }
   if (action === "workspace_run_shell" && !env.APP_WORKSPACE_SHELL_ENABLED) {
     return { allowed: false, message: "workspace shell is disabled", riskLevel: "shell" };

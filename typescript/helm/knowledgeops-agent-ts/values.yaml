@@ -1,0 +1,100 @@
+replicaCount: 2
+workerReplicaCount: 1
+
+image:
+  repository: ghcr.io/however-yir/knowledgeops-agent-ts
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+workerResources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+networkPolicy:
+  enabled: true
+
+probes:
+  startup:
+    failureThreshold: 30
+    periodSeconds: 5
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 3
+  liveness:
+    periodSeconds: 20
+    timeoutSeconds: 5
+
+env:
+  NODE_ENV: production
+  PORT: "3000"
+  APP_SECURITY_ENABLED: "true"
+  APP_PRISMA_ENABLED: "true"
+  APP_INGESTION_QUEUE_BACKEND: redis_stream
+  APP_RATE_LIMIT_ENABLED: "true"
+  APP_AGENT_HARNESS_TRUSTED_ENABLED: "false"
+  APP_WORKSPACE_WRITE_ENABLED: "false"
+  APP_WORKSPACE_SHELL_ENABLED: "false"
+
+secretEnv:
+  DATABASE_URL: ""
+  APP_JWT_SECRET: ""
+  APP_CORS_ALLOWED_ORIGINS: ""
+  APP_REDIS_URL: ""
+  APP_RABBITMQ_URL: ""
+  OPENAI_API_KEY: ""
+  OPENAI_BASE_URL: "https://api.openai.com/v1"
+  APP_PGVECTOR_ENDPOINT: ""
+
+extraEnv: []
+extraVolumeMounts: []
+extraVolumes: []
+nodeSelector: {}
+tolerations: []
+affinity: {}

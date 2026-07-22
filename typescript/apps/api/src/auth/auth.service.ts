@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import jwt from "jsonwebtoken";
 import type { ApiKeyIssueResponse, AuthTokenResponse } from "@knowledgeops/shared";
 
@@ -8,6 +8,7 @@ import { newId, nowIso } from "../common/ids.js";
 import { normalizeTenant } from "../common/tenant.js";
 import { env } from "../config/env.js";
 import { PlatformStore, sha256Hex } from "../platform/platform.store.js";
+import { PrismaPersistenceService } from "../platform/prisma.persistence.service.js";
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: [
@@ -56,7 +57,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly store: PlatformStore) {}
+  constructor(
+    private readonly store: PlatformStore,
+    @Optional() private readonly persistence?: PrismaPersistenceService
+  ) {}
 
   authenticateApiKey(apiKey: string | undefined, tenantHeader?: string) {
     if (!apiKey) {
@@ -121,7 +125,7 @@ export class AuthService {
     return this.issueTokens(identity.principal, identity.roles, identity.tenantId);
   }
 
-  refresh(refreshToken: string | undefined): AuthTokenResponse {
+  async refresh(refreshToken: string | undefined): Promise<AuthTokenResponse> {
     if (!refreshToken) {
       return { ok: 0, msg: "invalid refresh token" };
     }
@@ -130,9 +134,19 @@ export class AuthService {
     if (!record || record.revokedAt || Date.parse(record.expiresAt) <= Date.now()) {
       return { ok: 0, msg: "invalid refresh token" };
     }
+    const replacement = this.buildTokens(record.principal, record.roles, record.tenantId);
+    if (this.persistence) {
+      const consumed = await this.persistence.rotateRefreshToken(tokenHash, replacement.record);
+      if (!consumed) {
+        return { ok: 0, msg: "invalid refresh token" };
+      }
+    } else if (!this.store.refreshTokens.delete(tokenHash)) {
+      return { ok: 0, msg: "invalid refresh token" };
+    }
     this.store.refreshTokens.delete(tokenHash);
+    this.store.refreshTokens.set(replacement.record.tokenHash, replacement.record);
     this.store.persist();
-    return this.issueTokens(record.principal, record.roles, record.tenantId);
+    return replacement.response;
   }
 
   issueApiKey(keyName: string, roleName: string, tenantId?: string): ApiKeyIssueResponse {
@@ -199,30 +213,39 @@ export class AuthService {
   }
 
   private issueTokens(principal: string, roles: string[], tenantId: string): AuthTokenResponse {
+    const issued = this.buildTokens(principal, roles, tenantId);
+    this.store.refreshTokens.set(issued.record.tokenHash, issued.record);
+    this.store.persist();
+    return issued.response;
+  }
+
+  private buildTokens(principal: string, roles: string[], tenantId: string) {
     const permissions = [...new Set(roles.flatMap((role) => ROLE_PERMISSIONS[role] ?? []))];
     const token = jwt.sign({ sub: principal, roles, permissions, tenant_id: tenantId }, env.APP_JWT_SECRET, {
       expiresIn: `${env.APP_JWT_EXPIRE_MINUTES}m`
     });
     const refreshToken = newId("refresh");
     const tokenHash = sha256Hex(refreshToken);
+    const createdAt = nowIso();
     const refreshExpiresAt = new Date(Date.now() + env.APP_REFRESH_EXPIRE_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    this.store.refreshTokens.set(tokenHash, {
-      tokenHash,
-      principal,
-      roles,
-      tenantId,
-      expiresAt: refreshExpiresAt,
-      createdAt: nowIso()
-    });
-    this.store.persist();
     return {
-      ok: 1,
-      msg: "ok",
-      token,
-      refreshToken,
-      tenantId,
-      expiresInSeconds: env.APP_JWT_EXPIRE_MINUTES * 60,
-      refreshWillExpireSoon: Date.parse(refreshExpiresAt) < Date.now() + 2 * 24 * 60 * 60 * 1000
+      record: {
+        tokenHash,
+        principal,
+        roles,
+        tenantId,
+        expiresAt: refreshExpiresAt,
+        createdAt
+      },
+      response: {
+        ok: 1 as const,
+        msg: "ok",
+        token,
+        refreshToken,
+        tenantId,
+        expiresInSeconds: env.APP_JWT_EXPIRE_MINUTES * 60,
+        refreshWillExpireSoon: Date.parse(refreshExpiresAt) < Date.now() + 2 * 24 * 60 * 60 * 1000
+      }
     };
   }
 

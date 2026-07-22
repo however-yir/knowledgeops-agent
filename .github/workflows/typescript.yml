@@ -63,9 +63,9 @@ jobs:
         working-directory: typescript
         run: pnpm db:validate
 
-      - name: Java vs TS contract diff
+      - name: Contract inventory
         working-directory: typescript
-        run: pnpm contract:diff
+        run: pnpm contract:inventory
 
       - name: Frontend TS backend contract
         working-directory: typescript

@@ -1,7 +1,8 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
-import { map, type Observable } from "rxjs";
+import { mergeMap, type Observable } from "rxjs";
 
+import { PlatformStore } from "../platform/platform.store.js";
 import { traceIdFrom } from "./trace.js";
 
 interface EnvelopeLike {
@@ -14,12 +15,17 @@ interface EnvelopeLike {
 
 @Injectable()
 export class ApiResponseInterceptor implements NestInterceptor {
+  constructor(private readonly store: PlatformStore) {}
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const response = context.switchToHttp().getResponse<{ header?: (name: string, value: string) => unknown }>();
     const traceId = traceIdFrom(request);
     response.header?.("X-Trace-ID", traceId);
-    return next.handle().pipe(map((value) => shouldBypassEnvelope(request) ? value : envelope(value, traceId)));
+    return next.handle().pipe(mergeMap(async (value) => {
+      await this.store.waitForPersistence();
+      return shouldBypassEnvelope(request) ? value : envelope(value, traceId);
+    }));
   }
 }
 

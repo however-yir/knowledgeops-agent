@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import type { Citation } from "@knowledgeops/shared";
 
 import { AiService } from "../ai/ai.service.js";
 import { newId, nowIso } from "../common/ids.js";
-import { normalizeTenant, TENANT_HEADER } from "../common/tenant.js";
+import { TenantId } from "../common/tenant-id.decorator.js";
+import { normalizeTenant } from "../common/tenant.js";
 import { PlatformStore } from "../platform/platform.store.js";
 
 @Controller("ai/evaluation")
@@ -11,7 +12,7 @@ export class EvaluationController {
   constructor(private readonly store: PlatformStore, private readonly aiService: AiService) {}
 
   @Post("datasets")
-  createDataset(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body: { name: string; description?: string; cases?: Array<Record<string, unknown>> }) {
+  createDataset(@TenantId() tenantId: string, @Body() body: { name: string; description?: string; cases?: Array<Record<string, unknown>> }) {
     if (!body?.name?.trim()) {
       return { ok: 0, msg: "dataset name is required" };
     }
@@ -20,7 +21,7 @@ export class EvaluationController {
     }
     const dataset = {
       datasetId: newId("ds"),
-      tenantId: normalizeTenant(tenantHeader),
+      tenantId: normalizeTenant(tenantId),
       name: body.name.trim(),
       description: body.description,
       cases: body.cases ?? [],
@@ -34,18 +35,18 @@ export class EvaluationController {
   }
 
   @Get("datasets")
-  listDatasets(@Headers(TENANT_HEADER) tenantHeader: string | undefined) {
-    const tenantId = normalizeTenant(tenantHeader);
+  listDatasets(@TenantId() tenantId: string) {
+    const tenant = normalizeTenant(tenantId);
     return [...this.store.evalDatasets.values()]
-      .filter((dataset) => dataset.tenantId === tenantId)
+      .filter((dataset) => dataset.tenantId === tenant)
       .map(({ cases: _cases, ...dataset }) => ({ ...dataset, caseCount: _cases.length }));
   }
 
   @Post("datasets/:datasetId/runs")
-  async triggerRun(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Param("datasetId") datasetId: string, @Body() body?: { modelProfile?: string }) {
-    const tenantId = normalizeTenant(tenantHeader);
+  async triggerRun(@TenantId() tenantId: string, @Param("datasetId") datasetId: string, @Body() body?: { modelProfile?: string }) {
+    const tenant = normalizeTenant(tenantId);
     const dataset = this.store.evalDatasets.get(datasetId);
-    if (!dataset) {
+    if (!dataset || dataset.tenantId !== tenant) {
       return { ok: 0, msg: "dataset not found" };
     }
     const totalCases = dataset?.cases.length ?? 0;
@@ -57,7 +58,7 @@ export class EvaluationController {
       const started = Date.now();
       const question = String(testCase.question ?? "");
       const chatId = String(testCase.chatId ?? `eval-${datasetId}-${index}`);
-      const answer = await this.aiService.reactChat({ prompt: question, chatId, modelProfile: body?.modelProfile }, tenantId);
+      const answer = await this.aiService.reactChat({ prompt: question, chatId, modelProfile: body?.modelProfile }, tenant);
       const expectedKeywords = toStringArray(testCase.expectedKeywords);
       const expectedCitations = toStringArray(testCase.expectedCitations);
       const forbiddenKeywords = toStringArray(testCase.forbiddenKeywords);
@@ -99,7 +100,7 @@ export class EvaluationController {
     const run = {
       runId: newId("run"),
       datasetId,
-      tenantId,
+      tenantId: tenant,
       status: "COMPLETED",
       modelProfile: body?.modelProfile ?? "balanced",
       metrics: {
@@ -123,40 +124,51 @@ export class EvaluationController {
   }
 
   @Post("runs")
-  async triggerRunFromBody(@Headers(TENANT_HEADER) tenantHeader: string | undefined, @Body() body?: { datasetId?: string; modelProfile?: string }) {
+  async triggerRunFromBody(@TenantId() tenantId: string, @Body() body?: { datasetId?: string; modelProfile?: string }) {
     if (!body?.datasetId?.trim()) {
       return { ok: 0, msg: "datasetId is required" };
     }
-    return this.triggerRun(tenantHeader, body.datasetId, { modelProfile: body.modelProfile });
+    return this.triggerRun(tenantId, body.datasetId, { modelProfile: body.modelProfile });
   }
 
   @Get("datasets/:datasetId/comparison")
-  compare(@Param("datasetId") datasetId: string) {
+  compare(@TenantId() tenantId: string, @Param("datasetId") datasetId: string) {
+    const tenant = normalizeTenant(tenantId);
     const dataset = this.store.evalDatasets.get(datasetId);
-    const runs = [...this.store.evalRuns.values()].filter((run) => run.datasetId === datasetId);
-    const baseline = dataset?.baselineRunId ? this.store.evalRuns.get(dataset.baselineRunId) ?? null : runs.at(-2) ?? null;
+    if (!dataset || dataset.tenantId !== tenant) {
+      return { ok: 0, msg: "dataset not found" };
+    }
+    const runs = [...this.store.evalRuns.values()]
+      .filter((run) => run.tenantId === tenant && run.datasetId === datasetId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const configuredBaseline = dataset.baselineRunId ? this.store.evalRuns.get(dataset.baselineRunId) : undefined;
+    const baseline = configuredBaseline?.tenantId === tenant ? configuredBaseline : runs.at(-2) ?? null;
     return { dataset, baseline, current: runs.at(-1) ?? null };
   }
 
   @Get("runs/:runId")
-  getRun(@Param("runId") runId: string) {
-    return this.store.evalRuns.get(runId) ?? { ok: 0, msg: "run not found" };
+  getRun(@TenantId() tenantId: string, @Param("runId") runId: string) {
+    const run = this.store.evalRuns.get(runId);
+    return run?.tenantId === normalizeTenant(tenantId) ? run : { ok: 0, msg: "run not found" };
   }
 
   @Post("runs/:runId/baseline")
-  baseline(@Param("runId") runId: string) {
+  baseline(@TenantId() tenantId: string, @Param("runId") runId: string) {
+    const tenant = normalizeTenant(tenantId);
     const run = this.store.evalRuns.get(runId);
-    const dataset = run ? this.store.evalDatasets.get(run.datasetId) : undefined;
-    if (run && dataset) {
+    const dataset = run?.tenantId === tenant ? this.store.evalDatasets.get(run.datasetId) : undefined;
+    if (run && dataset?.tenantId === tenant) {
       dataset.baselineRunId = runId;
       this.store.persist();
+      return run;
     }
-    return run ?? { ok: 0, msg: "run not found" };
+    return { ok: 0, msg: "run not found" };
   }
 
   @Get("runs/:runId/report")
-  report(@Param("runId") runId: string) {
-    const run = this.store.evalRuns.get(runId);
+  report(@TenantId() tenantId: string, @Param("runId") runId: string) {
+    const candidate = this.store.evalRuns.get(runId);
+    const run = candidate?.tenantId === normalizeTenant(tenantId) ? candidate : undefined;
     return [
       "# RAG Evaluation Report",
       "",

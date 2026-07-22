@@ -30,11 +30,11 @@ describe("EvaluationController", () => {
     if (!("runId" in run)) {
       throw new Error("expected evaluation run to succeed");
     }
-    const baseline = controller.baseline(run.runId);
+    const baseline = controller.baseline("public", run.runId);
     if (!("runId" in baseline)) {
       throw new Error("expected baseline assignment to succeed");
     }
-    const report = controller.report(run.runId);
+    const report = controller.report("public", run.runId);
 
     expect(run.status).toBe("COMPLETED");
     expect(run.metrics.totalCases).toBe(1);

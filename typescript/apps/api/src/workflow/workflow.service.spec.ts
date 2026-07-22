@@ -23,7 +23,7 @@ describe("WorkflowService", () => {
 
     expect(task.status).toBe("DONE");
     expect(task.finalOutput).toContain("Research Report");
-    expect(service.getEvents(task.taskId).length).toBeGreaterThan(2);
+    expect(service.getEvents("public", task.taskId).length).toBeGreaterThan(2);
     expect(store.workflowSteps.get(task.taskId)?.length).toBeGreaterThan(1);
   });
 
@@ -48,7 +48,7 @@ describe("WorkflowService", () => {
     const processed = await service.processQueuedTasks();
 
     expect(processed).toBe(1);
-    expect(service.getTask(task.taskId)?.status).toBe("DONE");
-    expect(service.getTask(task.taskId)?.events.some((event) => event.eventType === "TASK_COMPLETED")).toBe(true);
+    expect(service.getTask("public", task.taskId)?.status).toBe("DONE");
+    expect(service.getTask("public", task.taskId)?.events.some((event) => event.eventType === "TASK_COMPLETED")).toBe(true);
   });
 });
