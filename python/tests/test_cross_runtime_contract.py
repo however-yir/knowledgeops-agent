@@ -80,3 +80,10 @@ def test_cross_runtime_sse_cases_negotiate_event_streams() -> None:
         if case.get("sse"):
             assert case["headers"]["Accept"] == "text/event-stream"
             assert case["headers"]["Connection"] == "close"
+
+
+def test_cross_runtime_provider_failure_matches_java_planner_fallback() -> None:
+    cases = json.loads((Path(__file__).parents[1] / "parity" / "cross-runtime-ci-cases.json").read_text(encoding="utf-8"))
+    provider_failure = next(case for case in cases if case["label"] == "react stream planner fallback")
+
+    assert provider_failure["sseEvents"] == ["trace", "token", "done"]

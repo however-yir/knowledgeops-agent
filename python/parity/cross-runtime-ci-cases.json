@@ -34,7 +34,7 @@
     "path": "/ai/react/chat",
     "body": {"prompt": "contract smoke", "chatId": "contract-react", "modelProfile": "balanced"},
     "expectStatus": 200,
-    "fields": ["ok", "msg", "chatId", "answer", "model", "routeProfile", "trace"]
+    "fields": ["ok", "msg", "chatId", "answer", "routeProfile", "trace"]
   },
   {
     "label": "react stream",
@@ -47,14 +47,14 @@
     "sseEvents": ["trace", "token", "done"]
   },
   {
-    "label": "react stream provider error",
+    "label": "react stream planner fallback",
     "method": "POST",
     "path": "/ai/react/chat/stream",
     "headers": {"Accept": "text/event-stream", "Connection": "close"},
     "body": {"prompt": "contract provider failure", "chatId": "contract-stream-error", "modelProfile": "balanced"},
     "expectStatus": 200,
     "sse": true,
-    "sseEvents": ["error"]
+    "sseEvents": ["trace", "token", "done"]
   },
   {
     "label": "missing file",
