@@ -15,8 +15,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     reply.status(status).send({
       ok: 0,
       msg: messageFrom(exception),
-      code: codeFrom(exception, status),
-      traceId
+      code: "REQUEST_FAILED",
+      traceId: null,
+      data: null
     });
   }
 }
@@ -38,24 +39,6 @@ function messageFrom(exception: unknown): string {
     }
   }
   return exception instanceof Error ? exception.message : "internal server error";
-}
-
-function codeFrom(exception: unknown, status: number): string {
-  if (exception instanceof HttpException) {
-    const response = exception.getResponse();
-    if (isRecord(response) && typeof response.code === "string") {
-      return response.code;
-    }
-  }
-  return status === HttpStatus.UNAUTHORIZED
-    ? "UNAUTHORIZED"
-    : status === HttpStatus.FORBIDDEN
-      ? "FORBIDDEN"
-      : status === HttpStatus.NOT_FOUND
-        ? "NOT_FOUND"
-        : status >= 500
-          ? "INTERNAL_ERROR"
-          : "BAD_REQUEST";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
