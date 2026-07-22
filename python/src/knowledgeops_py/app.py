@@ -87,6 +87,7 @@ from .infrastructure.security_repository import SecurityRepository, SqlAlchemySe
 from .infrastructure.session_repository import SqlAlchemySessionRepository
 from .infrastructure.workflow_repository import SqlAlchemyWorkflowRepository
 from .infrastructure.workspace_runtime import WorkspaceRuntime
+from .observability.metrics import metric_inc, prometheus_text
 from .observability.setup import configure_observability
 
 
@@ -1655,17 +1656,6 @@ def legacy_harness_schemas() -> list[dict[str, Any]]:
         {"contract": "legacy", "action": "memory_save", "requiredKeys": ["content"], "optionalKeys": ["userId", "type"], "riskLevel": "write"},
         {"contract": "legacy", "action": "graph_search", "requiredKeys": ["query"], "optionalKeys": ["limit"], "riskLevel": "read"},
     ]
-
-
-def prometheus_text(store: PlatformStore) -> str:
-    lines = ["# HELP knowledgeops_python_up Python service liveness", "# TYPE knowledgeops_python_up gauge", "knowledgeops_python_up 1"]
-    for name, value in sorted(store.metrics.items()):
-        lines.extend([f"# TYPE {name} counter", f"{name} {value:g}"])
-    return "\n".join(lines) + "\n"
-
-
-def metric_inc(store: PlatformStore, name: str, amount: float = 1.0) -> None:
-    store.metrics[name] = store.metrics.get(name, 0.0) + amount
 
 
 def estimate_tokens(text: str) -> int:
