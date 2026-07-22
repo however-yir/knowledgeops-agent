@@ -97,6 +97,13 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         research_task_id = assert_envelope(
             first_app.post("/ai/research/tasks", headers={"X-API-Key": "persistent-admin"}, json={"topic": "heat safety"}).json()
         )["taskId"]
+        assert_envelope(
+            first_app.post(
+                "/ai/memory/items",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"sessionId": "durable-chat", "type": "fact", "content": "Water and shade are important."},
+            ).json()
+        )
         queued = assert_envelope(
             first_app.post(
                 "/ingestion/upload/durable-chat",
@@ -120,6 +127,8 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         assert assert_envelope(second_app.get(f"/ai/workflow/tasks/{workflow_task_id}/events", headers={"X-API-Key": "persistent-admin"}).json())
         research_report = second_app.get(f"/ai/research/tasks/{research_task_id}/report", headers={"X-API-Key": "persistent-admin"})
         assert research_report.status_code == 200 and "heat safety" in research_report.text
+        memories = assert_envelope(second_app.get("/ai/memory/items?sessionId=durable-chat", headers={"X-API-Key": "persistent-admin"}).json())
+        assert memories[0]["content"] == "Water and shade are important."
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0

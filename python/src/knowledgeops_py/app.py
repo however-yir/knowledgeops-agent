@@ -52,6 +52,7 @@ from .dto import (
 from .infrastructure.database import create_engine, create_session_factory
 from .infrastructure.file_store import LocalFileStore
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
+from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
 from .infrastructure.providers import OpenAICompatibleChatProvider
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
@@ -162,6 +163,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     session_repository = SqlAlchemySessionRepository(session_factory) if session_factory is not None else None
     workflow_repository = SqlAlchemyWorkflowRepository(session_factory) if session_factory is not None else None
+    memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     ingestion_service = (
         IngestionApplicationService(
@@ -203,6 +205,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.security_repository = security_repository
     app.state.session_repository = session_repository
     app.state.workflow_repository = workflow_repository
+    app.state.memory_repository = memory_repository
     app.state.oidc_state_store = oidc_state_store
     app.state.ingestion_service = ingestion_service
     app.state.tracer = tracer
@@ -569,12 +572,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok({"confirmationToken": token, "action": action, "riskLevel": schema["riskLevel"], "expiresInSeconds": 300}, trace_id=ctx.trace_id)
 
     @app.post("/ai/harness/actions/execute/{token}")
-    def action_execute(token: str, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
+    async def action_execute(token: str, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
         confirmation = store.action_confirmations.get(sha256_hex(token))
         if not confirmation or confirmation["tenantId"] != ctx.tenant_id or confirmation["used"] or confirmation["expiresAt"] <= epoch_seconds():
             raise HTTPException(status_code=404, detail="confirmation token not found")
         confirmation["used"] = True
-        observation = execute_trusted_action(store, ctx, confirmation["action"], confirmation["actionInput"])
+        if memory_repository is not None and confirmation["action"] == "memory_save":
+            action_input = confirmation["actionInput"]
+            item = await memory_repository.create(
+                ctx.tenant_id,
+                ctx.principal,
+                str(action_input["content"]),
+                str(action_input.get("type") or "fact"),
+                action_input.get("sessionId"),
+            )
+            observation = {"action": "memory_save", "status": "COMPLETED", "result": item}
+        else:
+            observation = execute_trusted_action(store, ctx, confirmation["action"], confirmation["actionInput"])
         return ok(observation, trace_id=ctx.trace_id)
 
     @app.get("/ai/chat")
@@ -851,19 +865,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         content = str(payload.get("content", "")).strip()
         if not content:
             raise HTTPException(status_code=422, detail="memory content is required")
+        if memory_repository is not None:
+            item = await memory_repository.create(
+                ctx.tenant_id,
+                ctx.principal,
+                content,
+                str(payload.get("type") or "fact"),
+                payload.get("sessionId"),
+            )
+            return ok(item, trace_id=ctx.trace_id)
         item = {"memoryId": new_id("mem"), "tenantId": ctx.tenant_id, "principal": ctx.principal, "sessionId": payload.get("sessionId"), "type": str(payload.get("type") or "fact"), "content": content, "createdAt": now_iso()}
         store.memories[item["memoryId"]] = item
         return ok(item, trace_id=ctx.trace_id)
 
     @app.get("/ai/memory/items")
-    def memory_list(sessionId: str | None = None, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def memory_list(sessionId: str | None = None, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+        if memory_repository is not None:
+            return ok(await memory_repository.list(ctx.tenant_id, ctx.principal, sessionId), trace_id=ctx.trace_id)
         items = [item for item in store.memories.values() if item["tenantId"] == ctx.tenant_id and item["principal"] == ctx.principal and (not sessionId or item.get("sessionId") == sessionId)]
         return ok(items, trace_id=ctx.trace_id)
 
     @app.get("/ai/memory/context")
-    def memory_context(prompt: str, sessionId: str | None = None, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def memory_context(prompt: str, sessionId: str | None = None, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
         tokens = set(tokenize(prompt))
-        items = [item for item in store.memories.values() if item["tenantId"] == ctx.tenant_id and item["principal"] == ctx.principal and (not sessionId or item.get("sessionId") == sessionId)]
+        items = (
+            await memory_repository.list(ctx.tenant_id, ctx.principal, sessionId)
+            if memory_repository is not None
+            else [item for item in store.memories.values() if item["tenantId"] == ctx.tenant_id and item["principal"] == ctx.principal and (not sessionId or item.get("sessionId") == sessionId)]
+        )
         matched = [item for item in items if tokens.intersection(tokenize(item["content"]))]
         return ok(matched[:10], trace_id=ctx.trace_id)
 

@@ -20,6 +20,7 @@ from knowledgeops_py.domain.ports import (
 from knowledgeops_py.infrastructure.database import create_engine, create_session_factory, session_scope
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository
+from knowledgeops_py.infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from knowledgeops_py.infrastructure.models import (
     ApiKeyRecord,
     AuditLogRecord,
@@ -312,6 +313,24 @@ def test_sql_workflow_repository_persists_tasks_steps_events_and_tenant_boundary
         assert await repository.events("tenant-b", task["taskId"]) is None
         simple = await repository.create_completed("tenant-a", "RESEARCH", "topic", "quality", "", "report", [], None)
         assert [event["type"] for event in simple["events"]] == ["TASK_CREATED", "TASK_COMPLETED"]
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_sql_memory_repository_scopes_items_by_tenant_principal_and_session() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemyMemoryRepository(create_session_factory(engine))
+        first = await repository.create("tenant-a", "alice", "Use concise answers.", "fact", "session-1")
+        await repository.create("tenant-a", "alice", "A separate session.", "short", "session-2")
+        await repository.create("tenant-a", "bob", "Other principal.", "fact", "session-1")
+        await repository.create("tenant-b", "alice", "Other tenant.", "fact", "session-1")
+        assert (await repository.list("tenant-a", "alice", "session-1"))[0]["memoryId"] == first["memoryId"]
+        assert {item["content"] for item in await repository.list("tenant-a", "alice")} == {"Use concise answers.", "A separate session."}
+        assert await repository.list("tenant-b", "alice")
         await engine.dispose()
 
     asyncio.run(exercise())
