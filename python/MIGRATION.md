@@ -36,5 +36,20 @@ knowledgeops-python-baseline-manifest \
    Before the replay, run `knowledgeops-python-shadow-preflight`. It verifies production dependencies, OIDC settings, queue selection, isolated-write declarations and the 10,000-request-or-7-day observation target without printing secrets or calling external services.
 2. Mirror read-only production traffic to Python. Mirror writes only into the isolated database.
 3. Require 10,000 requests or seven continuous days with structure difference `<0.5%`, no cross-tenant result, error rate within `0.2` percentage points of Java and p95 no more than `1.2x` Java.
+   Export only desensitized aggregate measurements as JSON and run `knowledgeops-python-shadow-evidence --evidence shadow-metrics.json`; it prints a machine-readable accepted/rejected decision and never reads raw request payloads.
+   The evidence file contains counts and decimal rates only, for example:
+
+   ```json
+   {
+     "requestCount": 10000,
+     "continuousDays": 0,
+     "structureDifferenceRate": 0.004,
+     "javaErrorRate": 0.01,
+     "pythonErrorRate": 0.012,
+     "javaP95Ms": 500,
+     "pythonP95Ms": 600,
+     "crossTenantErrors": 0
+   }
+   ```
 4. Drain Java workers, stamp the compatible Alembic revision, start Python workers, then direct write traffic to Python.
 5. On any breach, route back to Java and restart Java workers. Do not run destructive Python migrations during rollback.
