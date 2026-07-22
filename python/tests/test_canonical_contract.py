@@ -59,6 +59,21 @@ def test_canonical_chat_query_validation_uses_java_result() -> None:
     }
 
 
+def test_canonical_sessions_use_java_paged_result_and_state_shape() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+    client.post("/ai/chat", headers=AUTH_HEADERS, json={"chatId": "session-shape", "prompt": "hello"})
+
+    page = client.get("/ai/sessions?page=1&pageSize=1&search=Session", headers=AUTH_HEADERS)
+    state = client.get("/ai/sessions/session-shape", headers=AUTH_HEADERS)
+
+    assert page.status_code == 200
+    assert set(page.json()) == {"items", "total", "page", "pageSize"}
+    assert page.json()["total"] == 1
+    assert {"id", "title", "updatedAt", "modelProfile", "streaming", "pinned", "archived", "workspaceId", "activeBranchId", "branches"} <= set(page.json()["items"][0])
+    assert state.json()["id"] == "session-shape"
+    assert isinstance(state.json()["updatedAt"], int)
+
+
 def test_python_v1_keeps_legacy_envelope_and_java_errors_return_result() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
 

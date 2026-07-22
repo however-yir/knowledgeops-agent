@@ -172,8 +172,8 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
         failures.append("canonical PDF chat did not accept Java query parameters")
 
     sessions = client.get("/ai/sessions", headers=AUTH_HEADERS).json()
-    if "data" in sessions:
-        failures.append("canonical sessions response retained the Python envelope")
+    if "data" in sessions or not {"items", "total", "page", "pageSize"} <= set(sessions):
+        failures.append("canonical sessions response did not match PagedResult")
     feedback = client.post("/ai/feedback", headers=AUTH_HEADERS, json={"chatId": "contract-chat", "rating": 1}).json()
     if feedback.get("ok") != 1 or feedback.get("data") is not None:
         failures.append("canonical feedback response did not match Result")

@@ -110,6 +110,12 @@ class SessionDto(BaseModel):
     chatId: str
     modelProfile: str
     updatedAt: str
+    workspace: str | None = None
+    branches: list[dict[str, Any]] = Field(default_factory=list)
+    activeBranchId: str | None = None
+    streaming: bool = True
+    pinned: bool = False
+    archived: bool = False
     messages: list[dict[str, Any]] = Field(default_factory=list)
 
 

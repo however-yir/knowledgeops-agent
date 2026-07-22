@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Request
@@ -46,7 +47,12 @@ async def canonicalize_response(request: Request, response: Response) -> Respons
     if payload["ok"] == 0:
         canonical_payload: Any = failure_payload(path, str(payload.get("msg") or "request failed"))
     else:
-        canonical_payload = success_payload(path, payload.get("data"), str(payload.get("msg") or "ok"))
+        canonical_payload = success_payload(
+            path,
+            payload.get("data"),
+            str(payload.get("msg") or "ok"),
+            request.query_params,
+        )
 
     if payload["ok"] == 1 and path in {"/ai/chat", "/ai/pdf/chat"} and isinstance(canonical_payload, dict):
         answer = str(canonical_payload.get("answer") or "")
@@ -80,7 +86,7 @@ def copy_headers(source: Response, target: Response) -> None:
     target.raw_headers.extend(preserved)
 
 
-def success_payload(path: str, data: Any, message: str) -> Any:
+def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]) -> Any:
     if path in AUTH_PATHS:
         return auth_token_payload(data, 1, message)
     if path in API_KEY_PATHS:
@@ -89,6 +95,10 @@ def success_payload(path: str, data: Any, message: str) -> Any:
         return {"ok": 1, "msg": message, "job": ingestion_job_payload(data)}
     if path in {"/ai/react/chat", "/ai/workflow/react/chat"}:
         return react_response_payload(data)
+    if path == "/ai/sessions":
+        return paged_session_payload(data, query)
+    if is_session_state_path(path):
+        return session_state_payload(data)
     if path == "/ai/feedback":
         return result_payload(1, "ok")
     return data
@@ -187,6 +197,82 @@ def model_data(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
         return value.model_dump()
     return {}
+
+
+def paged_session_payload(data: Any, query: Mapping[str, str]) -> dict[str, Any]:
+    items = [item for item in (data if isinstance(data, list) else []) if session_matches(item, query)]
+    page = positive_int(query.get("page"), default=1)
+    page_size = positive_int(query.get("pageSize"), default=20)
+    start = (page - 1) * page_size
+    return {
+        "items": [session_state_payload(item) for item in items[start : start + page_size]],
+        "total": len(items),
+        "page": page,
+        "pageSize": page_size,
+    }
+
+
+def session_matches(session: Any, query: Mapping[str, str]) -> bool:
+    source = model_data(session)
+    if query.get("includeArchived", "false").lower() != "true" and source.get("archived"):
+        return False
+    search = query.get("search", "").strip().lower()
+    if search and search not in str(source.get("title") or "").lower():
+        return False
+    workspace = query.get("workspace")
+    return not workspace or workspace == (source.get("workspaceId") or source.get("workspace") or "default")
+
+
+def session_state_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "id": source.get("id") or source.get("sessionId"),
+        "title": source.get("title"),
+        "updatedAt": epoch_millis(source.get("updatedAt")),
+        "modelProfile": source.get("modelProfile") or "balanced",
+        "streaming": bool(source.get("streaming", True)),
+        "pinned": bool(source.get("pinned", False)),
+        "archived": bool(source.get("archived", False)),
+        "workspaceId": source.get("workspaceId") or source.get("workspace") or "default",
+        "activeBranchId": source.get("activeBranchId"),
+        "branches": [branch_state_payload(branch) for branch in source.get("branches") or []],
+    }
+
+
+def branch_state_payload(branch: Any) -> dict[str, Any]:
+    source = model_data(branch)
+    return {
+        "id": source.get("id") or source.get("branchId"),
+        "title": source.get("title"),
+        "parentBranchId": source.get("parentBranchId"),
+        "parentMessageId": source.get("parentMessageId"),
+        "updatedAt": epoch_millis(source.get("updatedAt")),
+        "messages": source.get("messages") or [],
+        "traceSteps": source.get("traceSteps") or [],
+    }
+
+
+def is_session_state_path(path: str) -> bool:
+    parts = path.split("/")
+    return path.startswith("/ai/sessions/") and (len(parts) == 4 or parts[-1] in {"pin", "archive"})
+
+
+def positive_int(value: str | None, default: int) -> int:
+    try:
+        return max(1, int(value)) if value is not None else default
+    except ValueError:
+        return default
+
+
+def epoch_millis(value: Any) -> int:
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() * 1000)
+        except ValueError:
+            pass
+    return int(datetime.now(UTC).timestamp() * 1000)
 
 
 def result_payload(ok: int, message: str, code: str | None = None) -> dict[str, Any]:
