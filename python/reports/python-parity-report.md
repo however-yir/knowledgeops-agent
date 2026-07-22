@@ -42,6 +42,11 @@ Python target: FastAPI enterprise service edition.
 | GET | `/ai/history/{kind}/{chatId}` | implemented |
 | GET | `/ai/sessions` | implemented |
 | GET | `/ai/sessions/{sessionId}` | implemented |
+| PUT | `/ai/sessions/{sessionId}` | implemented |
+| POST | `/ai/sessions/{sessionId}/pin` | implemented |
+| POST | `/ai/sessions/{sessionId}/archive` | implemented |
+| POST | `/ai/sessions/{sessionId}/branches/compare` | implemented |
+| POST | `/ai/sessions/{sessionId}/branches/merge` | implemented |
 | POST | `/ai/feedback` | implemented |
 | GET | `/ai/evaluation/datasets` | implemented |
 | POST | `/ai/evaluation/runs` | implemented |

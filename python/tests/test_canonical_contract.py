@@ -87,6 +87,86 @@ def test_canonical_sessions_use_java_paged_result_and_state_shape() -> None:
     assert isinstance(state.json()["updatedAt"], int)
 
 
+def test_canonical_session_branches_match_java_compare_and_merge_contracts() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+    state = {
+        "title": "Branch session",
+        "workspaceId": "team",
+        "streaming": False,
+        "activeBranchId": "target",
+        "branches": [
+            {
+                "id": "source",
+                "title": "Source",
+                "messages": [
+                    {"id": "source-common", "role": "user", "content": "common message"},
+                    {"id": "source-only", "role": "assistant", "content": "source only"},
+                ],
+            },
+            {
+                "id": "target",
+                "title": "Target",
+                "messages": [
+                    {"id": "target-common", "role": "user", "content": " common   message "},
+                    {"id": "target-only", "role": "assistant", "content": "target only"},
+                ],
+            },
+        ],
+    }
+
+    missing = client.get("/ai/sessions/missing", headers=AUTH_HEADERS)
+    saved = client.put("/ai/sessions/branch-session", headers=AUTH_HEADERS, json=state)
+    defaulted = client.put(
+        "/ai/sessions/defaulted-session",
+        headers=AUTH_HEADERS,
+        json={"title": "   ", "workspaceId": " ", "activeBranchId": " ", "branches": [{"id": "fallback"}]},
+    )
+    comparison = client.post(
+        "/ai/sessions/branch-session/branches/compare",
+        headers=AUTH_HEADERS,
+        json={"sourceBranchId": "source", "targetBranchId": "target"},
+    )
+    merged = client.post(
+        "/ai/sessions/branch-session/branches/merge",
+        headers=AUTH_HEADERS,
+        json={"sourceBranchId": "source", "targetBranchId": "target", "title": "Merged"},
+    )
+
+    assert missing.status_code == 400
+    assert missing.json()["msg"] == "session not found"
+    assert set(saved.json()) == {
+        "id",
+        "title",
+        "updatedAt",
+        "modelProfile",
+        "streaming",
+        "pinned",
+        "archived",
+        "workspaceId",
+        "activeBranchId",
+        "branches",
+    }
+    assert saved.json()["workspaceId"] == "team"
+    assert defaulted.json()["title"] == "新会话"
+    assert defaulted.json()["workspaceId"] == "default"
+    assert defaulted.json()["activeBranchId"] == "fallback"
+    assert comparison.json() == {
+        "sourceBranchId": "source",
+        "targetBranchId": "target",
+        "sourceMessageCount": 2,
+        "targetMessageCount": 2,
+        "commonMessageCount": 1,
+        "sourceOnlyCount": 1,
+        "targetOnlyCount": 1,
+        "sourceOnlyPreview": ["source only"],
+        "targetOnlyPreview": ["target only"],
+    }
+    assert set(merged.json()) == {"session", "mergedBranch", "mergedMessageCount"}
+    assert merged.json()["mergedMessageCount"] == 3
+    assert merged.json()["mergedBranch"]["title"] == "Merged"
+    assert merged.json()["session"]["activeBranchId"] == merged.json()["mergedBranch"]["id"]
+
+
 def test_canonical_evaluation_datasets_hide_cases_behind_java_summary_dto() -> None:
     response = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a"))).get(
         "/ai/evaluation/datasets", headers=AUTH_HEADERS

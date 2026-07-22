@@ -38,6 +38,11 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("GET", "/ai/history/{kind}/{chatId}"),
     ("GET", "/ai/sessions"),
     ("GET", "/ai/sessions/{sessionId}"),
+    ("PUT", "/ai/sessions/{sessionId}"),
+    ("POST", "/ai/sessions/{sessionId}/pin"),
+    ("POST", "/ai/sessions/{sessionId}/archive"),
+    ("POST", "/ai/sessions/{sessionId}/branches/compare"),
+    ("POST", "/ai/sessions/{sessionId}/branches/merge"),
     ("POST", "/ai/feedback"),
     ("GET", "/ai/evaluation/datasets"),
     ("POST", "/ai/evaluation/runs"),
@@ -176,6 +181,34 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     sessions = client.get("/ai/sessions", headers=AUTH_HEADERS).json()
     if "data" in sessions or not {"items", "total", "page", "pageSize"} <= set(sessions):
         failures.append("canonical sessions response did not match PagedResult")
+    branch_state = client.put(
+        "/ai/sessions/contract-branches",
+        headers=AUTH_HEADERS,
+        json={
+            "title": "Contract branches",
+            "branches": [
+                {"id": "source", "messages": [{"role": "user", "content": "shared"}, {"role": "assistant", "content": "source"}]},
+                {"id": "target", "messages": [{"role": "user", "content": " shared "}, {"role": "assistant", "content": "target"}]},
+            ],
+            "activeBranchId": "target",
+        },
+    ).json()
+    if "data" in branch_state or branch_state.get("id") != "contract-branches":
+        failures.append("canonical session upsert did not match AgentSessionStateVO")
+    branch_compare = client.post(
+        "/ai/sessions/contract-branches/branches/compare",
+        headers=AUTH_HEADERS,
+        json={"sourceBranchId": "source", "targetBranchId": "target"},
+    ).json()
+    if branch_compare.get("commonMessageCount") != 1 or branch_compare.get("sourceOnlyPreview") != ["source"]:
+        failures.append("canonical branch comparison did not match BranchCompareResultVO")
+    branch_merge = client.post(
+        "/ai/sessions/contract-branches/branches/merge",
+        headers=AUTH_HEADERS,
+        json={"sourceBranchId": "source", "targetBranchId": "target"},
+    ).json()
+    if set(branch_merge) != {"session", "mergedBranch", "mergedMessageCount"} or branch_merge.get("mergedMessageCount") != 3:
+        failures.append("canonical branch merge did not match BranchMergeResultVO")
     feedback = client.post("/ai/feedback", headers=AUTH_HEADERS, json={"chatId": "contract-chat", "rating": 1}).json()
     if feedback.get("ok") != 1 or feedback.get("data") is not None:
         failures.append("canonical feedback response did not match Result")

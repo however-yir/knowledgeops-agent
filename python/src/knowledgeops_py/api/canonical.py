@@ -105,6 +105,10 @@ def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]
         return evaluation_run_payload(data)
     if path == "/ai/sessions":
         return paged_session_payload(data, query)
+    if is_session_branch_compare_path(path):
+        return session_branch_compare_payload(data)
+    if is_session_branch_merge_path(path):
+        return session_branch_merge_payload(data)
     if is_session_state_path(path):
         return session_state_payload(data)
     if path == "/ai/feedback":
@@ -331,15 +335,66 @@ def branch_state_payload(branch: Any) -> dict[str, Any]:
         "title": source.get("title"),
         "parentBranchId": source.get("parentBranchId"),
         "parentMessageId": source.get("parentMessageId"),
-        "updatedAt": epoch_millis(source.get("updatedAt")),
-        "messages": source.get("messages") or [],
-        "traceSteps": source.get("traceSteps") or [],
+        "updatedAt": epoch_millis_or_none(source.get("updatedAt")),
+        "messages": [session_message_payload(item) for item in source["messages"]]
+        if isinstance(source.get("messages"), list)
+        else None,
+        "traceSteps": source.get("traceSteps"),
     }
 
 
 def is_session_state_path(path: str) -> bool:
     parts = path.split("/")
     return path.startswith("/ai/sessions/") and (len(parts) == 4 or parts[-1] in {"pin", "archive"})
+
+
+def is_session_branch_compare_path(path: str) -> bool:
+    return path.startswith("/ai/sessions/") and path.endswith("/branches/compare")
+
+
+def is_session_branch_merge_path(path: str) -> bool:
+    return path.startswith("/ai/sessions/") and path.endswith("/branches/merge")
+
+
+def session_branch_compare_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "sourceBranchId": source.get("sourceBranchId"),
+        "targetBranchId": source.get("targetBranchId"),
+        "sourceMessageCount": source.get("sourceMessageCount", 0),
+        "targetMessageCount": source.get("targetMessageCount", 0),
+        "commonMessageCount": source.get("commonMessageCount", 0),
+        "sourceOnlyCount": source.get("sourceOnlyCount", 0),
+        "targetOnlyCount": source.get("targetOnlyCount", 0),
+        "sourceOnlyPreview": source.get("sourceOnlyPreview") or [],
+        "targetOnlyPreview": source.get("targetOnlyPreview") or [],
+    }
+
+
+def session_branch_merge_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "session": session_state_payload(source.get("session")),
+        "mergedBranch": branch_state_payload(source.get("mergedBranch")),
+        "mergedMessageCount": source.get("mergedMessageCount", 0),
+    }
+
+
+def session_message_payload(message: Any) -> dict[str, Any]:
+    source = model_data(message)
+    return {
+        "id": source.get("id"),
+        "role": source.get("role"),
+        "content": source.get("content"),
+        "createdAt": epoch_millis_or_none(source.get("createdAt")),
+        "state": source.get("state"),
+        "citations": source.get("citations"),
+        "evidence": source.get("evidence"),
+        "taskId": source.get("taskId"),
+        "traceId": source.get("traceId"),
+        "memorySnapshot": source.get("memorySnapshot"),
+        "workflowState": source.get("workflowState"),
+    }
 
 
 def positive_int(value: str | None, default: int) -> int:
@@ -358,6 +413,10 @@ def epoch_millis(value: Any) -> int:
         except ValueError:
             pass
     return int(datetime.now(UTC).timestamp() * 1000)
+
+
+def epoch_millis_or_none(value: Any) -> int | None:
+    return epoch_millis(value) if value is not None else None
 
 
 def result_payload(ok: int, message: str, code: str | None = None) -> dict[str, Any]:
