@@ -102,7 +102,12 @@ services:
     build: &python-build
       context: ./python
     image: knowledgeops-contract-python:local
-    command: ["sh", "-ec", "alembic upgrade head && APP_DATABASE_URL=$${APP_PGVECTOR_URL} alembic upgrade head"]
+    command:
+      [
+        "sh",
+        "-ec",
+        "for attempt in $$(seq 1 30); do if alembic upgrade head && APP_DATABASE_URL=$${APP_PGVECTOR_URL} alembic upgrade head; then exit 0; fi; sleep 2; done; exit 1"
+      ]
     environment: &python-environment
       APP_ENV: production
       APP_DATABASE_URL: mysql+aiomysql://root:contract-mysql-pass@python-mysql:3306/knowledgeops_python
