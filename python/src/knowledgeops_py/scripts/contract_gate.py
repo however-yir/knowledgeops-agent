@@ -31,6 +31,7 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("POST", "/ingestion/upload/{chatId}"),
     ("GET", "/ingestion/jobs"),
     ("GET", "/ingestion/jobs/{jobId}"),
+    ("POST", "/ingestion/jobs/process"),
     ("POST", "/ai/pdf/chat"),
     ("GET", "/ai/pdf/chat"),
     ("GET", "/ai/pdf/file/{chatId}"),
@@ -163,12 +164,19 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     if upload.get("ok") != 1 or not upload.get("job"):
         failures.append("canonical upload response did not match IngestionSubmitVO")
     job_id = upload["job"]["jobId"]
-    client.post("/ingestion/upload/contract-rag-2", headers=AUTH_HEADERS, content=b"second document")
-    jobs = client.get("/ingestion/jobs", headers=AUTH_HEADERS).json()
+    client.post(
+        "/ingestion/upload/contract-rag-2",
+        headers=AUTH_HEADERS,
+        files={"file": ("second.txt", b"second document", "text/plain")},
+    )
+    jobs = client.get("/ingestion/jobs?chatId=contract-rag", headers=AUTH_HEADERS).json()
     if not isinstance(jobs, list):
         failures.append("canonical ingestion jobs response retained the Python envelope")
     job = client.get(f"/ingestion/jobs/{job_id}", headers=AUTH_HEADERS).json()
-    if job.get("jobId") != job_id:
+    if set(job) != {
+        "jobId", "chatId", "sourceName", "status", "attemptCount", "maxRetries", "errorMessage",
+        "traceId", "queueBackend", "createdAt", "startedAt", "finishedAt",
+    } or job.get("jobId") != job_id or job.get("status") not in {"PENDING", "SUCCEEDED"}:
         failures.append("canonical ingestion job response did not return IngestionJobVO")
 
     rag = envelope_data(legacy_client.post("/ai/pdf/chat", headers=AUTH_HEADERS, json={"chatId": "contract-rag", "prompt": "citations heat", "modelProfile": "quality"}))

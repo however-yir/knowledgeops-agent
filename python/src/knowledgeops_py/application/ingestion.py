@@ -25,8 +25,17 @@ class IngestionApplicationService:
     max_retries: int = 3
     retry_delay_seconds: int = 10
 
-    async def submit(self, context: TenantContext, chat_id: str, source_name: str, content: bytes) -> PersistedIngestionJob:
-        idempotency_key = hashlib.sha256(f"{context.tenant_id}|{chat_id}|".encode() + content).hexdigest()
+    async def submit(
+        self,
+        context: TenantContext,
+        chat_id: str,
+        source_name: str,
+        content: bytes,
+        provided_idempotency_key: str | None = None,
+    ) -> PersistedIngestionJob:
+        idempotency_key = normalize_idempotency_key(
+            context.tenant_id, chat_id, content, provided_idempotency_key
+        )
         existing = await self.repository.find_by_idempotency(context.tenant_id, idempotency_key)
         if existing is not None:
             return existing
@@ -120,6 +129,18 @@ class IngestionApplicationService:
             }
             for index, part in enumerate(parts)
         ]
+
+
+def normalize_idempotency_key(
+    tenant_id: str, chat_id: str, content: bytes, provided_idempotency_key: str | None
+) -> str:
+    """Match Java's client/automatic key behaviour without cross-tenant collisions."""
+    provided = provided_idempotency_key.strip() if provided_idempotency_key else ""
+    if provided:
+        return "client:" + hashlib.sha256(f"{tenant_id}|{provided}".encode()).hexdigest()
+    content_hash = hashlib.sha256(content).hexdigest()
+    seed = f"{tenant_id}|{chat_id}|{content_hash}"
+    return "auto:" + hashlib.sha256(seed.encode()).hexdigest()
 
 
 def extract_text(content: bytes) -> str:

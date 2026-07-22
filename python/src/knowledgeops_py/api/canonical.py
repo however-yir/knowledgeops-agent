@@ -14,6 +14,7 @@ LEGACY_PREFIX = "/python/v1"
 AUTH_PATHS = {"/auth/token", "/auth/refresh"}
 API_KEY_PATHS = {"/auth/api-keys", "/auth/api-keys/rotate", "/auth/api-keys/revoke"}
 UPLOAD_PATHS = {"/ai/pdf/upload", "/ingestion/upload"}
+INGESTION_PROCESS_PATH = "/ingestion/jobs/process"
 
 
 def prepare_contract_path(request: Request) -> None:
@@ -91,8 +92,12 @@ def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]
         return auth_token_payload(data, 1, message)
     if path in API_KEY_PATHS:
         return api_key_payload(data, 1, message)
-    if any(path.startswith(prefix) for prefix in UPLOAD_PATHS):
+    if any(path.startswith(prefix) for prefix in UPLOAD_PATHS) or path == INGESTION_PROCESS_PATH:
         return {"ok": 1, "msg": message, "job": ingestion_job_payload(data)}
+    if path == "/ingestion/jobs":
+        return [ingestion_job_payload(item) for item in data] if isinstance(data, list) else data
+    if path.startswith("/ingestion/jobs/"):
+        return ingestion_job_payload(data)
     if path in {"/ai/react/chat", "/ai/workflow/react/chat"}:
         return react_response_payload(data)
     if path == "/ai/evaluation/datasets":
@@ -153,20 +158,25 @@ def api_key_payload(data: Any, ok: int, message: str) -> dict[str, Any]:
 def ingestion_job_payload(data: Any) -> Any:
     if not isinstance(data, dict):
         return data
+    status = {"QUEUED": "PENDING", "COMPLETED": "SUCCEEDED"}.get(data.get("status"), data.get("status"))
     return {
         "jobId": data.get("jobId"),
         "chatId": data.get("chatId"),
         "sourceName": data.get("sourceName"),
-        "status": data.get("status"),
+        "status": status,
         "attemptCount": data.get("attemptCount"),
         "maxRetries": data.get("maxRetries"),
         "errorMessage": data.get("errorMessage"),
         "traceId": data.get("traceId"),
         "queueBackend": data.get("queueBackend"),
-        "createdAt": data.get("createdAt"),
-        "startedAt": data.get("startedAt"),
-        "finishedAt": data.get("finishedAt"),
+        "createdAt": java_local_datetime(data.get("createdAt")),
+        "startedAt": java_local_datetime(data.get("startedAt")),
+        "finishedAt": java_local_datetime(data.get("finishedAt")),
     }
+
+
+def java_local_datetime(value: Any) -> Any:
+    return value.removesuffix("Z") if isinstance(value, str) else value
 
 
 def react_response_payload(data: Any) -> dict[str, Any]:

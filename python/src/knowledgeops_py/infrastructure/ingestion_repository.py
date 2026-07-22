@@ -27,6 +27,8 @@ class PersistedIngestionJob:
     error_message: str | None
     created_at: datetime
     updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
 
 
 @dataclass(slots=True)
@@ -245,6 +247,8 @@ def to_job(record: IngestionJobRecord | None) -> PersistedIngestionJob | None:
         error_message=record.error_message,
         created_at=as_utc(record.created_at),
         updated_at=as_utc(record.updated_at),
+        started_at=as_utc(record.started_at) if record.started_at is not None else None,
+        finished_at=as_utc(record.finished_at) if record.finished_at is not None else None,
     )
 
 

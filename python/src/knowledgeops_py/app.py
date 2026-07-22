@@ -31,7 +31,7 @@ from .api.canonical import (
     react_response_payload,
     react_trace_payload,
 )
-from .application.ingestion import IngestionApplicationService
+from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .config import Settings, load_settings
 from .domain.context import TenantContext
 from .dto import (
@@ -471,25 +471,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/ai/pdf/upload/{chatId}")
     @app.post("/ingestion/upload/{chatId}")
     async def upload(chatId: str, request: Request, ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_WRITE"))):
-        source_name, content = await request_file(request, active_settings)
+        legacy = is_legacy_request(request)
+        if not legacy and not chatId.strip():
+            raise HTTPException(status_code=400, detail="chatId is required")
+        source_name, content = await request_file(request, active_settings, require_file=not legacy)
+        idempotency_key = request.headers.get("x-idempotency-key")
         if ingestion_service is not None:
-            job = await ingestion_service.submit(tenant_context(ctx), chatId, source_name, content)
+            job = await ingestion_service.submit(tenant_context(ctx), chatId, source_name, content, idempotency_key)
             return ok(IngestionJobDto(**persisted_public_job(job)), msg="accepted", trace_id=ctx.trace_id)
-        job = create_ingestion_job(store, active_settings, ctx, chatId, source_name, content)
+        job = create_ingestion_job(store, active_settings, ctx, chatId, source_name, content, idempotency_key)
         enqueue_and_process(store, active_settings, job["jobId"])
         return ok(IngestionJobDto(**public_job(store.jobs[job["jobId"]])), msg="accepted", trace_id=ctx.trace_id)
 
     @app.get("/ingestion/jobs")
-    async def ingestion_jobs(ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ")), chatId: str | None = Query(default=None), limit: int = Query(default=50)):
+    async def ingestion_jobs(
+        request: Request,
+        ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ")),
+        chatId: str | None = Query(default=None),
+        limit: int | None = Query(default=None),
+    ):
+        legacy = is_legacy_request(request)
+        if not legacy and chatId is None:
+            raise HTTPException(status_code=400, detail="chatId is required")
+        selected_limit = 50 if legacy else 20
+        if limit is not None:
+            selected_limit = limit
+        selected_limit = bounded(selected_limit, 1, 200 if legacy else 100)
         if ingestion_service is not None:
-            jobs = await ingestion_service.repository.list_jobs(ctx.tenant_id, chatId, bounded(limit, 1, 200))
+            jobs = await ingestion_service.repository.list_jobs(ctx.tenant_id, chatId, selected_limit)
             return ok([IngestionJobDto(**persisted_public_job(job)).model_dump() for job in jobs], trace_id=ctx.trace_id)
         jobs = [
             IngestionJobDto(**job).model_dump()
             for job in store.jobs.values()
             if job["tenantId"] == ctx.tenant_id and (not chatId or job["chatId"] == chatId)
         ]
-        return ok(jobs[: bounded(limit, 1, 200)], trace_id=ctx.trace_id)
+        return ok(jobs[:selected_limit], trace_id=ctx.trace_id)
 
     @app.get("/ingestion/jobs/{jobId}")
     async def ingestion_job(jobId: str, ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_READ"))):
@@ -779,12 +795,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return PlainTextResponse("\n".join(chunk["content"] for chunk in chunks), media_type="text/plain; charset=utf-8")
 
     @app.post("/ingestion/jobs/process")
-    async def ingestion_process(ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_WRITE"))):
-        if ingestion_service is not None:
-            processed = await ingestion_service.process_ready(ctx.tenant_id)
+    async def ingestion_process(
+        request: Request,
+        jobId: str | None = Query(default=None),
+        ctx: RequestContext = Depends(require_permissions("PERM_INGESTION_WRITE")),
+    ):
+        if is_legacy_request(request):
+            if ingestion_service is not None:
+                processed = await ingestion_service.process_ready(ctx.tenant_id)
+                return ok({"processed": processed}, trace_id=ctx.trace_id)
+            processed = process_pending_jobs(store, active_settings, ctx.tenant_id)
             return ok({"processed": processed}, trace_id=ctx.trace_id)
-        processed = process_pending_jobs(store, active_settings, ctx.tenant_id)
-        return ok({"processed": processed}, trace_id=ctx.trace_id)
+        if "ROLE_ADMIN" not in ctx.permissions:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="permission denied")
+        if jobId is None or not jobId.strip():
+            requeued = await ingestion_service.publish_ready(limit=20) if ingestion_service is not None else 0
+            return ok(None, msg=f"requeue={requeued}", trace_id=ctx.trace_id)
+        if ingestion_service is not None:
+            job = await ingestion_service.repository.get(ctx.tenant_id, jobId)
+            if job is None:
+                raise HTTPException(status_code=404, detail="job not found")
+            processed = await ingestion_service.process(job.job_id)
+            return ok(None, msg="processed" if processed is not None else "empty", trace_id=ctx.trace_id)
+        job = store.jobs.get(jobId)
+        if not job or job["tenantId"] != ctx.tenant_id:
+            raise HTTPException(status_code=404, detail="job not found")
+        picked = job["status"] in {"QUEUED", "RETRY"}
+        if picked:
+            process_ingestion_job(store, jobId)
+        return ok(None, msg="processed" if picked else "empty", trace_id=ctx.trace_id)
 
     @app.get("/ai/history/{kind}")
     async def history_list(kind: str, page: int = Query(default=1, ge=1), pageSize: int = Query(default=20, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
@@ -2235,7 +2274,19 @@ def evidence_accepts(score: float) -> bool:
     return score > 0
 
 
-def create_ingestion_job(store: PlatformStore, settings: Settings, ctx: RequestContext, chat_id: str, source_name: str, content: bytes) -> dict[str, Any]:
+def create_ingestion_job(
+    store: PlatformStore,
+    settings: Settings,
+    ctx: RequestContext,
+    chat_id: str,
+    source_name: str,
+    content: bytes,
+    provided_idempotency_key: str | None = None,
+) -> dict[str, Any]:
+    idempotency_key = normalize_idempotency_key(ctx.tenant_id, chat_id, content, provided_idempotency_key)
+    for existing in store.jobs.values():
+        if existing["tenantId"] == ctx.tenant_id and existing.get("idempotencyKey") == idempotency_key:
+            return public_job(existing)
     now = now_iso()
     job = {
         "jobId": new_id("job"),
@@ -2247,9 +2298,13 @@ def create_ingestion_job(store: PlatformStore, settings: Settings, ctx: RequestC
         "maxRetries": 3,
         "queueBackend": settings.ingestion_queue_backend,
         "traceId": ctx.trace_id,
+        "errorMessage": None,
         "content": content,
+        "idempotencyKey": idempotency_key,
         "createdAt": now,
         "updatedAt": now,
+        "startedAt": None,
+        "finishedAt": None,
     }
     store.jobs[job["jobId"]] = job
     return public_job(job)
@@ -2270,6 +2325,7 @@ def process_ingestion_job(store: PlatformStore, job_id: str) -> None:
         return
     job["status"] = "RUNNING"
     job["attemptCount"] += 1
+    job["startedAt"] = now_iso()
     text = safe_decode(job.pop("content"))
     for index, content in enumerate(chunk_text(text)):
         chunk_id = new_id("chunk")
@@ -2287,11 +2343,12 @@ def process_ingestion_job(store: PlatformStore, job_id: str) -> None:
             }
         )
     job["status"] = "COMPLETED"
-    job["updatedAt"] = now_iso()
+    job["finishedAt"] = now_iso()
+    job["updatedAt"] = job["finishedAt"]
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in job.items() if key not in {"tenantId", "content"}}
+    return {key: value for key, value in job.items() if key not in {"tenantId", "content", "idempotencyKey"}}
 
 
 def persisted_public_job(job: PersistedIngestionJob) -> dict[str, Any]:
@@ -2302,10 +2359,13 @@ def persisted_public_job(job: PersistedIngestionJob) -> dict[str, Any]:
         "status": job.status,
         "attemptCount": job.attempt_count,
         "maxRetries": job.max_retries,
+        "errorMessage": job.error_message,
         "queueBackend": job.queue_backend,
         "traceId": job.trace_id or "",
         "createdAt": job.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "updatedAt": job.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "startedAt": job.started_at.strftime("%Y-%m-%dT%H:%M:%SZ") if job.started_at else None,
+        "finishedAt": job.finished_at.strftime("%Y-%m-%dT%H:%M:%SZ") if job.finished_at else None,
     }
 
 
@@ -2313,7 +2373,7 @@ def tenant_context(ctx: RequestContext) -> TenantContext:
     return TenantContext(ctx.trace_id, ctx.tenant_id, ctx.principal, tuple(ctx.roles), tuple(ctx.permissions), ctx.auth_source)
 
 
-async def request_file(request: Request, settings: Settings) -> tuple[str, bytes]:
+async def request_file(request: Request, settings: Settings, require_file: bool = False) -> tuple[str, bytes]:
     content_type = request.headers.get("content-type", "")
     if "multipart/form-data" in content_type:
         form = await request.form()
@@ -2321,8 +2381,12 @@ async def request_file(request: Request, settings: Settings) -> tuple[str, bytes
         if hasattr(uploaded, "read"):
             name = getattr(uploaded, "filename", "document.txt") or "document.txt"
             content = await uploaded.read()
+            if require_file and not content:
+                raise HTTPException(status_code=400, detail="file is required")
             validate_upload(name, content, getattr(uploaded, "content_type", None), settings)
             return name, content
+    if require_file:
+        raise HTTPException(status_code=400, detail="file is required")
     content = await request.body()
     validate_upload("document.txt", content, request.headers.get("content-type"), settings)
     return "document.txt", content

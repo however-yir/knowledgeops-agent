@@ -177,6 +177,57 @@ def test_canonical_evaluation_datasets_hide_cases_behind_java_summary_dto() -> N
     assert "cases" not in dataset
 
 
+def test_canonical_ingestion_matches_java_job_lifecycle_and_admin_contract() -> None:
+    client = TestClient(
+        create_app(
+            Settings(demo_api_key="test-key", demo_tenant_id="tenant-a", ingestion_queue_backend="db_polling")
+        )
+    )
+
+    missing_chat = client.get("/ingestion/jobs", headers=AUTH_HEADERS)
+    missing_file = client.post("/ingestion/upload/ingestion-contract", headers=AUTH_HEADERS, content=b"not multipart")
+    assert missing_chat.status_code == 400 and missing_chat.json()["msg"] == "chatId is required"
+    assert missing_file.status_code == 400 and missing_file.json()["msg"] == "file is required"
+
+    upload_headers = AUTH_HEADERS | {"X-Idempotency-Key": "ingestion-contract-key"}
+    first = client.post(
+        "/ingestion/upload/ingestion-contract",
+        headers=upload_headers,
+        files={"file": ("policy.txt", b"Water and shade prevent heat injury.", "text/plain")},
+    ).json()
+    duplicate = client.post(
+        "/ingestion/upload/ingestion-contract",
+        headers=upload_headers,
+        files={"file": ("policy.txt", b"different body is ignored by the client key", "text/plain")},
+    ).json()
+    job_id = first["job"]["jobId"]
+
+    assert first["ok"] == duplicate["ok"] == 1
+    assert duplicate["job"]["jobId"] == job_id
+    assert first["job"]["status"] == "PENDING"
+    assert first["job"]["startedAt"] is None and first["job"]["finishedAt"] is None
+
+    jobs = client.get("/ingestion/jobs?chatId=ingestion-contract", headers=AUTH_HEADERS).json()
+    assert len(jobs) == 1 and jobs[0]["jobId"] == job_id
+    assert set(jobs[0]) == {
+        "jobId", "chatId", "sourceName", "status", "attemptCount", "maxRetries", "errorMessage",
+        "traceId", "queueBackend", "createdAt", "startedAt", "finishedAt",
+    }
+    assert not jobs[0]["createdAt"].endswith("Z")
+
+    user_key = client.post("/auth/api-keys?keyName=ingestion-user&role=USER", headers=AUTH_HEADERS).json()["rawApiKey"]
+    denied = client.post("/ingestion/jobs/process", headers={"X-API-Key": user_key})
+    processed = client.post(f"/ingestion/jobs/process?jobId={job_id}", headers=AUTH_HEADERS)
+    completed = client.get(f"/ingestion/jobs/{job_id}", headers=AUTH_HEADERS).json()
+    requeued = client.post("/ingestion/jobs/process", headers=AUTH_HEADERS)
+
+    assert denied.status_code == 403 and denied.json()["msg"] == "permission denied"
+    assert processed.json() == {"ok": 1, "msg": "processed", "job": None}
+    assert completed["status"] == "SUCCEEDED"
+    assert completed["startedAt"] is not None and completed["finishedAt"] is not None
+    assert requeued.json() == {"ok": 1, "msg": "requeue=0", "job": None}
+
+
 def test_canonical_evaluation_comparison_and_report_match_java_contract() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
     dataset_id = client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS).json()[0]["datasetId"]

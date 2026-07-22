@@ -100,7 +100,10 @@ class IngestionJobDto(BaseModel):
     queueBackend: str
     traceId: str
     createdAt: str
-    updatedAt: str
+    errorMessage: str | None = None
+    startedAt: str | None = None
+    finishedAt: str | None = None
+    updatedAt: str | None = None
 
 
 class SessionDto(BaseModel):
