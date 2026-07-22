@@ -15,7 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
@@ -29,6 +29,7 @@ from .api.canonical import (
 )
 from .api.conversation_routes import register_conversation_routes
 from .api.evaluation_routes import register_evaluation_routes
+from .api.feedback_routes import register_feedback_routes
 from .api.harness_routes import register_harness_routes
 from .api.ingestion_routes import register_ingestion_routes
 from .api.knowledge_routes import register_knowledge_routes
@@ -57,7 +58,6 @@ from .dto import (
     CitationDto,
     CostSummaryDto,
     EvaluationRunRequestDto,
-    FeedbackRequestDto,
     RagResponseDto,
     RetrievalStatsDto,
     UsageDto,
@@ -466,12 +466,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         chat_request_payload=chat_request_payload,
         rag_response_with_provider=rag_response_with_provider,
     )
-
-    @app.post("/ai/feedback")
-    def feedback(payload: FeedbackRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_FEEDBACK_WRITE"))):
-        record = payload.model_dump() | {"tenantId": ctx.tenant_id, "principal": ctx.principal, "createdAt": now_iso()}
-        store.feedback.append(record)
-        return ok(record, msg="saved", trace_id=ctx.trace_id)
+    register_feedback_routes(
+        app,
+        store=store,
+        require_permissions=require_permissions,
+        ok=ok,
+        now_iso=now_iso,
+    )
 
     def research_callbacks(ctx: RequestContext, model_profile: str):
         async def plan(research_topic: str) -> list[str]:
