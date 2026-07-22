@@ -31,13 +31,14 @@ from .api.evaluation_routes import register_evaluation_routes
 from .api.harness_routes import register_harness_routes
 from .api.knowledge_routes import register_knowledge_routes
 from .api.operations_routes import register_operations_routes
+from .api.research_routes import register_research_routes
 from .api.session_routes import register_session_routes
 from .api.system_routes import register_system_routes
 from .application.authentication import AuthApplicationService
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
-from .application.research import DeepResearchApplicationService, ResearchNotResumable
+from .application.research import DeepResearchApplicationService
 from .application.security import bearer_token
 from .application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from .config import Settings, load_settings
@@ -390,7 +391,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         optional_payload_text=optional_payload_text,
         parse_optional_date=parse_optional_date,
     )
-
     @app.post("/ai/chat", response_model=ChatEnvelope)
     async def ai_chat(
         request: Request,
@@ -792,99 +792,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return plan, retrieve_question, write_report
 
-    @app.post("/ai/research/tasks")
-    async def research_create(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        payload = await request.json()
-        topic = str(payload.get("topic", "")).strip()
-        if not topic:
-            raise HTTPException(status_code=422, detail="topic is required")
-        model_profile = str(payload.get("modelProfile") or "quality")
-        if research_service is None:
-            return ok(create_research_task(store, ctx, topic), trace_id=ctx.trace_id)
-
-        plan, retrieve_question, write_report = research_callbacks(ctx, model_profile)
-        result = await research_service.run(tenant_context(ctx), topic, model_profile, plan, retrieve_question, write_report)
-        return ok(
-            {"taskId": result.task["taskId"], "topic": result.topic, "report": result.report, "status": result.task["status"]},
-            trace_id=ctx.trace_id,
-        )
-
-    @app.post("/ai/research/tasks/{taskId}/resume")
-    async def research_resume(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        if not is_legacy_request(request) or research_service is None or workflow_repository is None:
-            raise HTTPException(status_code=404, detail="task not found")
-        task = await workflow_repository.get(ctx.tenant_id, taskId)
-        if task is None:
-            raise HTTPException(status_code=404, detail="task not found")
-        plan, retrieve_question, write_report = research_callbacks(ctx, str(task["modelProfile"]))
-        try:
-            result = await research_service.resume(
-                tenant_context(ctx), taskId, plan, retrieve_question, write_report
-            )
-        except ResearchNotResumable as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return ok(
-            {"taskId": taskId, "topic": result.topic, "report": result.report, "status": result.task["status"]},
-            trace_id=ctx.trace_id,
-        )
-
-    @app.post("/ai/research/tasks/{taskId}/cancel")
-    async def research_cancel(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        if not is_legacy_request(request) or research_service is None:
-            raise HTTPException(status_code=404, detail="task not found")
-        try:
-            task = await research_service.cancel(tenant_context(ctx), taskId)
-        except ResearchNotResumable as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        if task is None:
-            raise HTTPException(status_code=404, detail="task not found")
-        return ok(task, trace_id=ctx.trace_id)
-
-    @app.get("/ai/research/tasks/{taskId}")
-    async def research_task(
-        request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))
-    ):
-        legacy = is_legacy_request(request)
-        if workflow_repository is not None:
-            task = await workflow_repository.get(ctx.tenant_id, taskId)
-            if task is None or (legacy and task["type"] not in {"RESEARCH", "DEEP_RESEARCH"}):
-                raise HTTPException(status_code=404, detail="task not found")
-            return ok(task, trace_id=ctx.trace_id)
-        task = require_research_task(store, ctx, taskId) if legacy else require_workflow_task(store, ctx, taskId)
-        return ok(task, trace_id=ctx.trace_id)
-
-    @app.get("/ai/research/tasks/{taskId}/events")
-    async def research_events(
-        request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))
-    ):
-        legacy = is_legacy_request(request)
-        if workflow_repository is not None:
-            task = await workflow_repository.get(ctx.tenant_id, taskId)
-            events = await workflow_repository.events(ctx.tenant_id, taskId)
-            if not legacy and (task is None or events is None):
-                return ok([], trace_id=ctx.trace_id)
-            if task is None or task["type"] not in {"RESEARCH", "DEEP_RESEARCH"} or events is None:
-                raise HTTPException(status_code=404, detail="task not found")
-            return ok(events, trace_id=ctx.trace_id)
-        if legacy:
-            return ok(require_research_task(store, ctx, taskId)["events"], trace_id=ctx.trace_id)
-        task = store.workflow_tasks.get(taskId)
-        return ok(task["events"] if task and task["tenantId"] == ctx.tenant_id else [], trace_id=ctx.trace_id)
-
-    @app.get("/ai/research/tasks/{taskId}/report")
-    async def research_report(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
-        legacy = is_legacy_request(request)
-        if workflow_repository is not None:
-            task = await workflow_repository.get(ctx.tenant_id, taskId)
-            if task is None or (legacy and task["type"] not in {"RESEARCH", "DEEP_RESEARCH"}):
-                raise HTTPException(status_code=404, detail="task not found")
-            report = str(task["finalOutput"] or "")
-        else:
-            task = require_research_task(store, ctx, taskId) if legacy else require_workflow_task(store, ctx, taskId)
-            report = str(task.get("report") or task.get("finalOutput") or "")
-        if not legacy:
-            return ok({"taskId": task["taskId"], "report": report}, trace_id=ctx.trace_id)
-        return PlainTextResponse(report, media_type="text/markdown; charset=utf-8")
+    register_research_routes(
+        app,
+        store=store,
+        research_service=research_service,
+        workflow_repository=workflow_repository,
+        require_permissions=require_permissions,
+        ok=ok,
+        is_legacy_request=is_legacy_request,
+        tenant_context=tenant_context,
+        create_research_task=create_research_task,
+        research_callbacks=research_callbacks,
+        require_research_task=require_research_task,
+        require_workflow_task=require_workflow_task,
+    )
 
     return app
 
