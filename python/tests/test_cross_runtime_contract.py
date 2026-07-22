@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import httpx
+from collections.abc import Iterator
 
-from knowledgeops_py.scripts.cross_runtime_contract import compare_case
+import httpx
+import pytest
+
+from knowledgeops_py.scripts.cross_runtime_contract import compare_case, request_contract_case
 
 
 def response(status: int, *, body: str = "", json_data: object | None = None) -> httpx.Response:
@@ -37,3 +40,32 @@ def test_cross_runtime_contract_checks_runtime_specific_fields_without_comparing
         response(200, json_data={"ok": 1, "token": "java-token"}),
         response(200, json_data={"ok": 1, "token": "python-token", "usage": {"totalTokens": 5}}),
     ) == []
+
+
+class TruncatedSseStream(httpx.SyncByteStream):
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield self.body
+        raise httpx.RemoteProtocolError("incomplete chunked read")
+
+
+def test_cross_runtime_contract_keeps_terminal_sse_events_after_baseline_transport_close() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=TruncatedSseStream(b"event: trace\n\nevent: done\n\n"), request=request)
+
+    case = {"label": "stream", "method": "POST", "sse": True, "sseEvents": ["trace", "done"]}
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        response = request_contract_case(client, case, "http://contract.test/stream", {"headers": {}})
+
+    assert response.text == "event: trace\n\nevent: done\n\n"
+
+
+def test_cross_runtime_contract_rejects_truncated_sse_without_a_terminal_event() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=TruncatedSseStream(b"event: trace\n\n"), request=request)
+
+    case = {"label": "stream", "method": "POST", "sse": True, "sseEvents": ["trace", "done"]}
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client, pytest.raises(httpx.RemoteProtocolError):
+        request_contract_case(client, case, "http://contract.test/stream", {"headers": {}})

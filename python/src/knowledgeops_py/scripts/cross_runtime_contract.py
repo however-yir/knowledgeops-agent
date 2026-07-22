@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 VOLATILE_FIELDS = {"traceId", "createdAt", "updatedAt", "expiresAt", "token", "refreshToken", "rawApiKey"}
+TERMINAL_SSE_EVENTS = {"done", "error"}
 
 
 def normalize(value: Any) -> Any:
@@ -70,6 +71,31 @@ def has_json_field(payload: Any, field: str) -> bool:
     return True
 
 
+def request_contract_case(
+    client: httpx.Client, case: dict[str, Any], url: str, request: dict[str, Any]
+) -> httpx.Response:
+    if not case.get("sse"):
+        return client.request(case["method"], url, **request)
+
+    expected_events = [str(event) for event in case.get("sseEvents", [])]
+    with client.stream(case["method"], url, **request) as response:
+        chunks: list[bytes] = []
+        try:
+            for chunk in response.iter_bytes():
+                chunks.append(chunk)
+        except httpx.RemoteProtocolError:
+            body = b"".join(chunks)
+            terminal_events = set(expected_events) & TERMINAL_SSE_EVENTS
+            if not terminal_events or not any(f"event: {event}".encode() in body for event in terminal_events):
+                raise
+        return httpx.Response(
+            response.status_code,
+            headers=response.headers,
+            content=b"".join(chunks),
+            request=response.request,
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare Java and Python HTTP contracts against shared cases")
     parser.add_argument("--java-base-url", required=True)
@@ -87,8 +113,8 @@ def main() -> None:
             request = {"headers": request_headers}
             if case.get("body"):
                 request["json"] = case["body"]
-            java = client.request(case["method"], args.java_base_url.rstrip("/") + case["path"], **request)
-            python = client.request(case["method"], args.python_base_url.rstrip("/") + case["path"], **request)
+            java = request_contract_case(client, case, args.java_base_url.rstrip("/") + case["path"], request)
+            python = request_contract_case(client, case, args.python_base_url.rstrip("/") + case["path"], request)
             failures.extend(compare_case(case, java, python))
     if failures:
         raise SystemExit("\n".join(failures))
