@@ -41,6 +41,7 @@ from knowledgeops_py.infrastructure.providers import (
 )
 from knowledgeops_py.infrastructure.queues import MySqlPollingIngestionQueue, RedisStreamsIngestionQueue
 from knowledgeops_py.infrastructure.security_repository import SqlAlchemySecurityRepository, StoredIdentity
+from knowledgeops_py.infrastructure.session_repository import SqlAlchemySessionRepository
 from knowledgeops_py.scripts.java_baseline_manifest import build_manifest
 
 
@@ -228,6 +229,45 @@ def test_redis_oidc_state_store_consumes_once_and_fails_closed(monkeypatch: pyte
         client.fail = True
         with pytest.raises(OidcStateUnavailable):
             await store.consume("exchange", "hashed")
+
+    asyncio.run(exercise())
+
+
+def test_sql_session_repository_persists_messages_flags_and_tenant_boundary() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemySessionRepository(create_session_factory(engine))
+
+        assert await repository.list("tenant-a") == []
+        assert await repository.get("tenant-a", "missing") is None
+        created = await repository.upsert(
+            "tenant-a",
+            "session-1",
+            {"title": "Initial", "chatId": "chat-1", "workspace": "team", "pinned": True},
+        )
+        assert created is not None and created["workspace"] == "team" and created["pinned"] is True
+        appended = await repository.append_turn("tenant-a", "session-1", "chat-1", "question", "answer", "quality")
+        assert appended is not None and [message["content"] for message in appended["messages"]] == ["question", "answer"]
+        updated = await repository.upsert(
+            "tenant-a",
+            "session-1",
+            {"title": "Updated", "branches": [{"id": "main"}], "archived": True, "streaming": False},
+        )
+        assert updated is not None and updated["title"] == "Updated" and updated["archived"] is True
+        assert updated["branches"] == [{"id": "main"}] and updated["streaming"] is False
+        unarchived = await repository.set_flag("tenant-a", "session-1", "archived", False)
+        assert unarchived is not None and unarchived["archived"] is False
+        assert len(await repository.list("tenant-a")) == 1
+        assert await repository.get("tenant-b", "session-1") is None
+        assert await repository.upsert("tenant-b", "session-1", {}) is None
+        assert await repository.set_flag("tenant-a", "missing", "pinned", True) is None
+        with pytest.raises(ValueError, match="unsupported session flag"):
+            await repository.set_flag("tenant-a", "session-1", "invalid", True)
+        new_turn = await repository.append_turn("tenant-a", "session-2", "chat-2", "next", "saved", "balanced")
+        assert new_turn is not None and new_turn["messages"][1]["content"] == "saved"
+        await engine.dispose()
 
     asyncio.run(exercise())
 

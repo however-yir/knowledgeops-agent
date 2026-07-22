@@ -78,6 +78,13 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
         rotated = assert_envelope(first_app.post("/auth/api-keys/rotate?keyName=persisted", headers={"X-API-Key": "persistent-admin"}).json())
         assert first_app.post("/auth/token", headers={"X-API-Key": issued["rawApiKey"]}).json()["ok"] == 0
+        assert_envelope(
+            first_app.post(
+                "/ai/chat",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"chatId": "durable-chat", "prompt": "Persist this conversation.", "modelProfile": "balanced"},
+            ).json()
+        )
         queued = assert_envelope(
             first_app.post(
                 "/ingestion/upload/durable-chat",
@@ -92,6 +99,10 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
     with TestClient(create_app(settings)) as second_app:
         new_key_token = assert_envelope(second_app.post("/auth/token", headers={"X-API-Key": rotated["rawApiKey"]}).json())
         assert new_key_token["tenantId"] == "tenant-a"
+        durable_session = assert_envelope(second_app.get("/ai/sessions/durable-chat", headers={"X-API-Key": "persistent-admin"}).json())
+        assert durable_session["messages"][0]["content"] == "Persist this conversation."
+        pinned = assert_envelope(second_app.post("/ai/sessions/durable-chat/pin?value=true", headers={"X-API-Key": "persistent-admin"}).json())
+        assert pinned["pinned"] is True
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0

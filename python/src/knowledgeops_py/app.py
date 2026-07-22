@@ -57,6 +57,7 @@ from .infrastructure.providers import OpenAICompatibleChatProvider
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
+from .infrastructure.session_repository import SqlAlchemySessionRepository
 from .observability.setup import configure_observability
 
 TENANT_HEADER = "x-tenant-id"
@@ -158,6 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     security_repository: SecurityRepository | None = (
         SqlAlchemySecurityRepository(session_factory) if session_factory is not None else None
     )
+    session_repository = SqlAlchemySessionRepository(session_factory) if session_factory is not None else None
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     ingestion_service = (
         IngestionApplicationService(
@@ -197,6 +199,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = active_settings
     app.state.store = store
     app.state.security_repository = security_repository
+    app.state.session_repository = session_repository
     app.state.oidc_state_store = oidc_state_store
     app.state.ingestion_service = ingestion_service
     app.state.tracer = tracer
@@ -369,22 +372,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/ai/chat", response_model=ChatEnvelope)
     async def ai_chat(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await chat_response_with_provider(store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings)
+        data = await chat_response_with_provider(
+            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
+        )
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/chat/stream")
     async def ai_chat_stream(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await chat_response_with_provider(store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings)
+        data = await chat_response_with_provider(
+            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
+        )
         return PlainTextResponse(to_sse(data, ctx.trace_id), media_type="text/event-stream")
 
     @app.post("/ai/react/chat", response_model=ChatEnvelope)
     async def react_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await chat_response_with_provider(store, ctx, payload, mode="react", require_evidence=False, settings=active_settings)
+        data = await chat_response_with_provider(
+            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings, session_repository=session_repository
+        )
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/react/chat/stream")
     async def react_chat_stream(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await chat_response_with_provider(store, ctx, payload, mode="react", require_evidence=False, settings=active_settings)
+        data = await chat_response_with_provider(
+            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings, session_repository=session_repository
+        )
         return PlainTextResponse(to_sse(data, ctx.trace_id), media_type="text/event-stream")
 
     @app.post("/ai/pdf/chat", response_model=RagEnvelope)
@@ -396,6 +407,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             require_evidence=True,
             settings=active_settings,
             ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+            session_repository=session_repository,
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -435,12 +447,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(IngestionJobDto(**job), trace_id=ctx.trace_id)
 
     @app.get("/ai/sessions")
-    def sessions(ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
+    async def sessions(ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
+        if session_repository is not None:
+            return ok(await session_repository.list(ctx.tenant_id), trace_id=ctx.trace_id)
         data = [SessionDto(**session).model_dump() for session in store.sessions.values() if session["tenantId"] == ctx.tenant_id]
         return ok(data, trace_id=ctx.trace_id)
 
     @app.get("/ai/sessions/{sessionId}")
-    def session(sessionId: str, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
+    async def session(sessionId: str, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
+        if session_repository is not None:
+            data = await session_repository.get(ctx.tenant_id, sessionId)
+            if data is None:
+                raise HTTPException(status_code=404, detail="session not found")
+            return ok(data, trace_id=ctx.trace_id)
         data = get_or_create_session(store, ctx, sessionId, chat_id=sessionId)
         return ok(SessionDto(**data), trace_id=ctx.trace_id)
 
@@ -558,7 +577,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/ai/chat")
     @app.get("/ai/service")
     async def html_chat(prompt: str = Query(..., min_length=1), chatId: str = Query(default="default"), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        response = await chat_response_with_provider(store, ctx, ChatRequestDto(chatId=chatId, prompt=prompt), mode="chat", require_evidence=False, settings=active_settings)
+        response = await chat_response_with_provider(
+            store,
+            ctx,
+            ChatRequestDto(chatId=chatId, prompt=prompt),
+            mode="chat",
+            require_evidence=False,
+            settings=active_settings,
+            session_repository=session_repository,
+        )
         return PlainTextResponse(response.answer, media_type="text/html; charset=utf-8")
 
     @app.get("/ai/pdf/chat")
@@ -570,6 +597,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             require_evidence=True,
             settings=active_settings,
             ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+            session_repository=session_repository,
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -593,12 +621,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok({"processed": processed}, trace_id=ctx.trace_id)
 
     @app.get("/ai/history/{kind}")
-    def history_list(kind: str, page: int = Query(default=1, ge=1), pageSize: int = Query(default=20, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def history_list(kind: str, page: int = Query(default=1, ge=1), pageSize: int = Query(default=20, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+        if session_repository is not None:
+            return ok(page_data(await session_repository.list(ctx.tenant_id), page, pageSize), trace_id=ctx.trace_id)
         sessions_for_tenant = [item for item in store.sessions.values() if item["tenantId"] == ctx.tenant_id]
         return ok(page_data(sessions_for_tenant, page, pageSize), trace_id=ctx.trace_id)
 
     @app.get("/ai/history/{kind}/{chatId}")
-    def history_messages(kind: str, chatId: str, page: int = Query(default=1, ge=1), pageSize: int = Query(default=50, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def history_messages(kind: str, chatId: str, page: int = Query(default=1, ge=1), pageSize: int = Query(default=50, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+        if session_repository is not None:
+            session_data = await session_repository.get(ctx.tenant_id, chatId)
+            return ok(page_data(session_data["messages"] if session_data else [], page, pageSize), trace_id=ctx.trace_id)
         session_data = store.sessions.get(chatId)
         messages = session_data["messages"] if session_data and session_data["tenantId"] == ctx.tenant_id else []
         return ok(page_data(messages, page, pageSize), trace_id=ctx.trace_id)
@@ -606,6 +639,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.put("/ai/sessions/{sessionId}")
     async def session_upsert(sessionId: str, request: Request, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_WRITE"))):
         payload = await request.json()
+        if session_repository is not None:
+            saved = await session_repository.upsert(ctx.tenant_id, sessionId, payload)
+            if saved is None:
+                raise HTTPException(status_code=404, detail="session not found")
+            return ok(saved, trace_id=ctx.trace_id)
         existing = get_or_create_session(store, ctx, sessionId, str(payload.get("chatId") or sessionId))
         for attribute in ("title", "chatId", "modelProfile", "workspace", "pinned", "archived"):
             if attribute in payload:
@@ -614,14 +652,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(existing, trace_id=ctx.trace_id)
 
     @app.post("/ai/sessions/{sessionId}/pin")
-    def session_pin(sessionId: str, value: bool = Query(...), ctx: RequestContext = Depends(require_permissions("PERM_SESSION_WRITE"))):
+    async def session_pin(sessionId: str, value: bool = Query(...), ctx: RequestContext = Depends(require_permissions("PERM_SESSION_WRITE"))):
+        if session_repository is not None:
+            saved = await session_repository.set_flag(ctx.tenant_id, sessionId, "pinned", value)
+            if saved is None:
+                raise HTTPException(status_code=404, detail="session not found")
+            return ok(saved, trace_id=ctx.trace_id)
         session_data = require_session(store, ctx, sessionId)
         session_data["pinned"] = value
         session_data["updatedAt"] = now_iso()
         return ok(session_data, trace_id=ctx.trace_id)
 
     @app.post("/ai/sessions/{sessionId}/archive")
-    def session_archive(sessionId: str, value: bool = Query(...), ctx: RequestContext = Depends(require_permissions("PERM_SESSION_WRITE"))):
+    async def session_archive(sessionId: str, value: bool = Query(...), ctx: RequestContext = Depends(require_permissions("PERM_SESSION_WRITE"))):
+        if session_repository is not None:
+            saved = await session_repository.set_flag(ctx.tenant_id, sessionId, "archived", value)
+            if saved is None:
+                raise HTTPException(status_code=404, detail="session not found")
+            return ok(saved, trace_id=ctx.trace_id)
         session_data = require_session(store, ctx, sessionId)
         session_data["archived"] = value
         session_data["updatedAt"] = now_iso()
@@ -629,27 +677,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/ai/sessions/{sessionId}/branches/compare")
     async def session_compare(sessionId: str, request: Request, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
-        session_data = require_session(store, ctx, sessionId)
+        session_data = (
+            await session_repository.get(ctx.tenant_id, sessionId)
+            if session_repository is not None
+            else require_session(store, ctx, sessionId)
+        )
+        if session_data is None:
+            raise HTTPException(status_code=404, detail="session not found")
         payload = await request.json()
         return ok({"sessionId": session_data["sessionId"], "sourceBranchId": payload.get("sourceBranchId"), "targetBranchId": payload.get("targetBranchId"), "differences": []}, trace_id=ctx.trace_id)
 
     @app.post("/ai/sessions/{sessionId}/branches/merge")
     async def session_merge(sessionId: str, request: Request, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_WRITE"))):
-        session_data = require_session(store, ctx, sessionId)
+        session_data = (
+            await session_repository.get(ctx.tenant_id, sessionId)
+            if session_repository is not None
+            else require_session(store, ctx, sessionId)
+        )
+        if session_data is None:
+            raise HTTPException(status_code=404, detail="session not found")
         payload = await request.json()
         branch_id = new_id("branch")
+        if session_repository is not None:
+            saved = await session_repository.upsert(
+                ctx.tenant_id,
+                sessionId,
+                session_data
+                | {
+                    "activeBranchId": branch_id,
+                    "branches": [
+                        {"id": branch_id, "title": payload.get("title") or "Merged branch", "messages": session_data["messages"]}
+                    ]
+                    + session_data["branches"],
+                },
+            )
+            if saved is None:
+                raise HTTPException(status_code=404, detail="session not found")
         return ok({"sessionId": session_data["sessionId"], "mergedBranchId": branch_id, "title": payload.get("title") or "Merged branch"}, trace_id=ctx.trace_id)
 
     @app.post("/ai/workflow/react/chat")
     async def workflow_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        response = await chat_response_with_provider(store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings)
+        response = await chat_response_with_provider(
+            store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
+        )
         task = create_workflow_task(store, ctx, payload, response)
         result = response.model_dump() | {"taskId": task["taskId"], "status": task["status"]}
         return ok(result, trace_id=ctx.trace_id)
 
     @app.post("/ai/workflow/react/chat/stream")
     async def workflow_stream(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        response = await chat_response_with_provider(store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings)
+        response = await chat_response_with_provider(
+            store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
+        )
         create_workflow_task(store, ctx, payload, response)
         return PlainTextResponse(to_sse(response, ctx.trace_id), media_type="text/event-stream")
 
@@ -1253,6 +1332,7 @@ def chat_response(
     mode: str,
     require_evidence: bool,
     rag: dict[str, Any] | None = None,
+    record_session: bool = True,
 ) -> ChatResponseDto:
     rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
     model = route_model(request.modelProfile, mode)
@@ -1263,13 +1343,14 @@ def chat_response(
     )
     trace = react_trace(request, rag, mode)
     usage = usage_for(store, ctx.tenant_id, request.prompt, answer)
-    session = get_or_create_session(store, ctx, request.chatId, request.chatId)
-    session["messages"].extend(
-        [
-            {"role": "user", "content": request.prompt, "createdAt": now_iso()},
-            {"role": "assistant", "content": answer, "createdAt": now_iso()},
-        ]
-    )
+    if record_session:
+        session = get_or_create_session(store, ctx, request.chatId, request.chatId)
+        session["messages"].extend(
+            [
+                {"role": "user", "content": request.prompt, "createdAt": now_iso()},
+                {"role": "assistant", "content": answer, "createdAt": now_iso()},
+            ]
+        )
     return ChatResponseDto(answer=answer, model=model, usage=usage, traceId=ctx.trace_id, trace=trace)
 
 
@@ -1281,29 +1362,38 @@ async def chat_response_with_provider(
     require_evidence: bool,
     settings: Settings,
     rag: dict[str, Any] | None = None,
+    session_repository: SqlAlchemySessionRepository | None = None,
 ) -> ChatResponseDto:
     rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
-    response = chat_response(store, ctx, request, mode, require_evidence, rag)
-    if not settings.model_base_url or not settings.model_api_key:
-        return response
-    if require_evidence and not rag["evidence"]:
-        return response
-    grounded_prompt = request.prompt
-    if rag["evidence"]:
-        grounded_prompt = f"{request.prompt}\n\nEvidence:\n" + "\n".join(rag["evidence"][:5])
-    provider = OpenAICompatibleChatProvider(settings.model_base_url, settings.model_api_key, settings.model_name)
-    try:
-        completion = await provider.complete(ctx, grounded_prompt, request.modelProfile)
-    except httpx.HTTPError as exc:
-        if settings.is_production:
-            raise HTTPException(status_code=502, detail="model provider request failed") from exc
-        return response
-    response.answer = str(completion["answer"])
-    response.model = str(completion["model"])
-    provider_usage = completion["usage"]
-    input_tokens = int(provider_usage.get("prompt_tokens", response.usage.inputTokens))
-    output_tokens = int(provider_usage.get("completion_tokens", response.usage.outputTokens))
-    response.usage = record_provider_usage(store, ctx.tenant_id, input_tokens, output_tokens)
+    response = chat_response(store, ctx, request, mode, require_evidence, rag, record_session=session_repository is None)
+    if settings.model_base_url and settings.model_api_key and (not require_evidence or rag["evidence"]):
+        grounded_prompt = request.prompt
+        if rag["evidence"]:
+            grounded_prompt = f"{request.prompt}\n\nEvidence:\n" + "\n".join(rag["evidence"][:5])
+        provider = OpenAICompatibleChatProvider(settings.model_base_url, settings.model_api_key, settings.model_name)
+        try:
+            completion = await provider.complete(tenant_context(ctx), grounded_prompt, request.modelProfile)
+        except httpx.HTTPError as exc:
+            if settings.is_production:
+                raise HTTPException(status_code=502, detail="model provider request failed") from exc
+        else:
+            response.answer = str(completion["answer"])
+            response.model = str(completion["model"])
+            provider_usage = completion["usage"]
+            input_tokens = int(provider_usage.get("prompt_tokens", response.usage.inputTokens))
+            output_tokens = int(provider_usage.get("completion_tokens", response.usage.outputTokens))
+            response.usage = record_provider_usage(store, ctx.tenant_id, input_tokens, output_tokens)
+    if session_repository is not None:
+        saved = await session_repository.append_turn(
+            ctx.tenant_id,
+            request.chatId,
+            request.chatId,
+            request.prompt,
+            response.answer,
+            request.modelProfile,
+        )
+        if saved is None:
+            raise HTTPException(status_code=404, detail="session not found")
     return response
 
 
@@ -1336,13 +1426,16 @@ async def rag_response_with_provider(
     require_evidence: bool,
     settings: Settings,
     ingestion_repository: SqlAlchemyIngestionRepository | None = None,
+    session_repository: SqlAlchemySessionRepository | None = None,
 ) -> RagResponseDto:
     rag = (
         await retrieve_persisted(ingestion_repository, ctx.tenant_id, request.chatId, request.prompt)
         if ingestion_repository is not None
         else retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
     )
-    base = await chat_response_with_provider(store, ctx, request, "rag", require_evidence, settings, rag)
+    base = await chat_response_with_provider(
+        store, ctx, request, "rag", require_evidence, settings, rag, session_repository
+    )
     return RagResponseDto(
         answer=base.answer,
         model=base.model,
