@@ -28,6 +28,7 @@ from .api.canonical import (
     react_response_payload,
     react_trace_payload,
 )
+from .api.operations_routes import register_operations_routes
 from .api.system_routes import register_system_routes
 from .application.authentication import AuthApplicationService
 from .application.harness import CanonicalHarnessApplicationService, harness_error
@@ -48,13 +49,10 @@ from .domain.ports import EmbeddingProvider, OidcStateStore, Reranker, VectorSto
 from .dto import (
     AgentTraceDto,
     AuditLogDto,
-    AuditLogsEnvelope,
-    BudgetUpdateDto,
     ChatEnvelope,
     ChatRequestDto,
     ChatResponseDto,
     CitationDto,
-    CostEnvelope,
     CostSummaryDto,
     EvaluationDatasetCreateDto,
     EvaluationRunRequestDto,
@@ -323,6 +321,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_permissions=require_permissions,
         ok=ok,
         fail=fail,
+    )
+    register_operations_routes(
+        app,
+        store=store,
+        require_permissions=require_permissions,
+        ok=ok,
+        bounded=bounded,
+        now_iso=now_iso,
+        select_audit_fields=select_audit_fields,
+        cost_summary_data=cost_summary_data,
     )
 
     @app.post("/ai/chat", response_model=ChatEnvelope)
@@ -615,26 +623,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return evaluation_report_response(run)
         run = require_eval_run(store, ctx, runId)
         return evaluation_report_response(run)
-
-    @app.get("/audit/logs", response_model=AuditLogsEnvelope)
-    def audit_logs(ctx: RequestContext = Depends(require_permissions("PERM_AUDIT_READ")), limit: int = Query(default=50)):
-        logs = [AuditLogDto(**select_audit_fields(log)).model_dump() for log in store.audit_logs if log["tenantId"] == ctx.tenant_id]
-        return ok(list(reversed(logs[-bounded(limit, 1, 200) :])), trace_id=ctx.trace_id)
-
-    @app.get("/cost/summary", response_model=CostEnvelope)
-    def cost_summary(ctx: RequestContext = Depends(require_permissions("PERM_COST_READ"))):
-        return ok(cost_summary_data(store, ctx.tenant_id), trace_id=ctx.trace_id)
-
-    @app.post("/cost/budget", response_model=CostEnvelope)
-    def cost_budget(payload: BudgetUpdateDto, ctx: RequestContext = Depends(require_permissions("PERM_COST_WRITE"))):
-        previous = store.budgets.get(ctx.tenant_id, {})
-        store.budgets[ctx.tenant_id] = {
-            "tenantId": ctx.tenant_id,
-            "monthlyBudgetUsd": payload.monthlyBudgetUsd,
-            "hardLimitEnabled": payload.hardLimitEnabled if payload.hardLimitEnabled is not None else bool(previous.get("hardLimitEnabled", False)),
-            "updatedAt": now_iso(),
-        }
-        return ok(cost_summary_data(store, ctx.tenant_id), msg="updated", trace_id=ctx.trace_id)
 
     @app.get("/ai/harness/actions")
     def action_schema(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
