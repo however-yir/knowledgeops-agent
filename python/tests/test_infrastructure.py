@@ -10,6 +10,7 @@ from redis.exceptions import RedisError
 
 from knowledgeops_py.app import retrieve_chunks_with_semantics
 from knowledgeops_py.application.ingestion import IngestionApplicationService
+from knowledgeops_py.application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from knowledgeops_py.config import Settings
 from knowledgeops_py.domain.context import TenantContext
 from knowledgeops_py.domain.ports import (
@@ -504,6 +505,63 @@ def test_sql_workflow_repository_persists_tasks_steps_events_and_tenant_boundary
         assert await repository.events("tenant-b", task["taskId"]) is None
         simple = await repository.create_completed("tenant-a", "RESEARCH", "topic", "quality", "", "report", [], None)
         assert [event["type"] for event in simple["events"]] == ["TASK_CREATED", "TASK_COMPLETED"]
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_langgraph_react_workflow_checkpoints_response_and_resumes_without_reinvoking_provider() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemyWorkflowRepository(create_session_factory(engine))
+        service = ReactWorkflowApplicationService(repository)
+        context = TenantContext("trace-a", "tenant-a", "alice", ("ADMIN",), ("PERM_CHAT_WRITE",), "jwt")
+        calls = 0
+
+        async def responder() -> dict[str, object]:
+            nonlocal calls
+            calls += 1
+            return {"chatId": "chat-a", "answer": "grounded answer", "model": "stub", "trace": []}
+
+        completed = await service.run(context, "find evidence", "quality", "chat-a", responder)
+        assert completed.task["status"] == "DONE" and completed.response["answer"] == "grounded answer"
+        assert calls == 1
+        event_types = {event["type"] for event in completed.task["events"]}
+        assert {"TASK_CREATED", "STATE_CHANGED", "STEP_STARTED", "STEP_COMPLETED", "STATE_CHECKPOINTED", "TASK_COMPLETED"} <= event_types
+
+        recovering = await repository.start_task("tenant-a", "REACT", "resume", "quality", "chat-a")
+        step = await repository.start_step("tenant-a", recovering["taskId"], "responder", 2, {"prompt": "resume"})
+        stored_response = {"chatId": "chat-a", "answer": "already persisted", "model": "stub", "trace": []}
+        await repository.complete_step(
+            "tenant-a",
+            recovering["taskId"],
+            step["stepId"],
+            thought="Generated the workflow answer.",
+            action="respond",
+            action_input={"prompt": "resume"},
+            observation={"answerLength": 17},
+            next_status="WRITING",
+            phase="responded",
+            state_patch={"response": stored_response},
+        )
+
+        async def should_not_run() -> dict[str, object]:
+            raise AssertionError("the provider must not be reinvoked after a response checkpoint")
+
+        resumed = await service.resume(context, recovering["taskId"], should_not_run)
+        assert resumed.task["status"] == "DONE" and resumed.response == stored_response
+        with pytest.raises(WorkflowNotResumable):
+            await service.resume(context, recovering["taskId"], should_not_run)
+
+        cancellable = await repository.start_task("tenant-a", "REACT", "cancel", "quality", "chat-a")
+        cancelled = await service.cancel(context, cancellable["taskId"])
+        assert cancelled is not None and cancelled["status"] == "CANCELLED"
+        after_late_completion = await repository.complete_task(
+            "tenant-a", cancellable["taskId"], "a late model response"
+        )
+        assert after_late_completion["status"] == "CANCELLED"
         await engine.dispose()
 
     asyncio.run(exercise())

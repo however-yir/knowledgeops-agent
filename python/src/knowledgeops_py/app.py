@@ -32,6 +32,7 @@ from .api.canonical import (
     react_trace_payload,
 )
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
+from .application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from .config import Settings, load_settings
 from .domain.context import TenantContext
 from .domain.ports import EmbeddingProvider, Reranker, VectorStore
@@ -181,6 +182,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     session_repository = SqlAlchemySessionRepository(session_factory) if session_factory is not None else None
     workflow_repository = SqlAlchemyWorkflowRepository(session_factory) if session_factory is not None else None
+    workflow_service = ReactWorkflowApplicationService(workflow_repository) if workflow_repository is not None else None
     memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
     evaluation_repository = SqlAlchemyEvaluationRepository(session_factory) if session_factory is not None else None
     graph_repository = SqlAlchemyGraphRepository(session_factory) if session_factory is not None else None
@@ -251,6 +253,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.security_repository = security_repository
     app.state.session_repository = session_repository
     app.state.workflow_repository = workflow_repository
+    app.state.workflow_service = workflow_service
     app.state.memory_repository = memory_repository
     app.state.evaluation_repository = evaluation_repository
     app.state.graph_repository = graph_repository
@@ -1058,45 +1061,99 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/ai/workflow/react/chat")
     async def workflow_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        response = await chat_response_with_provider(
-            store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
-        )
-        task = (
-            await workflow_repository.create_completed(
-                ctx.tenant_id,
-                "REACT",
-                payload.prompt,
-                payload.modelProfile,
-                payload.chatId,
-                response.answer,
-                [step.model_dump() for step in response.trace],
+        if workflow_service is not None:
+            async def respond() -> dict[str, Any]:
+                response = await chat_response_with_provider(
+                    store,
+                    ctx,
+                    payload,
+                    mode="workflow",
+                    require_evidence=False,
+                    settings=active_settings,
+                    session_repository=session_repository,
+                )
+                return response.model_dump()
+
+            workflow = await workflow_service.run(tenant_context(ctx), payload.prompt, payload.modelProfile, payload.chatId, respond)
+            response = ChatResponseDto.model_validate(workflow.response)
+            task = workflow.task
+        else:
+            response = await chat_response_with_provider(
+                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
             )
-            if workflow_repository is not None
-            else create_workflow_task(store, ctx, payload, response)
-        )
+            task = create_workflow_task(store, ctx, payload, response)
         result = response.model_dump() | {"taskId": task["taskId"], "status": task["status"]}
         return ok(result, trace_id=ctx.trace_id)
 
     @app.post("/ai/workflow/react/chat/stream")
     async def workflow_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        response = await chat_response_with_provider(
-            store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
-        )
-        if workflow_repository is not None:
-            await workflow_repository.create_completed(
-                ctx.tenant_id,
-                "REACT",
-                payload.prompt,
-                payload.modelProfile,
-                payload.chatId,
-                response.answer,
-                [step.model_dump() for step in response.trace],
-            )
+        if workflow_service is not None:
+            async def respond() -> dict[str, Any]:
+                response = await chat_response_with_provider(
+                    store,
+                    ctx,
+                    payload,
+                    mode="workflow",
+                    require_evidence=False,
+                    settings=active_settings,
+                    session_repository=session_repository,
+                )
+                return response.model_dump()
+
+            workflow = await workflow_service.run(tenant_context(ctx), payload.prompt, payload.modelProfile, payload.chatId, respond)
+            response = ChatResponseDto.model_validate(workflow.response)
         else:
+            response = await chat_response_with_provider(
+                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
+            )
             create_workflow_task(store, ctx, payload, response)
         return PlainTextResponse(
             to_sse(response, ctx.trace_id, legacy=is_legacy_request(request), react=True), media_type="text/event-stream"
         )
+
+    @app.post("/ai/workflow/tasks/{taskId}/resume")
+    async def workflow_resume(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+        if not is_legacy_request(request) or workflow_service is None or workflow_repository is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        task = await workflow_repository.get(ctx.tenant_id, taskId)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        payload = ChatRequestDto(
+            chatId=str(task["chatId"]),
+            prompt=str(task["userInput"]),
+            modelProfile=str(task["modelProfile"]),
+        )
+
+        async def respond() -> dict[str, Any]:
+            response = await chat_response_with_provider(
+                store,
+                ctx,
+                payload,
+                mode="workflow",
+                require_evidence=False,
+                settings=active_settings,
+                session_repository=session_repository,
+            )
+            return response.model_dump()
+
+        try:
+            workflow = await workflow_service.resume(tenant_context(ctx), taskId, respond)
+        except WorkflowNotResumable as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        response = ChatResponseDto.model_validate(workflow.response)
+        return ok(response.model_dump() | {"taskId": taskId, "status": workflow.task["status"]}, trace_id=ctx.trace_id)
+
+    @app.post("/ai/workflow/tasks/{taskId}/cancel")
+    async def workflow_cancel(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+        if not is_legacy_request(request) or workflow_service is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        try:
+            task = await workflow_service.cancel(tenant_context(ctx), taskId)
+        except WorkflowNotResumable as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        return ok(task, trace_id=ctx.trace_id)
 
     @app.get("/ai/workflow/tasks")
     async def workflow_list(
