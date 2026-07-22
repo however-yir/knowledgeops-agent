@@ -32,6 +32,7 @@ from .api.canonical import (
     react_trace_payload,
 )
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
+from .application.research import DeepResearchApplicationService, ResearchNotResumable
 from .application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from .config import Settings, load_settings
 from .domain.context import TenantContext
@@ -183,6 +184,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     session_repository = SqlAlchemySessionRepository(session_factory) if session_factory is not None else None
     workflow_repository = SqlAlchemyWorkflowRepository(session_factory) if session_factory is not None else None
     workflow_service = ReactWorkflowApplicationService(workflow_repository) if workflow_repository is not None else None
+    research_service = DeepResearchApplicationService(workflow_repository) if workflow_repository is not None else None
     memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
     evaluation_repository = SqlAlchemyEvaluationRepository(session_factory) if session_factory is not None else None
     graph_repository = SqlAlchemyGraphRepository(session_factory) if session_factory is not None else None
@@ -254,6 +256,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_repository = session_repository
     app.state.workflow_repository = workflow_repository
     app.state.workflow_service = workflow_service
+    app.state.research_service = research_service
     app.state.memory_repository = memory_repository
     app.state.evaluation_repository = evaluation_repository
     app.state.graph_repository = graph_repository
@@ -1207,30 +1210,87 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return ok([], trace_id=ctx.trace_id)
         return ok(task["events"], trace_id=ctx.trace_id)
 
+    def research_callbacks(ctx: RequestContext, model_profile: str):
+        async def plan(research_topic: str) -> list[str]:
+            return await research_plan_with_provider(store, tenant_context(ctx), active_settings, research_topic, model_profile)
+
+        async def retrieve_question(question: str, task_id: str) -> dict[str, Any]:
+            rag = await retrieve_hybrid(
+                store,
+                ctx.tenant_id,
+                f"research_{task_id}",
+                question,
+                ingestion_service.repository if ingestion_service is not None else None,
+                graph_repository,
+                create_embedding_provider(active_settings),
+                create_reranker(active_settings),
+                active_settings.is_production,
+                vector_store,
+            )
+            return {
+                "evidence": rag["evidence"],
+                "citations": [citation.model_dump() for citation in rag["citations"]],
+                "retrievalStats": rag["retrievalStats"],
+            }
+
+        async def write_report(research_topic: str, findings: list[dict[str, Any]]) -> str:
+            return await research_report_with_provider(
+                store,
+                tenant_context(ctx),
+                active_settings,
+                research_topic,
+                model_profile,
+                findings,
+            )
+
+        return plan, retrieve_question, write_report
+
     @app.post("/ai/research/tasks")
     async def research_create(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
         payload = await request.json()
         topic = str(payload.get("topic", "")).strip()
         if not topic:
             raise HTTPException(status_code=422, detail="topic is required")
-        task = (
-            await workflow_repository.create_completed(
-                ctx.tenant_id,
-                "DEEP_RESEARCH",
-                topic,
-                "quality",
-                "",
-                f"# {topic}\n\nNo tenant-scoped evidence has been ingested yet. Add sources before relying on this report.\n",
-                [],
-                [
-                    {"type": "PLANNED", "payload": {}},
-                    {"type": "EVIDENCE_JUDGED", "payload": {"evidenceCount": 0}},
-                    {"type": "REPORT_WRITTEN", "payload": {}},
-                ],
-            )
-            if workflow_repository is not None
-            else create_research_task(store, ctx, topic)
+        model_profile = str(payload.get("modelProfile") or "quality")
+        if research_service is None:
+            return ok(create_research_task(store, ctx, topic), trace_id=ctx.trace_id)
+
+        plan, retrieve_question, write_report = research_callbacks(ctx, model_profile)
+        result = await research_service.run(tenant_context(ctx), topic, model_profile, plan, retrieve_question, write_report)
+        return ok(
+            {"taskId": result.task["taskId"], "topic": result.topic, "report": result.report, "status": result.task["status"]},
+            trace_id=ctx.trace_id,
         )
+
+    @app.post("/ai/research/tasks/{taskId}/resume")
+    async def research_resume(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+        if not is_legacy_request(request) or research_service is None or workflow_repository is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        task = await workflow_repository.get(ctx.tenant_id, taskId)
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        plan, retrieve_question, write_report = research_callbacks(ctx, str(task["modelProfile"]))
+        try:
+            result = await research_service.resume(
+                tenant_context(ctx), taskId, plan, retrieve_question, write_report
+            )
+        except ResearchNotResumable as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return ok(
+            {"taskId": taskId, "topic": result.topic, "report": result.report, "status": result.task["status"]},
+            trace_id=ctx.trace_id,
+        )
+
+    @app.post("/ai/research/tasks/{taskId}/cancel")
+    async def research_cancel(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+        if not is_legacy_request(request) or research_service is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        try:
+            task = await research_service.cancel(tenant_context(ctx), taskId)
+        except ResearchNotResumable as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if task is None:
+            raise HTTPException(status_code=404, detail="task not found")
         return ok(task, trace_id=ctx.trace_id)
 
     @app.get("/ai/research/tasks/{taskId}")
@@ -1743,6 +1803,100 @@ def create_research_task(store: PlatformStore, ctx: RequestContext, topic: str) 
     store.workflow_tasks[task["taskId"]] = task
     store.research_tasks[task["taskId"]] = task
     return task
+
+
+async def research_plan_with_provider(
+    store: PlatformStore,
+    context: TenantContext,
+    settings: Settings,
+    topic: str,
+    model_profile: str,
+) -> list[str]:
+    provider = create_chat_provider(settings)
+    if provider is None:
+        return [topic]
+    prompt = (
+        "Break this research topic into at most four precise sub-questions. "
+        "Return one question per line, without commentary.\n\nTopic: "
+        f"{topic}"
+    )
+    try:
+        completion = await provider.complete(context, prompt, model_profile)
+    except (httpx.HTTPError, ValueError) as exc:
+        if settings.is_production:
+            raise HTTPException(status_code=502, detail="research planner request failed") from exc
+        return [topic]
+    usage = completion.get("usage") or {}
+    record_provider_usage(
+        store,
+        context.tenant_id,
+        int(usage.get("prompt_tokens") or 0),
+        int(usage.get("completion_tokens") or 0),
+    )
+    return parse_research_questions(str(completion.get("answer") or ""), topic)
+
+
+async def research_report_with_provider(
+    store: PlatformStore,
+    context: TenantContext,
+    settings: Settings,
+    topic: str,
+    model_profile: str,
+    findings: list[dict[str, Any]],
+) -> str:
+    evidence = research_evidence_text(findings)
+    if not evidence:
+        return f"# {topic}\n\nNo tenant-scoped evidence has been ingested yet. Add sources before relying on this report.\n"
+    provider = create_chat_provider(settings)
+    if provider is None:
+        return fallback_research_report(topic, findings)
+    prompt = (
+        "Write a concise Markdown research report using only the evidence below. "
+        "State uncertainty where evidence is incomplete and cite evidence with [n] markers.\n\n"
+        f"Topic: {topic}\n\nEvidence:\n{evidence}"
+    )
+    try:
+        completion = await provider.complete(context, prompt, model_profile)
+    except (httpx.HTTPError, ValueError) as exc:
+        if settings.is_production:
+            raise HTTPException(status_code=502, detail="research writer request failed") from exc
+        return fallback_research_report(topic, findings)
+    usage = completion.get("usage") or {}
+    record_provider_usage(
+        store,
+        context.tenant_id,
+        int(usage.get("prompt_tokens") or 0),
+        int(usage.get("completion_tokens") or 0),
+    )
+    answer = str(completion.get("answer") or "").strip()
+    return answer if answer else fallback_research_report(topic, findings)
+
+
+def parse_research_questions(answer: str, topic: str) -> list[str]:
+    questions: list[str] = []
+    for line in answer.splitlines():
+        question = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
+        if question and question not in questions:
+            questions.append(question[:500])
+    return questions[:4] or [topic]
+
+
+def research_evidence_text(findings: list[dict[str, Any]]) -> str:
+    sections: list[str] = []
+    for index, finding in enumerate(findings, start=1):
+        evidence = [str(item) for item in finding.get("evidence", []) if str(item).strip()]
+        if evidence:
+            sections.append(f"[{index}] {finding.get('question', '')}: {evidence[0][:800]}")
+    return "\n".join(sections)
+
+
+def fallback_research_report(topic: str, findings: list[dict[str, Any]]) -> str:
+    sections = [f"# {topic}", "", "## Findings"]
+    for index, finding in enumerate(findings, start=1):
+        evidence = [str(item) for item in finding.get("evidence", []) if str(item).strip()]
+        if evidence:
+            sections.extend([f"### {finding.get('question', topic)}", evidence[0][:800], f"[{index}]"])
+    return "\n\n".join(sections) + "\n"
 
 
 def require_eval_run(store: PlatformStore, ctx: RequestContext, run_id: str) -> dict[str, Any]:

@@ -10,6 +10,7 @@ from redis.exceptions import RedisError
 
 from knowledgeops_py.app import retrieve_chunks_with_semantics
 from knowledgeops_py.application.ingestion import IngestionApplicationService
+from knowledgeops_py.application.research import DeepResearchApplicationService, ResearchNotResumable
 from knowledgeops_py.application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from knowledgeops_py.config import Settings
 from knowledgeops_py.domain.context import TenantContext
@@ -562,6 +563,77 @@ def test_langgraph_react_workflow_checkpoints_response_and_resumes_without_reinv
             "tenant-a", cancellable["taskId"], "a late model response"
         )
         assert after_late_completion["status"] == "CANCELLED"
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_langgraph_deep_research_persists_plan_retrieval_judgement_and_report() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemyWorkflowRepository(create_session_factory(engine))
+        service = DeepResearchApplicationService(repository)
+        context = TenantContext("trace-a", "tenant-a", "alice", ("ADMIN",), ("PERM_CHAT_WRITE",), "jwt")
+
+        async def planner(_: str) -> list[str]:
+            return ["Heat risk", "Cooling access"]
+
+        async def retriever(question: str, task_id: str) -> dict[str, object]:
+            return {
+                "evidence": [f"{question} evidence for {task_id}"],
+                "citations": [{"id": question, "source": "test", "chunkId": question}],
+                "retrievalStats": {"evidenceAccepted": 1},
+            }
+
+        async def writer(topic: str, findings: list[dict[str, object]]) -> str:
+            return f"# {topic}\n\nEvidence sections: {len(findings)}"
+
+        result = await service.run(context, "Heat safety", "quality", planner, retriever, writer)
+        assert result.task["status"] == "DONE" and result.report.startswith("# Heat safety")
+        assert [step["agentName"] for step in result.task["steps"]] == [
+            "ResearchPlanner",
+            "RagResearchAgent",
+            "RagResearchAgent",
+            "EvidenceJudge",
+            "ReportWriter",
+        ]
+        event_types = {event["type"] for event in result.task["events"]}
+        assert {"PLANNED", "EVIDENCE_JUDGED", "REPORT_WRITTEN", "TASK_COMPLETED"} <= event_types
+
+        recovering = await repository.start_task("tenant-a", "DEEP_RESEARCH", "Recover", "quality", "")
+        plan_step = await repository.start_step(
+            "tenant-a", recovering["taskId"], "ResearchPlanner", 1, {"topic": "Recover"}
+        )
+        await repository.complete_step(
+            "tenant-a",
+            recovering["taskId"],
+            plan_step["stepId"],
+            thought="Planned.",
+            action="plan_research",
+            action_input={"topic": "Recover"},
+            observation={"subQuestions": ["already", "missing"]},
+            next_status="SEARCHING",
+            phase="retrieving",
+            state_patch={
+                "subquestions": ["already", "missing"],
+                "retrievals": {"already": {"evidence": ["saved"], "citations": [], "retrievalStats": {}}},
+            },
+        )
+        recovered_questions: list[str] = []
+
+        async def planner_must_not_run(_: str) -> list[str]:
+            raise AssertionError("the persisted plan must be reused")
+
+        async def recover_retriever(question: str, _: str) -> dict[str, object]:
+            recovered_questions.append(question)
+            return {"evidence": ["new"], "citations": [], "retrievalStats": {}}
+
+        resumed = await service.resume(context, recovering["taskId"], planner_must_not_run, recover_retriever, writer)
+        assert resumed.task["status"] == "DONE" and recovered_questions == ["missing"]
+        with pytest.raises(ResearchNotResumable):
+            await service.resume(context, recovering["taskId"], planner_must_not_run, recover_retriever, writer)
         await engine.dispose()
 
     asyncio.run(exercise())

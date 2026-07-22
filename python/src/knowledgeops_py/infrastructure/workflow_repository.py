@@ -123,6 +123,7 @@ class SqlAlchemyWorkflowRepository:
         next_status: str | None = None,
         phase: str | None = None,
         state_patch: Mapping[str, Any] | None = None,
+        extra_events: list[tuple[str, Mapping[str, Any]]] | None = None,
     ) -> None:
         """Persist a step result and its task checkpoint atomically."""
         now = utc_now()
@@ -154,6 +155,8 @@ class SqlAlchemyWorkflowRepository:
                     {"status": "COMPLETED", "action": action},
                 )
             )
+            for event_type, payload in extra_events or []:
+                session.add(workflow_event(task_id, tenant_id, None, event_type, payload))
             if next_status is not None:
                 previous_status = task.status
                 task.status = next_status
