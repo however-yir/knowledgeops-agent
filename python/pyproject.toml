@@ -14,6 +14,7 @@ dependencies = [
   "httpx>=0.27,<1",
   "SQLAlchemy>=2.0,<3",
   "greenlet>=3.1,<4",
+  "aiomysql>=0.3.2,<1",
   "alembic>=1.14,<2",
   "aiosqlite>=0.20,<1",
   "asyncpg>=0.30,<1",
@@ -34,11 +35,7 @@ test = [
   "httpx>=0.27,<1",
   "pytest>=9.0.3,<10",
   "pytest-cov>=6.0,<7",
-  "asyncmy>=0.2.11,<1",
   "testcontainers[postgres]>=4.9,<5"
-]
-mysql = [
-  "asyncmy>=0.2.11,<1"
 ]
 local-reranker = [
   "sentence-transformers>=3.4,<6"

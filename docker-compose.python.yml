@@ -6,7 +6,7 @@ services:
     command: ["sh", "-ec", "alembic upgrade head && APP_DATABASE_URL=$${APP_PGVECTOR_URL} alembic upgrade head"]
     environment: &python-environment
       APP_ENV: development
-      APP_DATABASE_URL: mysql+asyncmy://root:${DB_PASSWORD:-root}@mysql:3306/knowledgeops_python
+      APP_DATABASE_URL: mysql+aiomysql://root:${DB_PASSWORD:-root}@mysql:3306/knowledgeops_python
       APP_PGVECTOR_URL: postgresql+asyncpg://postgres:${PGPASSWORD:-postgres}@pgvector:5432/knowledgeops_python
       APP_VECTOR_BACKEND: pgvector
       APP_REDIS_URL: redis://redis:6379/0
