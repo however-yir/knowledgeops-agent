@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from alembic.config import Config
 from docker.errors import DockerException
+from sqlalchemy import update
 from sqlalchemy.engine import make_url
 from testcontainers.mysql import MySqlContainer
 
 from alembic import command
 from knowledgeops_py.infrastructure.database import create_engine, create_session_factory
-from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository
+from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository, utc_now
 from knowledgeops_py.infrastructure.models import IngestionJobRecord
 
 
@@ -45,7 +47,13 @@ def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.Mo
                     claimed_ids.add(remaining.job_id)
                 assert claimed_ids == {first.job_id, second.job_id}
                 assert await repository.get("tenant-a", second.job_id) is None
-                assert await repository.recover_abandoned(lease_seconds=0) == 2
+                async with engine.begin() as connection:
+                    await connection.execute(
+                        update(IngestionJobRecord)
+                        .where(IngestionJobRecord.job_id.in_([first.job_id, second.job_id]))
+                        .values(started_at=utc_now() - timedelta(seconds=10))
+                    )
+                assert await repository.recover_abandoned(lease_seconds=1) == 2
                 assert (await repository.get("tenant-a", first.job_id)).status == "RETRY"  # type: ignore[union-attr]
                 assert (await repository.get("tenant-b", second.job_id)).status == "RETRY"  # type: ignore[union-attr]
                 await engine.dispose()
