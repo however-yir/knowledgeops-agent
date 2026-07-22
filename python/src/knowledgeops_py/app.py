@@ -34,6 +34,7 @@ from .api.operations_routes import register_operations_routes
 from .api.research_routes import register_research_routes
 from .api.session_routes import register_session_routes
 from .api.system_routes import register_system_routes
+from .api.workflow_task_routes import register_workflow_task_routes
 from .application.authentication import AuthApplicationService
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
@@ -391,6 +392,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         optional_payload_text=optional_payload_text,
         parse_optional_date=parse_optional_date,
     )
+    register_workflow_task_routes(
+        app,
+        store=store,
+        workflow_repository=workflow_repository,
+        require_permissions=require_permissions,
+        ok=ok,
+        is_legacy_request=is_legacy_request,
+        bounded=bounded,
+        page_data=page_data,
+    )
+
     @app.post("/ai/chat", response_model=ChatEnvelope)
     async def ai_chat(
         request: Request,
@@ -704,58 +716,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if task is None:
             raise HTTPException(status_code=404, detail="task not found")
         return ok(task, trace_id=ctx.trace_id)
-
-    @app.get("/ai/workflow/tasks")
-    async def workflow_list(
-        request: Request,
-        page: int = Query(default=1, ge=1),
-        pageSize: int = Query(default=20, ge=1, le=200),
-        ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ")),
-    ):
-        if not is_legacy_request(request):
-            limit = bounded(page * pageSize, 1, 2000)
-            tasks = (
-                await workflow_repository.list_tasks(ctx.tenant_id, limit)
-                if workflow_repository is not None
-                else [task for task in store.workflow_tasks.values() if task["tenantId"] == ctx.tenant_id]
-            )
-            start = (page - 1) * pageSize
-            return ok(tasks[start : start + pageSize], trace_id=ctx.trace_id)
-        if workflow_repository is not None:
-            tasks = await workflow_repository.list_tasks(ctx.tenant_id, bounded(page * pageSize, 1, 2000))
-            return ok(page_data(tasks, page, pageSize), trace_id=ctx.trace_id)
-        tasks = [task for task in store.workflow_tasks.values() if task["tenantId"] == ctx.tenant_id]
-        return ok(page_data(tasks, page, pageSize), trace_id=ctx.trace_id)
-
-    @app.get("/ai/workflow/tasks/{taskId}")
-    async def workflow_task(taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
-        if workflow_repository is not None:
-            task = await workflow_repository.get(ctx.tenant_id, taskId)
-            if task is None:
-                raise HTTPException(status_code=404, detail="task not found")
-            return ok(task, trace_id=ctx.trace_id)
-        task = store.workflow_tasks.get(taskId)
-        if not task or task["tenantId"] != ctx.tenant_id:
-            raise HTTPException(status_code=404, detail="task not found")
-        return ok(task, trace_id=ctx.trace_id)
-
-    @app.get("/ai/workflow/tasks/{taskId}/events")
-    async def workflow_events(
-        request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))
-    ):
-        if workflow_repository is not None:
-            events = await workflow_repository.events(ctx.tenant_id, taskId)
-            if events is None:
-                if is_legacy_request(request):
-                    raise HTTPException(status_code=404, detail="task not found")
-                return ok([], trace_id=ctx.trace_id)
-            return ok(events, trace_id=ctx.trace_id)
-        task = store.workflow_tasks.get(taskId)
-        if not task or task["tenantId"] != ctx.tenant_id:
-            if is_legacy_request(request):
-                raise HTTPException(status_code=404, detail="task not found")
-            return ok([], trace_id=ctx.trace_id)
-        return ok(task["events"], trace_id=ctx.trace_id)
 
     def research_callbacks(ctx: RequestContext, model_profile: str):
         async def plan(research_topic: str) -> list[str]:
