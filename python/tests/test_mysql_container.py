@@ -25,7 +25,9 @@ def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.Mo
             password="knowledgeops",
             dbname="knowledgeops",
         ).with_command("--default-authentication-plugin=mysql_native_password") as container:
-            database_url = str(make_url(container.get_connection_url()).set(drivername="mysql+asyncmy"))
+            database_url = make_url(container.get_connection_url()).set(drivername="mysql+asyncmy").render_as_string(
+                hide_password=False
+            )
             monkeypatch.setenv("APP_DATABASE_URL", database_url)
             command.upgrade(Config(str(Path(__file__).resolve().parents[1] / "alembic.ini")), "head")
 
