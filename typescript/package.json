@@ -6,7 +6,7 @@
     "build": "pnpm -r build",
     "contract:diff": "node scripts/contract-diff.mjs",
     "contract:inventory": "node scripts/contract-inventory.mjs",
-    "db:generate": "pnpm --filter @knowledgeops/api exec prisma generate --schema ../../prisma/schema.prisma",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:migrate": "node scripts/prisma-migrate.mjs",
     "db:seed-demo": "node scripts/bootstrap-demo-key.mjs",
     "db:validate": "node scripts/check-prisma-schema.mjs",
@@ -22,6 +22,10 @@
     "prod:gate": "pnpm parity && pnpm contract:inventory && pnpm db:validate && pnpm frontend:contract && pnpm migration:readiness && pnpm maturity:gate && pnpm security:defaults && pnpm e2e:smoke && pnpm perf:smoke",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @knowledgeops/shared build && pnpm -r test"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "prisma": "^6.19.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",

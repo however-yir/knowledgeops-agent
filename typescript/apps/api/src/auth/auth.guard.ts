@@ -67,6 +67,7 @@ function isPublic(request: FastifyRequest): boolean {
   const method = request.method.toUpperCase();
   const path = request.url.split("?")[0] ?? "/";
   return PUBLIC_ROUTES.some((route) => route.method === method && route.path === path)
+    || (method === "GET" && path.startsWith("/actuator/health/"))
     || path.startsWith("/v3/api-docs")
     || path.startsWith("/swagger-ui")
     || path === "/swagger-ui.html"
