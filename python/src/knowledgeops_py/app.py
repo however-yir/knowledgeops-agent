@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 import json
@@ -14,15 +13,12 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 from uuid import uuid4
 
 import httpx
-import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
-from jwt import InvalidTokenError
 
 from .api.canonical import (
     canonicalize_response,
@@ -34,6 +30,10 @@ from .api.canonical import (
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
+from .application.oidc import OidcFlowError
+from .application.oidc import begin_oidc_login as begin_oidc_login_flow
+from .application.oidc import complete_oidc_callback as complete_oidc_callback_flow
+from .application.oidc import consume_oidc_exchange_code as consume_oidc_exchange_code_flow
 from .application.research import DeepResearchApplicationService, ResearchNotResumable
 from .application.security import (
     ROLE_PERMISSIONS,
@@ -82,7 +82,7 @@ from .infrastructure.file_store import LocalFileStore
 from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
-from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
+from .infrastructure.oidc_state import OidcStateStore, RedisOidcStateStore
 from .infrastructure.pgvector_store import PgVectorProjection, VectorStoreUnavailable
 from .infrastructure.providers import (
     RerankerUnavailable,
@@ -1947,37 +1947,10 @@ async def revoke_persistent_api_key(
 async def begin_oidc_login(
     store: PlatformStore, settings: Settings, oidc_state_store: OidcStateStore | None, return_to: str | None
 ) -> dict[str, str]:
-    metadata = await oidc_metadata(settings)
-    state = secrets.token_urlsafe(32)
-    nonce = secrets.token_urlsafe(32)
-    verifier = secrets.token_urlsafe(64)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
-    pending = {
-        "nonce": nonce,
-        "verifier": verifier,
-        "returnTo": return_to or "",
-        "expiresAt": epoch_seconds() + 600,
-    }
-    if oidc_state_store is None:
-        store.oidc_states[state] = pending
-    else:
-        try:
-            await oidc_state_store.put("state", sha256_hex(state), pending, ttl_seconds=600)
-        except OidcStateUnavailable as exc:
-            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": settings.oidc_client_id,
-            "redirect_uri": settings.oidc_redirect_uri,
-            "scope": "openid profile email",
-            "state": state,
-            "nonce": nonce,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-        }
-    )
-    return {"authorizationUrl": f"{metadata['authorization_endpoint']}?{query}", "state": state}
+    try:
+        return await begin_oidc_login_flow(store.oidc_states, settings, oidc_state_store, return_to)
+    except OidcFlowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 async def complete_oidc_callback(
@@ -1987,115 +1960,26 @@ async def complete_oidc_callback(
     authorization_code: str,
     state: str,
 ) -> dict[str, str]:
-    if oidc_state_store is None:
-        pending = store.oidc_states.pop(state, None)
-    else:
-        try:
-            pending = await oidc_state_store.consume("state", sha256_hex(state))
-        except OidcStateUnavailable as exc:
-            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
-    if not pending or int(pending["expiresAt"]) <= epoch_seconds():
-        raise HTTPException(status_code=400, detail="invalid or expired OIDC state")
-    metadata = await oidc_metadata(settings)
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            token_response = await client.post(
-                metadata["token_endpoint"],
-                data={
-                    "grant_type": "authorization_code",
-                    "code": authorization_code,
-                    "redirect_uri": settings.oidc_redirect_uri,
-                    "client_id": settings.oidc_client_id,
-                    "client_secret": settings.oidc_client_secret or "",
-                    "code_verifier": pending["verifier"],
-                },
-            )
-            token_response.raise_for_status()
-            tokens = token_response.json()
-        claims = verify_oidc_id_token(settings, metadata, str(tokens["id_token"]), str(pending["nonce"]))
-    except (httpx.HTTPError, KeyError, InvalidTokenError, ValueError) as exc:
-        raise HTTPException(status_code=502, detail="OIDC token exchange failed") from exc
-    tenant_id = claims.get("tenant_id") or claims.get("tenantId") or claims.get("tid")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="OIDC tenant claim is required")
-    raw_roles = claims.get("roles") or claims.get("role") or ["USER"]
-    roles = [str(raw_roles)] if isinstance(raw_roles, str) else [str(role) for role in raw_roles]
-    roles = [role.upper() for role in roles if role.upper() in ROLE_PERMISSIONS] or ["USER"]
-    identity = Identity(str(claims["sub"]), normalize_tenant(tenant_id), roles, permissions_for_roles(roles), "oidc")
-    exchange_code = secrets.token_urlsafe(32)
-    exchange_payload = {
-        "identity": {
-            "principal": identity.principal,
-            "tenantId": identity.tenant_id,
-            "roles": identity.roles,
-        },
-        "expiresAt": epoch_seconds() + 60,
-    }
-    if oidc_state_store is None:
-        store.oidc_exchange_codes[sha256_hex(exchange_code)] = {"identity": identity, "expiresAt": exchange_payload["expiresAt"]}
-    else:
-        try:
-            await oidc_state_store.put("exchange", sha256_hex(exchange_code), exchange_payload, ttl_seconds=60)
-        except OidcStateUnavailable as exc:
-            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
-    return {"exchangeCode": exchange_code, "returnTo": str(pending["returnTo"])}
+        return await complete_oidc_callback_flow(
+            store.oidc_states,
+            store.oidc_exchange_codes,
+            settings,
+            oidc_state_store,
+            authorization_code,
+            state,
+        )
+    except OidcFlowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 async def consume_oidc_exchange_code(
     store: PlatformStore, oidc_state_store: OidcStateStore | None, exchange_code: str
 ) -> Identity | None:
-    if oidc_state_store is None:
-        record = store.oidc_exchange_codes.pop(sha256_hex(exchange_code), None)
-    else:
-        try:
-            record = await oidc_state_store.consume("exchange", sha256_hex(exchange_code))
-        except OidcStateUnavailable as exc:
-            raise HTTPException(status_code=503, detail="OIDC state store is unavailable") from exc
-    if not record or int(record["expiresAt"]) <= epoch_seconds():
-        return None
-    identity = record["identity"]
-    if isinstance(identity, Identity):
-        return identity
-    roles = [str(role) for role in identity.get("roles", ["USER"])]
-    return Identity(
-        str(identity["principal"]),
-        normalize_tenant(identity.get("tenantId")),
-        roles,
-        permissions_for_roles(roles),
-        "oidc",
-    )
-
-
-async def oidc_metadata(settings: Settings) -> dict[str, Any]:
-    if not settings.oidc_issuer_url or not settings.oidc_client_id or not settings.oidc_redirect_uri:
-        raise HTTPException(status_code=503, detail="OIDC is not configured")
-    issuer = settings.oidc_issuer_url.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{issuer}/.well-known/openid-configuration")
-            response.raise_for_status()
-            metadata = response.json()
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=503, detail="OIDC discovery is unavailable") from exc
-    for required_key in ("authorization_endpoint", "token_endpoint", "jwks_uri", "issuer"):
-        if not metadata.get(required_key):
-            raise HTTPException(status_code=503, detail="OIDC discovery response is incomplete")
-    return metadata
-
-
-def verify_oidc_id_token(settings: Settings, metadata: dict[str, Any], token: str, nonce: str) -> dict[str, Any]:
-    key = jwt.PyJWKClient(metadata["jwks_uri"]).get_signing_key_from_jwt(token)
-    claims = jwt.decode(
-        token,
-        key.key,
-        algorithms=metadata.get("id_token_signing_alg_values_supported", ["RS256"]),
-        audience=settings.oidc_client_id,
-        issuer=metadata["issuer"],
-        options={"require": ["exp", "sub", "nonce"]},
-    )
-    if claims.get("nonce") != nonce:
-        raise InvalidTokenError("OIDC nonce mismatch")
-    return claims
+        return await consume_oidc_exchange_code_flow(store.oidc_exchange_codes, oidc_state_store, exchange_code)
+    except OidcFlowError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 async def issue_tokens(

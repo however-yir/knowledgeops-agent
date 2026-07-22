@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from jwt import InvalidTokenError
 
 import knowledgeops_py.app as app_module
+import knowledgeops_py.application.oidc as oidc_module
 from knowledgeops_py.config import Settings
 
 
@@ -58,9 +59,9 @@ def test_oidc_authorization_code_pkce_flow_is_one_time(monkeypatch: pytest.Monke
         observed_nonce.append(nonce)
         return {"sub": "alice", "tenant_id": "tenant-a", "roles": ["ADMIN"], "nonce": nonce}
 
-    monkeypatch.setattr(app_module, "oidc_metadata", fake_metadata)
-    monkeypatch.setattr(app_module, "verify_oidc_id_token", fake_verify)
-    monkeypatch.setattr(app_module.httpx, "AsyncClient", lambda **_: FakeOidcClient())
+    monkeypatch.setattr(oidc_module, "oidc_metadata", fake_metadata)
+    monkeypatch.setattr(oidc_module, "verify_oidc_id_token", fake_verify)
+    monkeypatch.setattr(oidc_module.httpx, "AsyncClient", lambda **_: FakeOidcClient())
 
     async def exercise() -> None:
         login = await app_module.begin_oidc_login(store, settings, None, "/console")
@@ -107,8 +108,8 @@ def test_oidc_id_token_verification_requires_jwks_issuer_audience_and_nonce(monk
         assert kwargs["options"] == {"require": ["exp", "sub", "nonce"]}
         return {"sub": "alice", "nonce": "expected"}
 
-    monkeypatch.setattr(app_module.jwt, "PyJWKClient", FakeJwkClient)
-    monkeypatch.setattr(app_module.jwt, "decode", fake_decode)
+    monkeypatch.setattr(oidc_module.jwt, "PyJWKClient", FakeJwkClient)
+    monkeypatch.setattr(oidc_module.jwt, "decode", fake_decode)
     settings = Settings(oidc_client_id="knowledgeops")
     metadata = {
         "jwks_uri": "https://idp.example.test/keys",
@@ -116,7 +117,7 @@ def test_oidc_id_token_verification_requires_jwks_issuer_audience_and_nonce(monk
         "id_token_signing_alg_values_supported": ["RS256"],
     }
 
-    assert app_module.verify_oidc_id_token(settings, metadata, "signed-id-token", "expected")["sub"] == "alice"
-    monkeypatch.setattr(app_module.jwt, "decode", lambda *_args, **_kwargs: {"sub": "alice", "nonce": "other"})
+    assert oidc_module.verify_oidc_id_token(settings, metadata, "signed-id-token", "expected")["sub"] == "alice"
+    monkeypatch.setattr(oidc_module.jwt, "decode", lambda *_args, **_kwargs: {"sub": "alice", "nonce": "other"})
     with pytest.raises(InvalidTokenError, match="OIDC nonce mismatch"):
-        app_module.verify_oidc_id_token(settings, metadata, "signed-id-token", "expected")
+        oidc_module.verify_oidc_id_token(settings, metadata, "signed-id-token", "expected")
