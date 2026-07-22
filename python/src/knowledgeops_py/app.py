@@ -31,6 +31,7 @@ from .api.canonical import (
     react_response_payload,
     react_trace_payload,
 )
+from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
 from .application.research import DeepResearchApplicationService, ResearchNotResumable
@@ -207,6 +208,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allowed_commands=active_settings.workspace_allowed_commands,
         allowed_git_subcommands=active_settings.workspace_allowed_git_subcommands,
     )
+    harness_service = CanonicalHarnessApplicationService(workspace_runtime, active_settings)
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     embedding_provider = create_embedding_provider(active_settings)
     vector_store = (
@@ -809,18 +811,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 {"confirmationToken": token, "action": action, "riskLevel": schema["riskLevel"], "expiresInSeconds": 300},
                 trace_id=ctx.trace_id,
             )
-        preview = (
-            execute_canonical_harness_action(
-                workspace_runtime,
-                active_settings,
-                ctx.tenant_id,
-                "workspace_propose_patch",
-                action_input,
-                schema,
-            )
-            if action == "workspace_apply_patch"
-            else canonical_harness_preview(action, action_input, schema)
-        )
+        preview = harness_service.preview(ctx.tenant_id, action, action_input, schema)
         return ok(
             {"token": token, "action": action, "expiresAt": iso_at_epoch(expires_at), "preview": preview},
             trace_id=ctx.trace_id,
@@ -842,9 +833,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         confirmation["used"] = True
         if not legacy:
             return ok(
-                execute_canonical_harness_action(
-                    workspace_runtime,
-                    active_settings,
+                harness_service.execute(
                     ctx.tenant_id,
                     confirmation["action"],
                     confirmation["actionInput"],
@@ -1552,83 +1541,6 @@ def execute_trusted_action(store: PlatformStore, ctx: RequestContext, action: st
         matches = [entity for entity in store.graph_entities.values() if entity["tenantId"] == ctx.tenant_id and query_tokens.intersection(tokenize(entity["name"]))]
         return {"action": action, "status": "COMPLETED", "result": matches[: int(action_input.get("limit", 20))]}
     raise HTTPException(status_code=403, detail="action is not executable")
-
-
-def execute_canonical_harness_action(
-    workspace_runtime: WorkspaceRuntime,
-    settings: Settings,
-    tenant_id: str,
-    action: str,
-    action_input: dict[str, Any],
-    schema: dict[str, Any],
-) -> dict[str, Any]:
-    if action in settings.trusted_runtime_disabled_actions:
-        return harness_error("policy", f"action is disabled: {action}")
-    allowed = settings.trusted_runtime_tenant_allowed_actions.get(tenant_id, ())
-    if allowed and action not in allowed:
-        return harness_error("policy", f"action is not allowed for tenant: {action}")
-    if not schema.get("trustedOnly"):
-        return harness_error("policy", f"action requires trusted runtime access: {action}")
-    if not settings.trusted_runtime_enabled:
-        return harness_error("policy", "trusted runtime is disabled")
-    missing = [field for field in schema["requiredFields"] if not harness_has_value(action_input.get(field))]
-    if missing:
-        return harness_error("policy", f"missing required field(s): {', '.join(missing)}")
-    if action in {"workspace_propose_patch", "workspace_apply_patch"} and not (
-        harness_has_value(action_input.get("content")) or harness_has_value(action_input.get("patch"))
-    ):
-        return harness_error("policy", "missing required field: content or patch")
-    known = {*schema["requiredFields"], *schema["optionalFields"]}
-    unknown = [field for field in action_input if field not in known]
-    if unknown:
-        return harness_error("policy", f"unknown field(s): {', '.join(unknown)}")
-    if schema["runtime"] == "workspace":
-        return workspace_runtime.execute(action, action_input)
-    return harness_error("runtime", f"no runtime for action: {action}")
-
-
-def canonical_harness_preview(action: str, action_input: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "status": "pending_confirmation",
-        "source": schema["runtime"],
-        "action": action,
-        "actionInput": sanitize_harness_action_input(action_input, schema),
-    }
-
-
-def sanitize_harness_action_input(action_input: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
-    sensitive = set(schema["sensitiveFields"])
-    keywords = ("password", "secret", "token", "apikey", "api_key", "contactinfo", "authorization")
-    return {
-        key: "[REDACTED]"
-        if key in sensitive or any(keyword in key.lower() for keyword in keywords)
-        else limit_harness_value(value)
-        for key, value in action_input.items()
-    }
-
-
-def limit_harness_value(value: Any) -> Any:
-    if isinstance(value, str):
-        return value if len(value) <= 600 else f"{value[:600]}...[truncated]"
-    if isinstance(value, dict):
-        result = {str(key): limit_harness_value(item) for key, item in list(value.items())[:60]}
-        if len(value) > 60:
-            result["_truncated"] = True
-        return result
-    if isinstance(value, list):
-        result = [limit_harness_value(item) for item in value[:30]]
-        if len(value) > 30:
-            result.append({"_truncated": True})
-        return result
-    return value
-
-
-def harness_has_value(value: Any) -> bool:
-    return bool(value.strip()) if isinstance(value, str) else value is not None
-
-
-def harness_error(source: str, message: str) -> dict[str, Any]:
-    return {"status": "error", "source": source, "latencyMs": 0, "message": message}
 
 
 def create_workflow_task(store: PlatformStore, ctx: RequestContext, request: ChatRequestDto, response: ChatResponseDto) -> dict[str, Any]:
