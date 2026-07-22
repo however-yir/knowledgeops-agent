@@ -658,7 +658,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/cost/budget", response_model=CostEnvelope)
     def cost_budget(payload: BudgetUpdateDto, ctx: RequestContext = Depends(require_permissions("PERM_COST_WRITE"))):
-        store.budgets[ctx.tenant_id] = {"tenantId": ctx.tenant_id, "monthlyBudgetUsd": payload.monthlyBudgetUsd, "updatedAt": now_iso()}
+        previous = store.budgets.get(ctx.tenant_id, {})
+        store.budgets[ctx.tenant_id] = {
+            "tenantId": ctx.tenant_id,
+            "monthlyBudgetUsd": payload.monthlyBudgetUsd,
+            "hardLimitEnabled": payload.hardLimitEnabled if payload.hardLimitEnabled is not None else bool(previous.get("hardLimitEnabled", False)),
+            "updatedAt": now_iso(),
+        }
         return ok(cost_summary_data(store, ctx.tenant_id), msg="updated", trace_id=ctx.trace_id)
 
     @app.get("/ai/harness/actions")
@@ -2234,15 +2240,26 @@ def parse_optional_date(value: Any) -> date | None:
 
 
 def cost_summary_data(store: PlatformStore, tenant_id: str) -> CostSummaryDto:
-    usage = store.usage.get(tenant_id, {"monthCostUsd": 0.0})
-    budget = store.budgets.get(tenant_id, {"monthlyBudgetUsd": 25.0})
+    usage = store.usage.get(tenant_id, {"monthCostUsd": 0.0, "requestCount": 0, "inputTokens": 0, "outputTokens": 0})
+    budget = store.budgets.get(tenant_id, {"monthlyBudgetUsd": 25.0, "hardLimitEnabled": False})
     month_cost = float(usage.get("monthCostUsd", 0.0))
     monthly_budget = float(budget.get("monthlyBudgetUsd", 25.0))
+    request_count = int(usage.get("requestCount", 0))
+    input_tokens = int(usage.get("inputTokens", 0))
+    output_tokens = int(usage.get("outputTokens", 0))
     return CostSummaryDto(
         tenantId=tenant_id,
+        month=date.today().strftime("%Y-%m"),
         monthCostUsd=round4(month_cost),
         monthlyBudgetUsd=round4(monthly_budget),
-        budgetRemainingUsd=round4(monthly_budget - month_cost),
+        hardLimitEnabled=bool(budget.get("hardLimitEnabled", False)),
+        monthRequestCount=request_count,
+        monthInputTokens=input_tokens,
+        monthOutputTokens=output_tokens,
+        todayCostUsd=round4(month_cost),
+        todayRequestCount=request_count,
+        budgetRemainingUsd=round4(max(0.0, monthly_budget - month_cost)),
+        budgetExceeded=month_cost > monthly_budget,
     )
 
 
@@ -2252,9 +2269,11 @@ def usage_for(store: PlatformStore, tenant_id: str, prompt: str, answer: str) ->
 
 def record_provider_usage(store: PlatformStore, tenant_id: str, input_tokens: int, output_tokens: int) -> UsageDto:
     cost = round4(input_tokens * 0.000001 + output_tokens * 0.000002)
-    usage = store.usage.setdefault(tenant_id, {"monthCostUsd": 0.0, "requestCount": 0})
+    usage = store.usage.setdefault(tenant_id, {"monthCostUsd": 0.0, "requestCount": 0, "inputTokens": 0, "outputTokens": 0})
     usage["monthCostUsd"] = round4(float(usage["monthCostUsd"]) + cost)
     usage["requestCount"] += 1
+    usage["inputTokens"] = int(usage.get("inputTokens", 0)) + input_tokens
+    usage["outputTokens"] = int(usage.get("outputTokens", 0)) + output_tokens
     return UsageDto(inputTokens=input_tokens, outputTokens=output_tokens, totalTokens=input_tokens + output_tokens, estimatedCostUsd=cost)
 
 
@@ -2291,7 +2310,12 @@ def seed_store(store: PlatformStore, settings: Settings) -> None:
         "cases": [{"caseId": "case-1", "question": "KnowledgeOps parity", "expectedKeywords": ["KnowledgeOps"]}],
         "createdAt": now_iso(),
     }
-    store.budgets[settings.demo_tenant_id] = {"tenantId": settings.demo_tenant_id, "monthlyBudgetUsd": 25.0, "updatedAt": now_iso()}
+    store.budgets[settings.demo_tenant_id] = {
+        "tenantId": settings.demo_tenant_id,
+        "monthlyBudgetUsd": 25.0,
+        "hardLimitEnabled": False,
+        "updatedAt": now_iso(),
+    }
     store.action_schemas = [
         {"action": "rag_search", "requiredKeys": ["query"], "optionalKeys": ["chatId"], "riskLevel": "read"},
         {"action": "memory_save", "requiredKeys": ["content"], "optionalKeys": ["userId", "type"], "riskLevel": "write"},

@@ -28,7 +28,20 @@ def test_unprefixed_auth_and_business_routes_use_java_response_shapes() -> None:
 
     cost = client.get("/cost/summary", headers=AUTH_HEADERS)
     assert cost.status_code == 200
-    assert {"tenantId", "monthCostUsd", "monthlyBudgetUsd", "budgetRemainingUsd"} <= set(cost.json())
+    assert {
+        "tenantId",
+        "month",
+        "monthlyBudgetUsd",
+        "hardLimitEnabled",
+        "monthCostUsd",
+        "monthRequestCount",
+        "monthInputTokens",
+        "monthOutputTokens",
+        "todayCostUsd",
+        "todayRequestCount",
+        "budgetRemainingUsd",
+        "budgetExceeded",
+    } <= set(cost.json())
     assert "data" not in cost.json()
 
 

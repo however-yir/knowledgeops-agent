@@ -184,7 +184,25 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     if run.get("status") != "COMPLETED":
         failures.append("evaluation run did not complete")
     cost = client.get("/cost/summary", headers=AUTH_HEADERS).json()
-    assert_keys(failures, "cost", cost, ["tenantId", "monthCostUsd", "monthlyBudgetUsd", "budgetRemainingUsd"])
+    assert_keys(
+        failures,
+        "cost",
+        cost,
+        [
+            "tenantId",
+            "month",
+            "monthlyBudgetUsd",
+            "hardLimitEnabled",
+            "monthCostUsd",
+            "monthRequestCount",
+            "monthInputTokens",
+            "monthOutputTokens",
+            "todayCostUsd",
+            "todayRequestCount",
+            "budgetRemainingUsd",
+            "budgetExceeded",
+        ],
+    )
     client.post("/cost/budget", headers=AUTH_HEADERS, json={"monthlyBudgetUsd": 30})
     audit = client.get("/audit/logs", headers=AUTH_HEADERS).json()
     if audit:

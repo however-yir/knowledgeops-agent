@@ -138,14 +138,23 @@ class EvaluationDatasetCreateDto(BaseModel):
 
 class CostSummaryDto(BaseModel):
     tenantId: str
+    month: str
     monthCostUsd: float
     monthlyBudgetUsd: float
+    hardLimitEnabled: bool
+    monthRequestCount: int
+    monthInputTokens: int
+    monthOutputTokens: int
+    todayCostUsd: float
+    todayRequestCount: int
     budgetRemainingUsd: float
+    budgetExceeded: bool
 
 
 class BudgetUpdateDto(BaseModel):
     tenantId: str | None = None
     monthlyBudgetUsd: float
+    hardLimitEnabled: bool | None = None
 
 
 class AuditLogDto(BaseModel):
