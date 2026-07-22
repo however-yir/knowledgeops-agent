@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import math
 import re
 import time
@@ -23,8 +22,6 @@ from .api.canonical import (
     canonicalize_response,
     is_legacy_request,
     prepare_contract_path,
-    react_response_payload,
-    react_trace_payload,
 )
 from .api.conversation_routes import register_conversation_routes
 from .api.evaluation_routes import register_evaluation_routes
@@ -37,6 +34,8 @@ from .api.payloads import chat_request_payload, error_payload, fail, ok
 from .api.rag_routes import register_rag_routes
 from .api.research_routes import register_research_routes
 from .api.session_routes import register_session_routes
+from .api.sse import to_sse as encode_sse
+from .api.sse import to_sse_error as encode_sse_error
 from .api.system_routes import register_system_routes
 from .api.workflow_execution_routes import register_workflow_execution_routes
 from .api.workflow_task_routes import register_workflow_task_routes
@@ -380,8 +379,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tenant_context=tenant_context,
         chat_response_with_provider=chat_response_with_provider,
         create_workflow_task=create_workflow_task,
-        to_sse=to_sse,
-        to_sse_error=to_sse_error,
+        to_sse=lambda data, trace_id, legacy, react=False: encode_sse(data, trace_id, legacy, react, ok=ok),
+        to_sse_error=lambda exc, trace_id, legacy: encode_sse_error(exc, trace_id, legacy, error_payload=error_payload),
     )
     register_ingestion_routes(
         app,
@@ -412,8 +411,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         is_legacy_request=is_legacy_request,
         chat_request_payload=chat_request_payload,
         chat_response_with_provider=chat_response_with_provider,
-        to_sse=to_sse,
-        to_sse_error=to_sse_error,
+        to_sse=lambda data, trace_id, legacy, react=False: encode_sse(data, trace_id, legacy, react, ok=ok),
+        to_sse_error=lambda exc, trace_id, legacy: encode_sse_error(exc, trace_id, legacy, error_payload=error_payload),
     )
     register_rag_routes(
         app,
@@ -1607,24 +1606,6 @@ def record_provider_usage(store: PlatformStore, tenant_id: str, input_tokens: in
 
 def select_audit_fields(log: dict[str, Any]) -> dict[str, Any]:
     return {key: log[key] for key in ["tenantId", "principal", "method", "path", "status", "createdAt"]}
-
-
-def to_sse(data: ChatResponseDto, trace_id: str, legacy: bool, react: bool = False) -> str:
-    events = []
-    for trace in data.trace:
-        payload = ok(trace, msg="trace", trace_id=trace_id) if legacy else react_trace_payload(trace)
-        events.append(f"event: trace\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n")
-    token = ok({"token": data.answer}, msg="token", trace_id=trace_id) if legacy else {"token": data.answer}
-    events.append(f"event: token\ndata: {json.dumps(token, ensure_ascii=False)}\n\n")
-    done = ok(data, trace_id=trace_id) if legacy else react_response_payload(data) if react else data.model_dump()
-    events.append(f"event: done\ndata: {json.dumps(done, ensure_ascii=False)}\n\n")
-    return "".join(events)
-
-
-def to_sse_error(exc: Exception, trace_id: str, legacy: bool) -> str:
-    message = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
-    payload = error_payload(message or "stream failed", "STREAM_FAILED", trace_id) if legacy else {"message": message or "stream failed"}
-    return f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def seed_store(store: PlatformStore, settings: Settings) -> None:
