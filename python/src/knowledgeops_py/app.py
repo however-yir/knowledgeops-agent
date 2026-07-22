@@ -32,6 +32,7 @@ from .api.canonical import (
     react_trace_payload,
 )
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
+from .application.memory import MemoryApplicationService, memory_context
 from .application.research import DeepResearchApplicationService, ResearchNotResumable
 from .application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from .config import Settings, load_settings
@@ -186,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     workflow_service = ReactWorkflowApplicationService(workflow_repository) if workflow_repository is not None else None
     research_service = DeepResearchApplicationService(workflow_repository) if workflow_repository is not None else None
     memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
+    memory_service = MemoryApplicationService(memory_repository) if memory_repository is not None else None
     evaluation_repository = SqlAlchemyEvaluationRepository(session_factory) if session_factory is not None else None
     graph_repository = SqlAlchemyGraphRepository(session_factory) if session_factory is not None else None
     workspace_runtime = WorkspaceRuntime(
@@ -258,6 +260,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.workflow_service = workflow_service
     app.state.research_service = research_service
     app.state.memory_repository = memory_repository
+    app.state.memory_service = memory_service
     app.state.evaluation_repository = evaluation_repository
     app.state.graph_repository = graph_repository
     app.state.oidc_state_store = oidc_state_store
@@ -445,7 +448,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         payload = chat_request_payload(payload, prompt, chatId, modelProfile)
         data = await chat_response_with_provider(
-            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
+            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings,
+            session_repository=session_repository, memory_service=memory_service
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -460,7 +464,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         payload = chat_request_payload(payload, prompt, chatId, modelProfile)
         data = await chat_response_with_provider(
-            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
+            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings,
+            session_repository=session_repository, memory_service=memory_service
         )
         if not is_legacy_request(request):
             return PlainTextResponse(f"data: {data.answer}\n\n", media_type="text/event-stream")
@@ -469,14 +474,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/ai/react/chat", response_model=ChatEnvelope)
     async def react_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
         data = await chat_response_with_provider(
-            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings, session_repository=session_repository
+            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings,
+            session_repository=session_repository, memory_service=memory_service
         )
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/react/chat/stream")
     async def react_chat_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
         data = await chat_response_with_provider(
-            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings, session_repository=session_repository
+            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings,
+            session_repository=session_repository, memory_service=memory_service
         )
         return PlainTextResponse(
             to_sse(data, ctx.trace_id, legacy=is_legacy_request(request), react=True), media_type="text/event-stream"
@@ -501,6 +508,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             graph_repository=graph_repository,
             session_repository=session_repository,
             vector_store=vector_store,
+            memory_service=memory_service,
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -874,6 +882,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             require_evidence=False,
             settings=active_settings,
             session_repository=session_repository,
+            memory_service=memory_service,
         )
         return PlainTextResponse(response.answer, media_type="text/html; charset=utf-8")
 
@@ -889,6 +898,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             graph_repository=graph_repository,
             session_repository=session_repository,
             vector_store=vector_store,
+            memory_service=memory_service,
         )
         return ok(data, trace_id=ctx.trace_id)
 
@@ -1074,6 +1084,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     require_evidence=False,
                     settings=active_settings,
                     session_repository=session_repository,
+                    memory_service=memory_service,
                 )
                 return response.model_dump()
 
@@ -1082,7 +1093,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             task = workflow.task
         else:
             response = await chat_response_with_provider(
-                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
+                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings,
+                session_repository=session_repository, memory_service=memory_service
             )
             task = create_workflow_task(store, ctx, payload, response)
         result = response.model_dump() | {"taskId": task["taskId"], "status": task["status"]}
@@ -1100,6 +1112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     require_evidence=False,
                     settings=active_settings,
                     session_repository=session_repository,
+                    memory_service=memory_service,
                 )
                 return response.model_dump()
 
@@ -1107,7 +1120,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response = ChatResponseDto.model_validate(workflow.response)
         else:
             response = await chat_response_with_provider(
-                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
+                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings,
+                session_repository=session_repository, memory_service=memory_service
             )
             create_workflow_task(store, ctx, payload, response)
         return PlainTextResponse(
@@ -1136,6 +1150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 require_evidence=False,
                 settings=active_settings,
                 session_repository=session_repository,
+                memory_service=memory_service,
             )
             return response.model_dump()
 
@@ -2463,6 +2478,7 @@ async def chat_response_with_provider(
     rag: dict[str, Any] | None = None,
     session_repository: SqlAlchemySessionRepository | None = None,
     record_session: bool = True,
+    memory_service: MemoryApplicationService | None = None,
 ) -> ChatResponseDto:
     rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
     response = chat_response(
@@ -2479,6 +2495,10 @@ async def chat_response_with_provider(
         grounded_prompt = request.prompt
         if rag["evidence"]:
             grounded_prompt = f"{request.prompt}\n\nEvidence:\n" + "\n".join(rag["evidence"][:5])
+        if memory_service is not None:
+            grounded_prompt += memory_context(
+                await memory_service.recall(tenant_context(ctx), request.chatId, request.prompt)
+            )
         try:
             completion = await provider.complete(tenant_context(ctx), grounded_prompt, request.modelProfile)
         except (httpx.HTTPError, ValueError) as exc:
@@ -2502,6 +2522,8 @@ async def chat_response_with_provider(
         )
         if saved is None:
             raise HTTPException(status_code=404, detail="session not found")
+    if memory_service is not None:
+        await memory_service.capture_explicit(tenant_context(ctx), request.chatId, request.prompt)
     return response
 
 
@@ -2538,6 +2560,7 @@ async def rag_response_with_provider(
     session_repository: SqlAlchemySessionRepository | None = None,
     record_session: bool = True,
     vector_store: VectorStore | None = None,
+    memory_service: MemoryApplicationService | None = None,
 ) -> RagResponseDto:
     rag = await retrieve_hybrid(
         store,
@@ -2552,7 +2575,7 @@ async def rag_response_with_provider(
         vector_store,
     )
     base = await chat_response_with_provider(
-        store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session
+        store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session, memory_service
     )
     return RagResponseDto(
         answer=base.answer,
