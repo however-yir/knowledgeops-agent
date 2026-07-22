@@ -451,12 +451,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/ai/react/chat/stream")
     async def react_chat_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await chat_response_with_provider(
-            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings,
-            session_repository=session_repository, memory_service=memory_service
-        )
+        legacy = is_legacy_request(request)
+        try:
+            data = await chat_response_with_provider(
+                store, ctx, payload, mode="react", require_evidence=False, settings=active_settings,
+                session_repository=session_repository, memory_service=memory_service
+            )
+        except Exception as exc:
+            return PlainTextResponse(to_sse_error(exc, ctx.trace_id, legacy), media_type="text/event-stream")
         return PlainTextResponse(
-            to_sse(data, ctx.trace_id, legacy=is_legacy_request(request), react=True), media_type="text/event-stream"
+            to_sse(data, ctx.trace_id, legacy=legacy, react=True), media_type="text/event-stream"
         )
 
     @app.post("/ai/pdf/chat", response_model=RagEnvelope)
@@ -1063,30 +1067,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/ai/workflow/react/chat/stream")
     async def workflow_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        if workflow_service is not None:
-            async def respond() -> dict[str, Any]:
-                response = await chat_response_with_provider(
-                    store,
-                    ctx,
-                    payload,
-                    mode="workflow",
-                    require_evidence=False,
-                    settings=active_settings,
-                    session_repository=session_repository,
-                    memory_service=memory_service,
-                )
-                return response.model_dump()
+        legacy = is_legacy_request(request)
+        try:
+            if workflow_service is not None:
+                async def respond() -> dict[str, Any]:
+                    response = await chat_response_with_provider(
+                        store,
+                        ctx,
+                        payload,
+                        mode="workflow",
+                        require_evidence=False,
+                        settings=active_settings,
+                        session_repository=session_repository,
+                        memory_service=memory_service,
+                    )
+                    return response.model_dump()
 
-            workflow = await workflow_service.run(tenant_context(ctx), payload.prompt, payload.modelProfile, payload.chatId, respond)
-            response = ChatResponseDto.model_validate(workflow.response)
-        else:
-            response = await chat_response_with_provider(
-                store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings,
-                session_repository=session_repository, memory_service=memory_service
-            )
-            create_workflow_task(store, ctx, payload, response)
+                workflow = await workflow_service.run(tenant_context(ctx), payload.prompt, payload.modelProfile, payload.chatId, respond)
+                response = ChatResponseDto.model_validate(workflow.response)
+            else:
+                response = await chat_response_with_provider(
+                    store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings,
+                    session_repository=session_repository, memory_service=memory_service
+                )
+                create_workflow_task(store, ctx, payload, response)
+        except Exception as exc:
+            return PlainTextResponse(to_sse_error(exc, ctx.trace_id, legacy), media_type="text/event-stream")
         return PlainTextResponse(
-            to_sse(response, ctx.trace_id, legacy=is_legacy_request(request), react=True), media_type="text/event-stream"
+            to_sse(response, ctx.trace_id, legacy=legacy, react=True), media_type="text/event-stream"
         )
 
     @app.post("/ai/workflow/tasks/{taskId}/resume")
@@ -2824,6 +2832,12 @@ def to_sse(data: ChatResponseDto, trace_id: str, legacy: bool, react: bool = Fal
     done = ok(data, trace_id=trace_id) if legacy else react_response_payload(data) if react else data.model_dump()
     events.append(f"event: done\ndata: {json.dumps(done, ensure_ascii=False)}\n\n")
     return "".join(events)
+
+
+def to_sse_error(exc: Exception, trace_id: str, legacy: bool) -> str:
+    message = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
+    payload = error_payload(message or "stream failed", "STREAM_FAILED", trace_id) if legacy else {"message": message or "stream failed"}
+    return f"event: error\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 def seed_store(store: PlatformStore, settings: Settings) -> None:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from knowledgeops_py.app import create_app
@@ -419,6 +421,27 @@ def test_canonical_react_sse_uses_java_event_payloads_while_python_v1_keeps_enve
     assert "data" not in canonical_done
     assert canonical_done["trace"][0]["thought"] == canonical_done["trace"][0]["thoughtSummary"]
     assert legacy_done["ok"] == 1 and "data" in legacy_done
+
+
+@pytest.mark.parametrize("path", ["/ai/react/chat/stream", "/ai/workflow/react/chat/stream"])
+def test_canonical_react_sse_returns_java_error_event_for_provider_failure(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    async def provider_failure(*args: object, **kwargs: object) -> None:
+        raise HTTPException(status_code=502, detail="model provider request failed")
+
+    monkeypatch.setattr("knowledgeops_py.app.chat_response_with_provider", provider_failure)
+    response = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a"))).post(
+        path,
+        headers=AUTH_HEADERS,
+        json={"chatId": "react-failure", "prompt": "hello", "modelProfile": "balanced"},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert json.loads([line.removeprefix("data: ") for line in response.text.splitlines() if line.startswith("data: ")][0]) == {
+        "message": "model provider request failed"
+    }
 
 
 def test_canonical_chat_stream_is_raw_text_while_python_v1_keeps_named_events() -> None:
