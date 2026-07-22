@@ -18,6 +18,7 @@ REQUIRED_FILES = [
     "python/src/knowledgeops_py/scripts/java_baseline_manifest.py",
     "python/src/knowledgeops_py/scripts/manifest_gate.py",
     "python/src/knowledgeops_py/scripts/security_gate.py",
+    "python/src/knowledgeops_py/scripts/shadow_preflight.py",
     "python/src/knowledgeops_py/scripts/parity_report.py",
     "python/tests/test_app.py",
     "python/Dockerfile",

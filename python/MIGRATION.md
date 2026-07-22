@@ -33,6 +33,7 @@ knowledgeops-python-baseline-manifest \
 
 1. Run migrations only in an isolated Python database, replay desensitized requests, and save contract/performance reports.
    Use `knowledgeops-python-cross-contract --java-base-url ... --python-base-url ... --api-key ... --tenant-id ...` against the two isolated stacks.
+   Before the replay, run `knowledgeops-python-shadow-preflight`. It verifies production dependencies, OIDC settings, queue selection, isolated-write declarations and the 10,000-request-or-7-day observation target without printing secrets or calling external services.
 2. Mirror read-only production traffic to Python. Mirror writes only into the isolated database.
 3. Require 10,000 requests or seven continuous days with structure difference `<0.5%`, no cross-tenant result, error rate within `0.2` percentage points of Java and p95 no more than `1.2x` Java.
 4. Drain Java workers, stamp the compatible Alembic revision, start Python workers, then direct write traffic to Python.
