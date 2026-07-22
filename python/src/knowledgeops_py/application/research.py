@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, TypedDict
@@ -293,3 +294,30 @@ def findings_from(retrievals: Mapping[str, Any], questions: list[str]) -> list[d
         for question in questions
         if isinstance((value := retrievals.get(question)), Mapping)
     ]
+
+
+def parse_research_questions(answer: str, topic: str) -> list[str]:
+    questions: list[str] = []
+    for line in answer.splitlines():
+        question = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
+        if question and question not in questions:
+            questions.append(question[:500])
+    return questions[:4] or [topic]
+
+
+def research_evidence_text(findings: list[dict[str, Any]]) -> str:
+    sections: list[str] = []
+    for index, finding in enumerate(findings, start=1):
+        evidence = [str(item) for item in finding.get("evidence", []) if str(item).strip()]
+        if evidence:
+            sections.append(f"[{index}] {finding.get('question', '')}: {evidence[0][:800]}")
+    return "\n".join(sections)
+
+
+def fallback_research_report(topic: str, findings: list[dict[str, Any]]) -> str:
+    sections = [f"# {topic}", "", "## Findings"]
+    for index, finding in enumerate(findings, start=1):
+        evidence = [str(item) for item in finding.get("evidence", []) if str(item).strip()]
+        if evidence:
+            sections.extend([f"### {finding.get('question', topic)}", evidence[0][:800], f"[{index}]"])
+    return "\n\n".join(sections) + "\n"

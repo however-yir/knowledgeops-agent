@@ -11,7 +11,13 @@ from redis.exceptions import RedisError
 from knowledgeops_py.app import retrieve_chunks_with_semantics
 from knowledgeops_py.application.ingestion import IngestionApplicationService
 from knowledgeops_py.application.memory import MemoryApplicationService, memory_context
-from knowledgeops_py.application.research import DeepResearchApplicationService, ResearchNotResumable
+from knowledgeops_py.application.research import (
+    DeepResearchApplicationService,
+    ResearchNotResumable,
+    fallback_research_report,
+    parse_research_questions,
+    research_evidence_text,
+)
 from knowledgeops_py.application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from knowledgeops_py.config import Settings
 from knowledgeops_py.domain.context import TenantContext
@@ -74,6 +80,15 @@ def test_domain_ports_and_tenant_context_are_framework_independent() -> None:
     assert context.has("PERM_CHAT_WRITE")
     for port in (ChatProvider, EmbeddingProvider, Reranker, VectorStore, IngestionQueue, ToolRuntime):
         assert port.__module__ == "knowledgeops_py.domain.ports"
+
+
+def test_research_text_rules_normalize_questions_and_evidence() -> None:
+    questions = parse_research_questions("1. Heat risk\n- Heat risk\n* Hydration", "fallback")
+    findings = [{"question": "Heat risk", "evidence": ["Use water.", "ignored"]}, {"question": "Empty", "evidence": [""]}]
+
+    assert questions == ["Heat risk", "Hydration"]
+    assert research_evidence_text(findings) == "[1] Heat risk: Use water."
+    assert fallback_research_report("Safety", findings) == "# Safety\n\n\n\n## Findings\n\n### Heat risk\n\nUse water.\n\n[1]\n"
 
 
 def test_async_database_metadata_and_transaction_scope() -> None:

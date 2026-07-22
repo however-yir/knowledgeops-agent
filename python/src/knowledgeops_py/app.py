@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import io
 import math
-import re
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -52,7 +51,12 @@ from .application.evaluation_scoring import score_evaluation_case
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
-from .application.research import DeepResearchApplicationService
+from .application.research import (
+    DeepResearchApplicationService,
+    fallback_research_report,
+    parse_research_questions,
+    research_evidence_text,
+)
 from .application.retrieval_math import cosine_like, tokenize, vector_cosine
 from .application.workflow import ReactWorkflowApplicationService
 from .config import Settings, load_settings
@@ -655,33 +659,6 @@ async def research_report_with_provider(
     )
     answer = str(completion.get("answer") or "").strip()
     return answer if answer else fallback_research_report(topic, findings)
-
-
-def parse_research_questions(answer: str, topic: str) -> list[str]:
-    questions: list[str] = []
-    for line in answer.splitlines():
-        question = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
-        if question and question not in questions:
-            questions.append(question[:500])
-    return questions[:4] or [topic]
-
-
-def research_evidence_text(findings: list[dict[str, Any]]) -> str:
-    sections: list[str] = []
-    for index, finding in enumerate(findings, start=1):
-        evidence = [str(item) for item in finding.get("evidence", []) if str(item).strip()]
-        if evidence:
-            sections.append(f"[{index}] {finding.get('question', '')}: {evidence[0][:800]}")
-    return "\n".join(sections)
-
-
-def fallback_research_report(topic: str, findings: list[dict[str, Any]]) -> str:
-    sections = [f"# {topic}", "", "## Findings"]
-    for index, finding in enumerate(findings, start=1):
-        evidence = [str(item) for item in finding.get("evidence", []) if str(item).strip()]
-        if evidence:
-            sections.extend([f"### {finding.get('question', topic)}", evidence[0][:800], f"[{index}]"])
-    return "\n\n".join(sections) + "\n"
 
 
 def require_eval_run(store: PlatformStore, ctx: RequestContext, run_id: str) -> dict[str, Any]:
