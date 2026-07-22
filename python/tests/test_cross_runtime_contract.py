@@ -79,3 +79,4 @@ def test_cross_runtime_sse_cases_negotiate_event_streams() -> None:
     for case in cases:
         if case.get("sse"):
             assert case["headers"]["Accept"] == "text/event-stream"
+            assert case["headers"]["Connection"] == "close"
