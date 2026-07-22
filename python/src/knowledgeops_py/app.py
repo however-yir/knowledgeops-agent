@@ -27,6 +27,7 @@ from .api.canonical import (
     react_response_payload,
     react_trace_payload,
 )
+from .api.system_routes import register_system_routes
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
@@ -316,23 +317,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return dependency
 
-    @app.get("/actuator/health")
-    @app.get("/health")
-    def health(request: Request):
-        return ok({"status": "UP", "service": "knowledgeops-agent-python"}, trace_id=ensure_trace_id(request))
-
-    @app.get("/metrics")
-    def metrics(request: Request, _ctx: RequestContext = Depends(require_permissions("PERM_METRICS_READ"))):
-        text = prometheus_text(store)
-        return ok({"prometheus": text, "counters": store.metrics}, trace_id=ensure_trace_id(request))
-
-    @app.get("/actuator/prometheus")
-    def prometheus(_ctx: RequestContext = Depends(require_permissions("PERM_METRICS_READ"))):
-        return PlainTextResponse(prometheus_text(store), media_type="text/plain; version=0.0.4")
-
-    @app.get("/v3/api-docs")
-    def openapi_docs(request: Request):
-        return ok(app.openapi(), trace_id=ensure_trace_id(request))
+    register_system_routes(
+        app,
+        store=store,
+        ensure_trace_id=ensure_trace_id,
+        require_permissions=require_permissions,
+        ok=ok,
+        prometheus_text=prometheus_text,
+    )
 
     @app.post("/auth/token")
     async def auth_token(request: Request, x_api_key: str | None = Header(default=None), x_tenant_id: str | None = Header(default=None)):
