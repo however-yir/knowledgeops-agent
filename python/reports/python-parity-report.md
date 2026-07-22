@@ -45,6 +45,8 @@ Python target: FastAPI enterprise service edition.
 | POST | `/ai/feedback` | implemented |
 | GET | `/ai/evaluation/datasets` | implemented |
 | POST | `/ai/evaluation/runs` | implemented |
+| GET | `/ai/evaluation/datasets/{datasetId}/comparison` | implemented |
+| GET | `/ai/evaluation/runs/{runId}/report` | implemented |
 | GET | `/audit/logs` | implemented |
 | GET | `/cost/summary` | implemented |
 | POST | `/cost/budget` | implemented |
@@ -60,6 +62,10 @@ Python target: FastAPI enterprise service edition.
 | GET | `/ai/memory/items` | implemented |
 | POST | `/ai/graph/entities` | implemented |
 | GET | `/ai/graph/entities` | implemented |
+| POST | `/ai/graph/relations` | implemented |
+| GET | `/ai/graph/entities/{entityId}/neighbors` | implemented |
+| POST | `/ai/graph/facts` | implemented |
+| GET | `/ai/graph/facts` | implemented |
 
 ## Response Contract
 

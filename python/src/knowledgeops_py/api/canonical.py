@@ -99,6 +99,10 @@ def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]
         if isinstance(data, list):
             return [evaluation_dataset_payload(item) for item in data]
         return evaluation_dataset_payload(data)
+    if path.startswith("/ai/evaluation/datasets/") and path.endswith("/comparison"):
+        return evaluation_comparison_payload(data)
+    if is_evaluation_run_path(path):
+        return evaluation_run_payload(data)
     if path == "/ai/sessions":
         return paged_session_payload(data, query)
     if is_session_state_path(path):
@@ -215,6 +219,68 @@ def evaluation_dataset_payload(data: Any) -> dict[str, Any]:
         "caseCount": source.get("caseCount") if source.get("caseCount") is not None else len(cases or []),
         "createdAt": source.get("createdAt"),
         "updatedAt": source.get("updatedAt"),
+    }
+
+
+def evaluation_comparison_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "dataset": evaluation_dataset_payload(source.get("dataset")),
+        "baseline": evaluation_run_payload(source.get("baseline")) if source.get("baseline") is not None else None,
+        "current": evaluation_run_payload(source.get("current")) if source.get("current") is not None else None,
+    }
+
+
+def is_evaluation_run_path(path: str) -> bool:
+    return path == "/ai/evaluation/runs" or (
+        path.startswith("/ai/evaluation/runs/") and not path.endswith("/report")
+    ) or (path.startswith("/ai/evaluation/datasets/") and path.endswith("/runs"))
+
+
+def evaluation_run_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    metrics = model_data(source.get("metrics"))
+    return {
+        "runId": source.get("runId"),
+        "datasetId": source.get("datasetId"),
+        "tenantId": source.get("tenantId"),
+        "status": "SUCCESS" if source.get("status") == "COMPLETED" else source.get("status"),
+        "modelProfile": source.get("modelProfile"),
+        "metrics": {
+            "totalCases": metrics.get("totalCases", 0),
+            "passedCases": metrics.get("passedCases", 0),
+            "runScore": metrics.get("runScore", 0.0),
+            "retrievalHitRate": metrics.get("retrievalHitRate", 0.0),
+            "citationCoverageRate": metrics.get("citationCoverageRate", 0.0),
+            "answerFaithfulnessScore": metrics.get("answerFaithfulnessScore", 0.0),
+            "avgLatencyMs": metrics.get("avgLatencyMs", 0.0),
+            "failureRate": metrics.get("failureRate", 0.0),
+        },
+        "results": [evaluation_result_payload(item) for item in source.get("results") or []],
+        "errorMessage": source.get("errorMessage"),
+        "startedAt": source.get("startedAt") or "",
+        "finishedAt": source.get("finishedAt") or "",
+        "createdAt": source.get("createdAt") or "",
+    }
+
+
+def evaluation_result_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "resultId": source.get("resultId"),
+        "caseId": source.get("caseId"),
+        "status": source.get("status"),
+        "question": source.get("question"),
+        "answer": source.get("answer") or "",
+        "citations": source.get("citations") or [],
+        "evidence": source.get("evidence") or [],
+        "retrievalHit": source.get("retrievalHit", 0.0),
+        "citationCoverage": source.get("citationCoverage", 0.0),
+        "keywordScore": source.get("keywordScore", 0.0),
+        "answerFaithfulness": source.get("answerFaithfulness", 0.0),
+        "score": source.get("score", 0.0),
+        "latencyMs": source.get("latencyMs", 0),
+        "errorMessage": source.get("errorMessage"),
     }
 
 

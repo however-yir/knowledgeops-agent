@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -618,21 +618,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return ok(run, trace_id=ctx.trace_id)
         run = require_eval_run(store, ctx, runId)
         run["isBaseline"] = True
+        dataset = store.eval_datasets.get(run["datasetId"])
+        if dataset is not None:
+            dataset["baselineRunId"] = runId
+            dataset["updatedAt"] = now_iso()
         return ok(run, trace_id=ctx.trace_id)
 
     @app.get("/ai/evaluation/datasets/{datasetId}/comparison")
-    async def evaluation_comparison(datasetId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_comparison(
+        datasetId: str,
+        request: Request,
+        ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ")),
+    ):
         if evaluation_repository is not None:
             dataset = await evaluation_repository.get_dataset(ctx.tenant_id, datasetId)
             if dataset is None:
                 raise HTTPException(status_code=404, detail="dataset not found")
             runs = await evaluation_repository.list_runs(ctx.tenant_id, datasetId)
-            return ok({"datasetId": datasetId, "runs": runs}, trace_id=ctx.trace_id)
+            data = {"datasetId": datasetId, "runs": runs} if is_legacy_request(request) else evaluation_comparison_data(dataset, runs)
+            return ok(data, trace_id=ctx.trace_id)
         dataset = store.eval_datasets.get(datasetId)
         if not dataset or dataset["tenantId"] != ctx.tenant_id:
             raise HTTPException(status_code=404, detail="dataset not found")
         runs = [run for run in store.eval_runs.values() if run["tenantId"] == ctx.tenant_id and run["datasetId"] == datasetId]
-        return ok({"datasetId": datasetId, "runs": runs}, trace_id=ctx.trace_id)
+        data = {"datasetId": datasetId, "runs": runs} if is_legacy_request(request) else evaluation_comparison_data(dataset, runs)
+        return ok(data, trace_id=ctx.trace_id)
 
     @app.get("/ai/evaluation/runs/{runId}/report")
     async def evaluation_report(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
@@ -640,12 +650,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             run = await evaluation_repository.get_run(ctx.tenant_id, runId)
             if run is None:
                 raise HTTPException(status_code=404, detail="evaluation run not found")
-            return PlainTextResponse(
-                f"# Evaluation {runId}\n\nScore: {run['metrics']['runScore']}\n",
-                media_type="text/markdown; charset=utf-8",
-            )
+            return evaluation_report_response(run)
         run = require_eval_run(store, ctx, runId)
-        return PlainTextResponse(f"# Evaluation {runId}\n\nScore: {run['metrics']['runScore']}\n", media_type="text/markdown; charset=utf-8")
+        return evaluation_report_response(run)
 
     @app.get("/audit/logs", response_model=AuditLogsEnvelope)
     def audit_logs(ctx: RequestContext = Depends(require_permissions("PERM_AUDIT_READ")), limit: int = Query(default=50)):
@@ -1218,6 +1225,75 @@ def require_eval_run(store: PlatformStore, ctx: RequestContext, run_id: str) -> 
     if not run or run["tenantId"] != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="evaluation run not found")
     return run
+
+
+def evaluation_comparison_data(dataset: dict[str, Any], runs: list[dict[str, Any]]) -> dict[str, Any]:
+    recent = sorted(runs, key=lambda item: str(item.get("createdAt") or ""), reverse=True)
+    current = recent[0] if recent else None
+    baseline_id = dataset.get("baselineRunId")
+    baseline = next((run for run in recent if run.get("runId") == baseline_id), None)
+    if baseline is None and len(recent) > 1:
+        baseline = recent[1]
+    return {"dataset": dataset, "baseline": baseline, "current": current}
+
+
+def evaluation_report_response(run: dict[str, Any]) -> PlainTextResponse:
+    return PlainTextResponse(
+        evaluation_report_markdown(run),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="rag-evaluation-{run["runId"]}.md"'},
+    )
+
+
+def evaluation_report_markdown(run: dict[str, Any]) -> str:
+    metrics = run["metrics"]
+    lines = [
+        "# RAG Evaluation Report",
+        "",
+        f"- Run ID: `{run['runId']}`",
+        f"- Dataset ID: `{run['datasetId']}`",
+        f"- Tenant: `{run['tenantId']}`",
+        f"- Model Profile: `{run['modelProfile']}`",
+        f"- Status: `{java_evaluation_status(run['status'])}`",
+        f"- Generated At: {datetime.now().isoformat(timespec='seconds')}",
+        "",
+        "## Metrics",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+        f"| Run Score | {percent(metrics.get('runScore', 0.0))} |",
+        f"| Retrieval Hit Rate | {percent(metrics.get('retrievalHitRate', 0.0))} |",
+        f"| Citation Coverage | {percent(metrics.get('citationCoverageRate', 0.0))} |",
+        f"| Answer Faithfulness | {percent(metrics.get('answerFaithfulnessScore', 0.0))} |",
+        f"| Avg Latency | {float(metrics.get('avgLatencyMs', 0.0)):.1f} ms |",
+        f"| Failure Rate | {percent(metrics.get('failureRate', 0.0))} |",
+        "",
+        "## Cases",
+        "",
+        "| Case | Status | Score | Retrieval | Citation | Faithfulness | Latency |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    lines.extend(
+        "| `{caseId}` | {status} | {score} | {retrieval} | {citation} | {faithfulness} | {latency} ms |".format(
+            caseId=result["caseId"],
+            status=result["status"],
+            score=percent(result["score"]),
+            retrieval=percent(result["retrievalHit"]),
+            citation=percent(result["citationCoverage"]),
+            faithfulness=percent(result["answerFaithfulness"]),
+            latency=result["latencyMs"],
+        )
+        for result in run["results"]
+    )
+    return "\n".join([*lines, ""])
+
+
+def percent(value: float) -> str:
+    return f"{float(value) * 100:.2f}%"
+
+
+def java_evaluation_status(value: str) -> str:
+    return "SUCCESS" if value == "COMPLETED" else value
 
 
 def require_research_task(store: PlatformStore, ctx: RequestContext, task_id: str) -> dict[str, Any]:
@@ -2093,27 +2169,67 @@ def create_eval_run(store: PlatformStore, ctx: RequestContext, payload: Evaluati
     if dataset and dataset["tenantId"] != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="dataset not found")
     cases = dataset["cases"] if dataset else [{"question": "default evaluation", "expectedKeywords": ["KnowledgeOps"]}]
-    results = []
+    results: list[dict[str, Any]] = []
     for index, case in enumerate(cases):
+        started = time.perf_counter()
         request = ChatRequestDto(chatId=f"eval-{index}", prompt=str(case["question"]), modelProfile=payload.modelProfile)
         answer = chat_response(store, ctx, request, "eval", require_evidence=False)
         expected = [str(item).lower() for item in case.get("expectedKeywords", [])]
         pool = answer.answer.lower()
         keyword_score = 1.0 if not expected else len([keyword for keyword in expected if keyword in pool]) / len(expected)
-        results.append({"caseId": case.get("caseId", f"case-{index + 1}"), "score": round4(keyword_score), "answer": answer.answer})
-    score = round4(sum(result["score"] for result in results) / max(1, len(results)))
+        citations: list[str] = []
+        evidence: list[str] = []
+        retrieval_hit = 1.0 if evidence else 0.0
+        citation_coverage = 1.0 if citations else 0.0
+        score = round4(0.30 * retrieval_hit + 0.25 * citation_coverage + 0.25 * keyword_score + 0.20 * keyword_score)
+        results.append(
+            {
+                "resultId": new_id("eval-result"),
+                "caseId": case.get("caseId", f"case-{index + 1}"),
+                "status": "SUCCESS",
+                "question": str(case["question"]),
+                "answer": answer.answer,
+                "citations": citations,
+                "evidence": evidence,
+                "retrievalHit": retrieval_hit,
+                "citationCoverage": citation_coverage,
+                "keywordScore": round4(keyword_score),
+                "answerFaithfulness": round4(keyword_score),
+                "score": score,
+                "latencyMs": round((time.perf_counter() - started) * 1000),
+                "errorMessage": None,
+            }
+        )
+    metrics = {
+        "runScore": average_metric(results, "score"),
+        "totalCases": len(results),
+        "passedCases": sum(result["score"] >= 0.7 for result in results),
+        "retrievalHitRate": average_metric(results, "retrievalHit"),
+        "citationCoverageRate": average_metric(results, "citationCoverage"),
+        "answerFaithfulnessScore": average_metric(results, "answerFaithfulness"),
+        "avgLatencyMs": average_metric(results, "latencyMs"),
+        "failureRate": 0.0,
+    }
+    now = now_iso()
     run = {
         "runId": new_id("run"),
         "tenantId": ctx.tenant_id,
         "datasetId": payload.datasetId or "default",
         "status": "COMPLETED",
         "modelProfile": payload.modelProfile,
-        "metrics": {"runScore": score, "totalCases": len(results), "passedCases": len([r for r in results if r["score"] >= 0.7])},
+        "metrics": metrics,
         "results": results,
-        "createdAt": now_iso(),
+        "errorMessage": None,
+        "startedAt": now,
+        "finishedAt": now,
+        "createdAt": now,
     }
     store.eval_runs[run["runId"]] = run
     return run
+
+
+def average_metric(items: list[dict[str, Any]], key: str) -> float:
+    return round4(sum(float(item[key]) for item in items) / len(items)) if items else 0.0
 
 
 async def create_persisted_eval_run(

@@ -41,6 +41,8 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("POST", "/ai/feedback"),
     ("GET", "/ai/evaluation/datasets"),
     ("POST", "/ai/evaluation/runs"),
+    ("GET", "/ai/evaluation/datasets/{datasetId}/comparison"),
+    ("GET", "/ai/evaluation/runs/{runId}/report"),
     ("GET", "/audit/logs"),
     ("GET", "/cost/summary"),
     ("POST", "/cost/budget"),
@@ -181,8 +183,15 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     if not datasets or "cases" in datasets[0] or "caseCount" not in datasets[0]:
         failures.append("canonical evaluation dataset response did not match EvalDatasetVO")
     run = client.post("/ai/evaluation/runs", headers=AUTH_HEADERS, json={"datasetId": datasets[0]["datasetId"], "modelProfile": "balanced"}).json()
-    if run.get("status") != "COMPLETED":
+    if run.get("status") != "SUCCESS":
         failures.append("evaluation run did not complete")
+    client.post(f"/ai/evaluation/runs/{run['runId']}/baseline", headers=AUTH_HEADERS)
+    comparison = client.get(f"/ai/evaluation/datasets/{datasets[0]['datasetId']}/comparison", headers=AUTH_HEADERS).json()
+    if set(comparison) != {"dataset", "baseline", "current"} or "cases" in comparison["dataset"]:
+        failures.append("canonical evaluation comparison did not match EvalComparisonVO")
+    report = client.get(f"/ai/evaluation/runs/{run['runId']}/report", headers=AUTH_HEADERS)
+    if report.headers.get("content-disposition") != f'attachment; filename="rag-evaluation-{run["runId"]}.md"':
+        failures.append("canonical evaluation report did not match Java download contract")
     cost = client.get("/cost/summary", headers=AUTH_HEADERS).json()
     assert_keys(
         failures,

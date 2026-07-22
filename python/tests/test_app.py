@@ -465,7 +465,7 @@ def test_harness_workflow_research_memory_graph_and_evaluations_are_tenant_scope
     assert assert_envelope(test_client.get(f"/ai/evaluation/runs/{run['runId']}", headers=headers).json())["runId"] == run["runId"]
     assert assert_envelope(test_client.post(f"/ai/evaluation/runs/{run['runId']}/baseline", headers=headers).json())["isBaseline"]
     assert assert_envelope(test_client.get(f"/ai/evaluation/datasets/{dataset['datasetId']}/comparison", headers=headers).json())["runs"]
-    assert "# Evaluation" in test_client.get(f"/ai/evaluation/runs/{run['runId']}/report", headers=headers).text
+    assert "# RAG Evaluation Report" in test_client.get(f"/ai/evaluation/runs/{run['runId']}/report", headers=headers).text
 
 
 def test_extended_java_routes_file_safety_and_production_configuration(monkeypatch: pytest.MonkeyPatch) -> None:

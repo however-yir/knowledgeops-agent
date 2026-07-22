@@ -97,6 +97,26 @@ def test_canonical_evaluation_datasets_hide_cases_behind_java_summary_dto() -> N
     assert "cases" not in dataset
 
 
+def test_canonical_evaluation_comparison_and_report_match_java_contract() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+    dataset_id = client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS).json()[0]["datasetId"]
+    run = client.post(
+        "/ai/evaluation/runs", headers=AUTH_HEADERS, json={"datasetId": dataset_id, "modelProfile": "balanced"}
+    ).json()
+    client.post(f"/ai/evaluation/runs/{run['runId']}/baseline", headers=AUTH_HEADERS)
+
+    comparison = client.get(f"/ai/evaluation/datasets/{dataset_id}/comparison", headers=AUTH_HEADERS)
+    report = client.get(f"/ai/evaluation/runs/{run['runId']}/report", headers=AUTH_HEADERS)
+
+    assert set(comparison.json()) == {"dataset", "baseline", "current"}
+    assert "cases" not in comparison.json()["dataset"]
+    assert comparison.json()["baseline"]["runId"] == run["runId"]
+    assert comparison.json()["current"]["status"] == "SUCCESS"
+    assert report.headers["content-disposition"] == f'attachment; filename="rag-evaluation-{run["runId"]}.md"'
+    assert report.headers["content-type"].startswith("text/markdown")
+    assert report.text.startswith("# RAG Evaluation Report\n")
+
+
 def test_python_v1_keeps_legacy_envelope_and_java_errors_return_result() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
 
