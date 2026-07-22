@@ -1,8 +1,6 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
-import type { SessionState } from "@knowledgeops/shared";
-
+import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { TenantId } from "../common/tenant-id.decorator.js";
-import { SessionsService } from "./sessions.service.js";
+import { type SessionPayload, SessionsService } from "./sessions.service.js";
 
 @Controller("ai/sessions")
 export class SessionsController {
@@ -26,7 +24,7 @@ export class SessionsController {
   }
 
   @Put(":sessionId")
-  upsert(@TenantId() tenantId: string, @Param("sessionId") sessionId: string, @Body() payload: SessionState) {
+  upsert(@TenantId() tenantId: string, @Param("sessionId") sessionId: string, @Body() payload: SessionPayload) {
     return this.sessionsService.upsert(tenantId, sessionId, payload);
   }
 
@@ -44,8 +42,11 @@ export class SessionsController {
   compare(
     @TenantId() tenantId: string,
     @Param("sessionId") sessionId: string,
-    @Body() body: { sourceBranchId: string; targetBranchId: string }
+    @Body() body: { sourceBranchId: string; targetBranchId: string } | null | undefined
   ) {
+    if (!body) {
+      throw new BadRequestException("compare request is required");
+    }
     return this.sessionsService.compare(tenantId, sessionId, body.sourceBranchId, body.targetBranchId);
   }
 
@@ -53,8 +54,11 @@ export class SessionsController {
   merge(
     @TenantId() tenantId: string,
     @Param("sessionId") sessionId: string,
-    @Body() body: { sourceBranchId: string; targetBranchId: string; title?: string }
+    @Body() body: { sourceBranchId: string; targetBranchId: string; title?: string } | null | undefined
   ) {
+    if (!body) {
+      throw new BadRequestException("merge request is required");
+    }
     return this.sessionsService.merge(tenantId, sessionId, body.sourceBranchId, body.targetBranchId, body.title);
   }
 }

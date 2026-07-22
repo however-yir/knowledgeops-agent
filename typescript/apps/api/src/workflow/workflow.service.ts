@@ -1,15 +1,35 @@
-import { Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+
+import { BadRequestException, Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 
 import { OpenAiCompatibleClient } from "../ai/llm.client.js";
 import { RetrievalService } from "../ai/retrieval.service.js";
-import { newId, nowIso } from "../common/ids.js";
+import { nowIso } from "../common/ids.js";
 import { normalizeTenant } from "../common/tenant.js";
 import { env } from "../config/env.js";
 import { MetricsService } from "../platform/metrics.service.js";
 import { ModelRouterService } from "../platform/model-router.service.js";
 import { PlatformStore, WorkflowStep, WorkflowTask } from "../platform/platform.store.js";
+import { SessionsService } from "../sessions/sessions.service.js";
 
-type WorkflowState = "CREATED" | "PLANNING" | "SEARCHING" | "RETRIEVING" | "WRITING" | "DONE" | "FAILED";
+type WorkflowState =
+  | "CREATED"
+  | "PLANNING"
+  | "SEARCHING"
+  | "RETRIEVING"
+  | "JUDGING"
+  | "REFLECTING"
+  | "WRITING"
+  | "DONE"
+  | "NEED_MORE_EVIDENCE"
+  | "FAILED";
+
+export interface ResearchResult {
+  taskId: string;
+  topic: string;
+  report: string;
+  status: string;
+}
 
 @Injectable()
 export class WorkflowService implements OnModuleInit, OnModuleDestroy {
@@ -21,7 +41,8 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     private readonly retrievalService: RetrievalService,
     private readonly metrics: MetricsService,
     @Optional() private readonly llmClient?: OpenAiCompatibleClient,
-    @Optional() private readonly modelRouter?: ModelRouterService
+    @Optional() private readonly modelRouter?: ModelRouterService,
+    @Optional() private readonly sessionsService?: SessionsService
   ) {}
 
   onModuleInit(): void {
@@ -40,35 +61,42 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
 
   createTask(tenantId: string | undefined, type: string, userInput: string, modelProfile?: string, chatId?: string, sessionId?: string): WorkflowTask {
     const task: WorkflowTask = {
-      taskId: newId("task"),
+      taskId: workflowId("task"),
       tenantId: normalizeTenant(tenantId),
       type,
       status: "CREATED",
       userInput,
-      modelProfile: modelProfile || "balanced",
+      modelProfile: hasText(modelProfile) ? modelProfile : "balanced",
       chatId,
       sessionId,
       createdAt: nowIso(),
       updatedAt: nowIso()
     };
     this.store.workflowTasks.set(task.taskId, task);
-    this.emitEvent(task.taskId, undefined, "STATE_CHANGED", { to: "CREATED" });
+    this.transition(task.taskId, "PLANNING", "CREATED");
     this.store.persist();
     return task;
   }
 
   executeResearch(tenantId: string | undefined, topic: string, modelProfile?: string): WorkflowTask {
-    const task = this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
-    return this.runResearchTask(task);
+    return this.runResearchTask(this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile));
   }
 
   async executeResearchAsync(tenantId: string | undefined, topic: string, modelProfile?: string): Promise<WorkflowTask> {
-    const task = this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
-    return this.runResearchTaskAsync(task);
+    return this.runResearchTaskAsync(this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile));
   }
 
   enqueueResearch(tenantId: string | undefined, topic: string, modelProfile?: string): WorkflowTask {
-    return this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile, `research_${Date.now()}`);
+    return this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile);
+  }
+
+  toResearchResult(task: WorkflowTask): ResearchResult {
+    return {
+      taskId: task.taskId,
+      topic: task.userInput,
+      report: task.status === "FAILED" ? `Research failed: ${task.finalOutput ?? ""}` : task.finalOutput ?? "",
+      status: task.status
+    };
   }
 
   async processQueuedTasks(): Promise<number> {
@@ -94,93 +122,144 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     const started = Date.now();
     const topic = task.userInput;
     try {
-      this.transition(task.taskId, "PLANNING");
+      this.transition(task.taskId, "SEARCHING", "PLANNING");
       const planStep = this.startStep(task.taskId, "ResearchPlanner", 1, { topic });
-      const subQuestions = await this.planResearchWithLlm(task, topic);
-      this.completeStep(planStep.stepId, "COMPLETED", { subQuestions, strategy: "llm_hybrid_rag" }, { subQuestions }, "Plan research sub-questions with routed LLM fallback.", "plan", { topic });
+      const plan = await this.planResearchWithLlm(task, topic);
+      this.completeStep(planStep.stepId, "COMPLETED", { subQuestions: plan.subQuestions, strategy: plan.strategy }, plan);
 
-      this.transition(task.taskId, "SEARCHING");
+      this.transition(task.taskId, "RETRIEVING", "SEARCHING");
       const findings: string[] = [];
       let order = 2;
-      for (const question of subQuestions) {
-        this.transition(task.taskId, "RETRIEVING");
-        const searchStep = this.startStep(task.taskId, "HybridRetriever", order, { question });
-        const retrieval = await this.retrievalService.hybridRetrieveAsync(question, task.tenantId, task.chatId ?? "", 5);
-        const finding = renderFinding(question, retrieval.documents.map((doc) => doc.content));
+      for (const question of plan.subQuestions) {
+        const searchStep = this.startStep(task.taskId, "RagResearchAgent", order, { subQuestion: question });
+        const retrieval = await this.retrievalService.hybridRetrieveAsync(question, task.tenantId, `research_${task.taskId}`, 5);
+        const finding = renderFinding(question, retrieval.documents);
         findings.push(finding);
-        this.completeStep(searchStep.stepId, "COMPLETED", { docsFound: retrieval.documents.length }, { finding }, "Retrieve evidence for sub-question.", "hybrid_retrieve", { question });
+        this.completeStep(searchStep.stepId, "COMPLETED", { docsFound: retrieval.documents.length }, { finding });
         order += 1;
       }
 
-      this.transition(task.taskId, "WRITING");
+      this.transition(task.taskId, "WRITING", "RETRIEVING");
       const writeStep = this.startStep(task.taskId, "ReportWriter", order, { topic });
       const report = await this.writeReportWithLlm(task, topic, findings);
-      this.completeStep(writeStep.stepId, "COMPLETED", { reportLength: report.length }, report, "Write research report with routed LLM fallback.", "write_report", { topic });
+      this.completeStep(writeStep.stepId, "COMPLETED", { reportLength: report.length }, report);
       this.completeTask(task.taskId, "DONE", report);
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "DONE" });
       this.metrics.observe("agent_workflow_task_latency_ms", Date.now() - started, { type: task.type });
     } catch (error) {
-      this.completeTask(task.taskId, "FAILED", error instanceof Error ? error.message : String(error));
+      this.failTask(task.taskId, messageFrom(error));
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "FAILED" });
     }
-    return this.getTask(task.tenantId, task.taskId) ?? task;
+    return this.store.workflowTasks.get(task.taskId) ?? task;
   }
 
   private runResearchTask(task: WorkflowTask): WorkflowTask {
     const started = Date.now();
     const topic = task.userInput;
     try {
-      this.transition(task.taskId, "PLANNING");
+      this.transition(task.taskId, "SEARCHING", "PLANNING");
       const planStep = this.startStep(task.taskId, "ResearchPlanner", 1, { topic });
-      const subQuestions = planResearch(topic);
-      this.completeStep(planStep.stepId, "COMPLETED", { subQuestions, strategy: "hybrid_rag" }, { subQuestions }, "Split the topic into focused sub-questions.", "plan", { topic });
+      const plan = fallbackPlan(topic);
+      this.completeStep(planStep.stepId, "COMPLETED", { subQuestions: plan.subQuestions, strategy: plan.strategy }, plan);
 
-      this.transition(task.taskId, "SEARCHING");
+      this.transition(task.taskId, "RETRIEVING", "SEARCHING");
       const findings: string[] = [];
       let order = 2;
-      for (const question of subQuestions) {
-        this.transition(task.taskId, "RETRIEVING");
-        const searchStep = this.startStep(task.taskId, "HybridRetriever", order, { question });
-        const retrieval = this.retrievalService.hybridRetrieve(question, task.tenantId, task.chatId ?? "", 5);
-        const finding = renderFinding(question, retrieval.documents.map((doc) => doc.content));
+      for (const question of plan.subQuestions) {
+        const searchStep = this.startStep(task.taskId, "RagResearchAgent", order, { subQuestion: question });
+        const retrieval = this.retrievalService.hybridRetrieve(question, task.tenantId, `research_${task.taskId}`, 5);
+        const finding = renderFinding(question, retrieval.documents);
         findings.push(finding);
-        this.completeStep(searchStep.stepId, "COMPLETED", { docsFound: retrieval.documents.length }, { finding }, "Retrieve evidence for sub-question.", "hybrid_retrieve", { question });
+        this.completeStep(searchStep.stepId, "COMPLETED", { docsFound: retrieval.documents.length }, { finding });
         order += 1;
       }
 
-      this.transition(task.taskId, "WRITING");
+      this.transition(task.taskId, "WRITING", "RETRIEVING");
       const writeStep = this.startStep(task.taskId, "ReportWriter", order, { topic });
       const report = renderReport(topic, findings);
-      this.completeStep(writeStep.stepId, "COMPLETED", { reportLength: report.length }, report, "Write a concise research report.", "write_report", { topic });
+      this.completeStep(writeStep.stepId, "COMPLETED", { reportLength: report.length }, report);
       this.completeTask(task.taskId, "DONE", report);
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "DONE" });
-      this.metrics.increment("agent_workflow_task_latency_ms_sum", { type: task.type }, Date.now() - started);
       this.metrics.observe("agent_workflow_task_latency_ms", Date.now() - started, { type: task.type });
     } catch (error) {
-      this.completeTask(task.taskId, "FAILED", error instanceof Error ? error.message : String(error));
+      this.failTask(task.taskId, messageFrom(error));
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "FAILED" });
     }
-    return this.getTask(task.tenantId, task.taskId) ?? task;
+    return this.store.workflowTasks.get(task.taskId) ?? task;
   }
 
-  startReactTask(tenantId: string | undefined, prompt: string, modelProfile?: string, chatId?: string, sessionId?: string): WorkflowTask {
-    const task = this.createTask(tenantId, "REACT_CHAT", prompt, modelProfile, chatId, sessionId);
-    this.transition(task.taskId, "PLANNING");
-    const step = this.startStep(task.taskId, "ReactPlanner", 1, { prompt });
+  startReactTask(
+    tenantId: string | undefined,
+    prompt: string,
+    modelProfile?: string,
+    chatId?: string,
+    sessionId?: string,
+    type: "REACT" | "REACT_STREAM" = "REACT"
+  ): WorkflowTask {
+    if (!hasText(prompt)) {
+      throw new BadRequestException("prompt is required");
+    }
+    if (!hasText(chatId)) {
+      throw new BadRequestException("chatId is required");
+    }
+    const task = this.createTask(tenantId, type, prompt, modelProfile, chatId, sessionId);
+    const step = this.startStep(task.taskId, "planner", 1, { prompt });
     this.completeStep(step.stepId, "COMPLETED", { action: "hybrid_retrieve" }, null, "Plan a RAG-backed ReAct response.", "hybrid_retrieve", { prompt });
-    this.completeTask(task.taskId, "DONE", "ReAct chat response generated by AiService");
-    return this.getTask(task.tenantId, task.taskId) ?? task;
+    return task;
+  }
+
+  completeReactTask(tenantId: string, taskId: string, finalOutput: string): WorkflowTask | undefined {
+    const task = this.taskForTenant(tenantId, taskId);
+    if (!task) {
+      return undefined;
+    }
+    this.completeTask(taskId, "DONE", finalOutput);
+    return task;
+  }
+
+  failReactTask(tenantId: string, taskId: string, error: unknown): WorkflowTask | undefined {
+    const task = this.taskForTenant(tenantId, taskId);
+    if (!task) {
+      return undefined;
+    }
+    this.failTask(taskId, messageFrom(error));
+    return task;
+  }
+
+  attachSessionSnapshot(
+    tenantId: string,
+    taskId: string,
+    traceId: string | undefined,
+    sessionId: string | undefined,
+    branchId: string | undefined,
+    messageId: string | undefined
+  ): void {
+    const task = this.taskForTenant(tenantId, taskId);
+    if (!task || !this.sessionsService || !hasText(sessionId) || !hasText(branchId) || !hasText(messageId)) {
+      return;
+    }
+    const state = this.getTask(tenantId, taskId);
+    this.sessionsService.attachWorkflowSnapshot(
+      task.tenantId,
+      sessionId,
+      branchId,
+      messageId,
+      taskId,
+      traceId,
+      [],
+      state ? { taskId: state.taskId, type: state.type, status: state.status, steps: state.steps } : {}
+    );
   }
 
   getTask(tenantId: string, taskId: string) {
-    const task = this.store.workflowTasks.get(taskId);
-    if (!task || task.tenantId !== normalizeTenant(tenantId)) {
+    const task = this.taskForTenant(tenantId, taskId);
+    if (!task) {
       return undefined;
     }
     return {
       ...task,
-      steps: this.store.workflowSteps.get(taskId) ?? [],
-      events: this.store.workflowEvents.get(taskId) ?? []
+      steps: [...(this.store.workflowSteps.get(taskId) ?? [])].sort((a, b) => a.stepOrder - b.stepOrder),
+      events: [...(this.store.workflowEvents.get(taskId) ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     };
   }
 
@@ -190,35 +269,49 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     const start = (safePage - 1) * safePageSize;
     return [...this.store.workflowTasks.values()]
       .filter((task) => task.tenantId === normalizeTenant(tenantId))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(start, start + safePageSize)
-      .map((task) => this.getTask(task.tenantId, task.taskId) ?? task);
+      .map((task) => ({
+        ...task,
+        steps: [...(this.store.workflowSteps.get(task.taskId) ?? [])].sort((a, b) => a.stepOrder - b.stepOrder),
+        events: []
+      }));
   }
 
   getEvents(tenantId: string, taskId: string) {
     return this.getTask(tenantId, taskId)?.events ?? [];
   }
 
-  private transition(taskId: string, to: WorkflowState): void {
+  currentState(taskId: string): WorkflowState | undefined {
+    const status = this.store.workflowTasks.get(taskId)?.status;
+    return isWorkflowState(status) ? status : status ? "FAILED" : undefined;
+  }
+
+  private taskForTenant(tenantId: string | undefined, taskId: string): WorkflowTask | undefined {
+    const task = this.store.workflowTasks.get(taskId);
+    return task?.tenantId === normalizeTenant(tenantId) ? task : undefined;
+  }
+
+  private transition(taskId: string, to: WorkflowState, expectedFrom?: WorkflowState): void {
     const task = this.store.workflowTasks.get(taskId);
     if (!task) {
       return;
     }
-    const from = task.status;
+    const from = isWorkflowState(task.status) ? task.status : "FAILED";
     task.status = to;
     task.updatedAt = nowIso();
-    this.emitEvent(taskId, undefined, "STATE_CHANGED", { from, to });
+    this.emitEvent(taskId, undefined, "STATE_CHANGED", { from: expectedFrom ?? from, to });
   }
 
   private startStep(taskId: string, agentName: string, stepOrder: number, input: Record<string, unknown>): WorkflowStep {
     const step: WorkflowStep = {
-      stepId: newId("step"),
+      stepId: workflowId("step"),
       taskId,
       agentName,
       status: "RUNNING",
       stepOrder,
       actionInput: input,
-      inputTokens: JSON.stringify(input).length,
+      inputTokens: 0,
       outputTokens: 0,
       latencyMs: 0,
       startedAt: nowIso()
@@ -230,7 +323,15 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     return step;
   }
 
-  private completeStep(stepId: string, status: string, output: Record<string, unknown>, observation: unknown, thought?: string, action?: string, actionInput?: Record<string, unknown>): void {
+  private completeStep(
+    stepId: string,
+    status: string,
+    output: Record<string, unknown>,
+    observation: unknown,
+    thought?: string,
+    action?: string,
+    actionInput?: Record<string, unknown>
+  ): void {
     for (const [taskId, steps] of this.store.workflowSteps.entries()) {
       const step = steps.find((candidate) => candidate.stepId === stepId);
       if (!step) {
@@ -240,9 +341,9 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
       step.thought = thought;
       step.action = action;
       step.actionInput = actionInput ?? step.actionInput;
-      step.observation = observation ?? output;
-      step.outputTokens = JSON.stringify(output).length;
-      step.latencyMs = Math.max(1, Date.now() - Date.parse(step.startedAt));
+      step.observation = observation;
+      step.outputTokens = 0;
+      step.latencyMs = Math.max(0, Date.now() - Date.parse(step.startedAt));
       step.endedAt = nowIso();
       this.emitEvent(taskId, stepId, "STEP_COMPLETED", { status, latencyMs: step.latencyMs });
       return;
@@ -257,14 +358,26 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     task.status = finalStatus;
     task.finalOutput = finalOutput;
     task.updatedAt = nowIso();
-    this.emitEvent(taskId, undefined, finalStatus === "FAILED" ? "TASK_FAILED" : "TASK_COMPLETED", { status: finalStatus });
+    this.emitEvent(taskId, undefined, "TASK_COMPLETED", { status: finalStatus });
     this.store.persist();
   }
 
-  private emitEvent(taskId: string, stepId: string | undefined, eventType: string, payload: unknown): void {
+  private failTask(taskId: string, errorMessage: string): void {
+    const task = this.store.workflowTasks.get(taskId);
+    if (!task) {
+      return;
+    }
+    task.status = "FAILED";
+    task.finalOutput = errorMessage;
+    task.updatedAt = nowIso();
+    this.emitEvent(taskId, undefined, "TASK_FAILED", { error: errorMessage });
+    this.store.persist();
+  }
+
+  private emitEvent(taskId: string, stepId: string | undefined, eventType: string, payload: Record<string, unknown>): void {
     const events = this.store.workflowEvents.get(taskId) ?? [];
     events.push({
-      eventId: newId("evt"),
+      eventId: workflowId("evt"),
       taskId,
       stepId,
       eventType,
@@ -274,28 +387,27 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     this.store.workflowEvents.set(taskId, events);
   }
 
-  private async planResearchWithLlm(task: WorkflowTask, topic: string): Promise<string[]> {
-    const route = this.modelRouter?.resolve(task.modelProfile, "research_planner", task.tenantId, task.taskId);
+  private async planResearchWithLlm(task: WorkflowTask, topic: string): Promise<ResearchPlan> {
+    const route = this.modelRouter?.resolve(task.modelProfile, "research", task.tenantId, topic);
     if (!route || !this.llmClient) {
-      return planResearch(topic);
+      return fallbackPlan(topic);
     }
     const result = await this.llmClient.complete({
-      prompt: `Create three focused research sub-questions for: ${topic}. Return one per line.`,
+      prompt: `Decompose the following research topic into 3-5 sub-questions. Return JSON only with subQuestions, keywords, and strategy.\n\nTopic: ${topic}`,
       route,
       groundedContext: [],
       memoryContext: []
     }).catch(() => undefined);
-    const lines = result?.answer.split("\n").map((line) => line.replace(/^[-*\d.\s]+/, "").trim()).filter(Boolean).slice(0, 5);
-    return lines?.length ? lines : planResearch(topic);
+    return parseResearchPlan(result?.answer, topic);
   }
 
   private async writeReportWithLlm(task: WorkflowTask, topic: string, findings: string[]): Promise<string> {
-    const route = this.modelRouter?.resolve(task.modelProfile, "research_writer", task.tenantId, task.taskId);
+    const route = this.modelRouter?.resolve(task.modelProfile, "research", task.tenantId, topic);
     if (!route || !this.llmClient) {
       return renderReport(topic, findings);
     }
     const result = await this.llmClient.complete({
-      prompt: `Write a concise research report for ${topic}. Use these findings:\n${findings.join("\n\n")}`,
+      prompt: `Write a comprehensive research report in Chinese. Structure: 1) Executive Summary 2) Key Findings 3) Detailed Analysis 4) Conclusions & Recommendations.\n\nTopic: ${topic}\n\nResearch Findings:\n${findings.join("\n\n")}`,
       route,
       groundedContext: findings,
       memoryContext: []
@@ -304,30 +416,93 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-function planResearch(topic: string): string[] {
-  const clean = topic.trim() || "research topic";
-  return [
-    clean,
-    `${clean} key evidence`,
-    `${clean} risks and recommendations`
-  ];
+interface ResearchPlan {
+  subQuestions: string[];
+  keywords: string[];
+  strategy: string;
 }
 
-function renderFinding(question: string, docs: string[]): string {
-  if (docs.length === 0) {
-    return `## ${question}\n\n- No matching local evidence was found.`;
+function fallbackPlan(topic: string): ResearchPlan {
+  const cleanTopic = topic.trim() || "research topic";
+  return {
+    subQuestions: [
+      `${cleanTopic}的背景与范围是什么？`,
+      `${cleanTopic}有哪些关键证据和主要发现？`,
+      `${cleanTopic}存在哪些风险，应采取哪些建议？`
+    ],
+    keywords: [],
+    strategy: "breadth_first"
+  };
+}
+
+function parseResearchPlan(raw: string | undefined, topic: string): ResearchPlan {
+  if (!hasText(raw)) {
+    return fallbackPlan(topic);
   }
-  return `## ${question}\n\n${docs.slice(0, 5).map((doc) => `- ${doc.slice(0, 240)}`).join("\n")}`;
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    const parsed = JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : "{}") as Record<string, unknown>;
+    const subQuestions = toStrings(parsed.subQuestions).slice(0, 5);
+    if (subQuestions.length < 3) {
+      return fallbackPlan(topic);
+    }
+    return {
+      subQuestions,
+      keywords: toStrings(parsed.keywords),
+      strategy: hasText(parsed.strategy) ? String(parsed.strategy) : "breadth_first"
+    };
+  } catch {
+    return fallbackPlan(topic);
+  }
+}
+
+function renderFinding(question: string, docs: Array<{ sourceType?: string; title?: string; fileName?: string; content: string }>): string {
+  const lines = [`## ${question}`, ""];
+  for (const doc of docs) {
+    lines.push(`- [${doc.sourceType ?? ""}] ${doc.title ?? doc.fileName ?? ""}: ${doc.content.slice(0, 200)}`);
+  }
+  return lines.join("\n");
 }
 
 function renderReport(topic: string, findings: string[]): string {
+  const evidence = findings.length > 0 ? findings.join("\n\n") : "未检索到可用证据。";
   return [
-    `# Research Report: ${topic}`,
+    `# ${topic}研究报告`,
     "",
-    "## Findings",
-    findings.join("\n\n"),
+    "## 1. 执行摘要",
+    `本报告围绕${topic}进行结构化研究，并基于当前可用证据形成结论。`,
     "",
-    "## Recommendation",
-    "Use the cited local knowledge first; add external web retrieval only when the configured search backend is enabled."
+    "## 2. 关键发现",
+    evidence,
+    "",
+    "## 3. 详细分析",
+    evidence,
+    "",
+    "## 4. 结论与建议",
+    "优先采用已验证的本地知识证据；仅在外部搜索后端已配置并启用时补充网络检索。"
   ].join("\n");
+}
+
+function toStrings(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(hasText) : [];
+}
+
+function isWorkflowState(value: unknown): value is WorkflowState {
+  return [
+    "CREATED", "PLANNING", "SEARCHING", "RETRIEVING", "JUDGING", "REFLECTING",
+    "WRITING", "DONE", "NEED_MORE_EVIDENCE", "FAILED"
+  ].includes(String(value));
+}
+
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function messageFrom(error: unknown): string {
+  return error instanceof Error && hasText(error.message) ? error.message : "workflow failed";
+}
+
+function workflowId(prefix: "task" | "step" | "evt"): string {
+  return `${prefix}-${randomUUID().replaceAll("-", "")}`;
 }

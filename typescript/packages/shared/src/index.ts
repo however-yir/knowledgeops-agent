@@ -80,7 +80,11 @@ export interface ReactTraceStep {
   observation?: unknown;
 }
 
-export type ReactChatRequest = ChatRequest;
+export interface ReactChatRequest extends ChatRequest {
+  sessionId?: string;
+  branchId?: string;
+  messageId?: string;
+}
 
 export interface ReactChatResponse {
   ok: number;
@@ -139,6 +143,10 @@ export interface SessionMessage {
   state?: "pending" | "streaming" | "done" | "error" | "stopped";
   citations?: Citation[];
   evidence?: string[];
+  taskId?: string;
+  traceId?: string;
+  memorySnapshot?: Array<Record<string, unknown>>;
+  workflowState?: Record<string, unknown>;
 }
 
 export interface SessionBranch {

@@ -66,6 +66,8 @@ const envSchema = z.object({
   APP_OBSERVABILITY_TRACE_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_WORKFLOW_ASYNC_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_WORKFLOW_WORKER_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
+  APP_FEEDBACK_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(true),
+  APP_FEEDBACK_DATASET_PATH: z.string().min(1).default("evaluation/feedback_dataset.jsonl"),
   APP_MCP_HTTP_ALLOWLIST: z.string().default(""),
   APP_AGENT_HARNESS_TRUSTED_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_WORKSPACE_WRITE_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),

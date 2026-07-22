@@ -206,11 +206,6 @@ export class AiService {
     return sse;
   }
 
-  saveFeedback(tenantId: string, payload: Record<string, unknown>): void {
-    this.store.feedback.push({ tenantId, ...payload, createdAt: new Date().toISOString() });
-    this.store.persist();
-  }
-
   private async educationToolAnswer(prompt: string): Promise<{ action: string; answer: string; citations: Citation[]; evidence: string[] } | undefined> {
     const normalized = prompt.toLowerCase();
     if (containsAny(normalized, ["校区", "campus"])) {

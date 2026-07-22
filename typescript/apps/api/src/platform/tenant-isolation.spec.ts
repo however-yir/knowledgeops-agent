@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { SessionState } from "@knowledgeops/shared";
 
 import type { AiService } from "../ai/ai.service.js";
+import { EvaluationReportRenderer } from "../evaluation/evaluation-report.renderer.js";
 import { EvaluationController } from "../evaluation/evaluation.controller.js";
+import { EvaluationScorer } from "../evaluation/evaluation.scorer.js";
+import { EvaluationService } from "../evaluation/evaluation.service.js";
 import { OperationsController } from "../operations/operations.controller.js";
 import { SessionsService } from "../sessions/sessions.service.js";
 import { RetrievalService } from "../ai/retrieval.service.js";
@@ -36,7 +39,12 @@ describe("tenant isolation", () => {
 
   it("prevents cross-tenant evaluation reads and baseline writes", async () => {
     const store = new PlatformStore();
-    const controller = new EvaluationController(store, fakeAiService());
+    const controller = new EvaluationController(new EvaluationService(
+      store,
+      fakeAiService(),
+      new EvaluationScorer(),
+      new EvaluationReportRenderer()
+    ));
     const dataset = controller.createDataset("tenant-a", {
       name: "private",
       cases: [{ question: "q" }]
@@ -49,9 +57,9 @@ describe("tenant isolation", () => {
       throw new Error("expected run");
     }
 
-    expect(controller.getRun("tenant-b", run.runId)).toMatchObject({ ok: 0, msg: "run not found" });
-    expect(controller.compare("tenant-b", dataset.datasetId)).toMatchObject({ ok: 0, msg: "dataset not found" });
-    expect(controller.baseline("tenant-b", run.runId)).toMatchObject({ ok: 0, msg: "run not found" });
+    expect(() => controller.getRun("tenant-b", run.runId)).toThrow("run not found");
+    expect(() => controller.compare("tenant-b", dataset.datasetId)).toThrow("dataset not found");
+    expect(() => controller.baseline("tenant-b", run.runId)).toThrow("run not found");
     expect(store.evalDatasets.get(dataset.datasetId)?.baselineRunId).toBeUndefined();
   });
 

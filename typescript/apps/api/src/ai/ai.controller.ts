@@ -5,10 +5,14 @@ import type { ReactChatRequest } from "@knowledgeops/shared";
 import type { RequestWithContext } from "../common/request-context.js";
 import { traceIdFrom } from "../common/trace.js";
 import { AiService } from "./ai.service.js";
+import { AnswerFeedbackService, type AnswerFeedbackPayload } from "./answer-feedback.service.js";
 
 @Controller()
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly answerFeedbackService: AnswerFeedbackService
+  ) {}
 
   @Post("ai/react/chat")
   async reactChat(@Body() request: ReactChatRequest, @Req() req: FastifyRequest) {
@@ -72,8 +76,8 @@ export class AiController {
   }
 
   @Post("ai/feedback")
-  feedback(@Req() req: FastifyRequest, @Body() payload: Record<string, unknown>) {
-    this.aiService.saveFeedback(tenantFrom(req), payload ?? {});
+  feedback(@Req() req: FastifyRequest, @Body() payload: AnswerFeedbackPayload) {
+    this.answerFeedbackService.submit(tenantFrom(req), payload);
     return { ok: 1, msg: "ok" };
   }
 }
