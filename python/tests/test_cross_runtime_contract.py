@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -69,3 +71,11 @@ def test_cross_runtime_contract_rejects_truncated_sse_without_a_terminal_event()
     case = {"label": "stream", "method": "POST", "sse": True, "sseEvents": ["trace", "done"]}
     with httpx.Client(transport=httpx.MockTransport(handler)) as client, pytest.raises(httpx.RemoteProtocolError):
         request_contract_case(client, case, "http://contract.test/stream", {"headers": {}})
+
+
+def test_cross_runtime_sse_cases_negotiate_event_streams() -> None:
+    cases = json.loads((Path(__file__).parents[1] / "parity" / "cross-runtime-ci-cases.json").read_text(encoding="utf-8"))
+
+    for case in cases:
+        if case.get("sse"):
+            assert case["headers"]["Accept"] == "text/event-stream"
