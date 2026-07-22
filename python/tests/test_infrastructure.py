@@ -347,6 +347,9 @@ def test_redis_streams_and_mysql_skip_locked_queue_adapters() -> None:
         async def xgroup_create(self, *args, **kwargs) -> None:
             return None
 
+        async def xautoclaim(self, *args, **kwargs):
+            return "0-0", [], []
+
         async def xreadgroup(self, *args, **kwargs):
             return [("stream", [("message-1", {"jobId": "redis-job"})])]
 

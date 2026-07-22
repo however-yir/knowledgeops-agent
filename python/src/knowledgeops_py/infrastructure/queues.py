@@ -21,6 +21,8 @@ class RedisStreamsIngestionQueue:
     group: str = "knowledgeops-python-workers"
     consumer: str = "worker-1"
     dead_letter_stream: str = "knowledgeops:ingestion:dlq"
+    recovery_idle_ms: int = 60_000
+    block_ms: int = 1_000
 
     async def publish(self, context: TenantContext, job_id: str) -> None:
         await self.client.xadd(self.stream, {"jobId": job_id, "tenantId": context.tenant_id})
@@ -38,7 +40,26 @@ class RedisStreamsIngestionQueue:
             if "BUSYGROUP" not in str(exc):
                 raise
         while True:
-            messages = await self.client.xreadgroup(self.group, self.consumer, {self.stream: ">"}, count=1, block=1000)
+            _, reclaimed, _ = await self.client.xautoclaim(
+                self.stream,
+                self.group,
+                self.consumer,
+                min_idle_time=self.recovery_idle_ms,
+                start_id="0-0",
+                count=1,
+            )
+            for message_id, fields in reclaimed:
+                yield str(fields["jobId"])
+                await self.client.xack(self.stream, self.group, message_id)
+            if reclaimed:
+                continue
+            messages = await self.client.xreadgroup(
+                self.group,
+                self.consumer,
+                {self.stream: ">"},
+                count=1,
+                block=self.block_ms,
+            )
             for _, entries in messages:
                 for message_id, fields in entries:
                     job_id = str(fields["jobId"])
