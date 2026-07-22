@@ -74,6 +74,7 @@ services:
       OPENAI_API_KEY: contract-stub-key
       APP_JWT_SECRET: contract-ci-jwt-secret-must-not-be-default
       APP_SECURITY_ENABLED: "true"
+      SPRING_SECURITY_FILTER_DISPATCHER_TYPES: request
       APP_VECTOR_STORE_BACKEND: simple
       APP_REQUIRE_PGVECTOR: "false"
       APP_INGESTION_WORKER_ENABLED: "false"
