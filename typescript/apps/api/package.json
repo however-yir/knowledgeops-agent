@@ -23,6 +23,9 @@
     "fastify": "^5.6.2",
     "ioredis": "^5.11.0",
     "jsonwebtoken": "^9.0.3",
+    "pdfjs-dist": "^6.1.200",
+    "pg": "^8.22.0",
+    "pgvector": "^0.3.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^4.1.13"
@@ -30,6 +33,10 @@
   "devDependencies": {
     "@types/amqplib": "^0.10.8",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.20.0",
+    "pdfkit": "^0.19.1",
+    "prisma": "^6.19.3",
     "tsx": "^4.21.0"
   }
 }

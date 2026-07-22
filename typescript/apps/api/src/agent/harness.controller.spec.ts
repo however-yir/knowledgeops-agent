@@ -6,9 +6,10 @@ import { BusinessToolsService } from "../platform/business-tools.service.js";
 import { MetricsService } from "../platform/metrics.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
 import { HarnessController } from "./harness.controller.js";
+import { McpClient } from "./mcp.client.js";
 
 function controller(store = new PlatformStore()) {
-  return new HarnessController(store, new RetrievalService(store), new BusinessToolsService(store, new MetricsService(store)));
+  return new HarnessController(store, new RetrievalService(store), new BusinessToolsService(store, new MetricsService(store)), new McpClient());
 }
 
 describe("HarnessController", () => {

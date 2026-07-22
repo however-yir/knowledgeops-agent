@@ -26,8 +26,8 @@ export class IngestionController {
       idempotencyKey
     });
     this.historyService.saveSession(tenantId, "pdf", chatId);
-    if (!env.APP_INGESTION_WORKER_ENABLED) {
-      this.ingestionService.processOne(tenantId, job.jobId);
+    if (!env.APP_INGESTION_WORKER_ENABLED && env.APP_INGESTION_QUEUE_BACKEND === "in-memory") {
+      await this.ingestionService.processOne(tenantId, job.jobId);
     }
     return { ok: 1, msg: "accepted", job: this.ingestionService.getJob(tenantId, job.jobId) ?? job };
   }
@@ -62,8 +62,11 @@ export class IngestionController {
   }
 
   @Post("ingestion/jobs/process")
-  processOne(@TenantId() tenantId: string, @Query("jobId") jobId?: string) {
-    const msg = this.ingestionService.processOne(tenantId, jobId);
+  async processOne(@TenantId() tenantId: string, @Query("jobId") jobId?: string) {
+    if (jobId && !this.ingestionService.getJob(tenantId, jobId)) {
+      throw new NotFoundException("job not found");
+    }
+    const msg = await this.ingestionService.processOne(tenantId, jobId);
     return { ok: 1, msg, job: null };
   }
 }

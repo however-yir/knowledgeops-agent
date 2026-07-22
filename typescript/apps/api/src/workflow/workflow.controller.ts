@@ -1,7 +1,9 @@
-import { BadRequestException, Body, Controller, Get, Header, NotFoundException, Param, Post, Query } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, Req, Res } from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ReactChatRequest } from "@knowledgeops/shared";
 
 import { AiService } from "../ai/ai.service.js";
+import { formatSse, sendSse, type SseEvent } from "../ai/sse.js";
 import { TenantId } from "../common/tenant-id.decorator.js";
 import { env } from "../config/env.js";
 import { WorkflowService } from "./workflow.service.js";
@@ -81,8 +83,12 @@ export class WorkflowController {
   }
 
   @Post("ai/workflow/react/chat/stream")
-  @Header("Content-Type", "text/event-stream")
-  async workflowReactStream(@TenantId() tenantId: string, @Body() body: ReactChatRequest | null | undefined) {
+  async workflowReactStream(
+    @TenantId() tenantId: string,
+    @Body() body: ReactChatRequest | null | undefined,
+    @Req() request?: FastifyRequest,
+    @Res() reply?: FastifyReply
+  ): Promise<string | void> {
     if (!body) {
       throw new BadRequestException("request is required");
     }
@@ -94,25 +100,56 @@ export class WorkflowController {
       body.sessionId,
       "REACT_STREAM"
     );
+    let doneData: Record<string, unknown> | undefined;
     try {
-      const stream = await this.aiService.reactChatStream(body, tenantId, "workflow_react");
-      const response = streamDoneData(stream);
-      if (response) {
-        this.workflowService.completeReactTask(tenantId, task.taskId, String(response.answer ?? ""));
-        this.workflowService.attachSessionSnapshot(
-          tenantId,
-          task.taskId,
-          optionalString(response.traceId),
-          body.sessionId,
-          body.branchId,
-          body.messageId
-        );
+      if (request && reply) {
+        await sendSse(request, reply, (signal) => trackDoneEvents(
+          this.aiService.reactChatStream(body, tenantId, "workflow_react", undefined, signal),
+          (value) => { doneData = value; }
+        ));
+        this.completeStreamTask(tenantId, task.taskId, doneData, body);
+        return;
       }
-      return stream;
+      const stream = await this.aiService.reactChatStream(body, tenantId, "workflow_react");
+      if (typeof stream === "string") {
+        doneData = streamDoneData(stream);
+        this.completeStreamTask(tenantId, task.taskId, doneData, body);
+        return stream;
+      }
+      let output = "";
+      for await (const event of trackDoneEvents(stream, (value) => { doneData = value; })) {
+        output += formatSse(event);
+      }
+      this.completeStreamTask(tenantId, task.taskId, doneData, body);
+      return output;
     } catch (error) {
       this.workflowService.failReactTask(tenantId, task.taskId, error);
       throw error;
     }
+  }
+
+  private completeStreamTask(tenantId: string, taskId: string, response: Record<string, unknown> | undefined, body: ReactChatRequest): void {
+    if (!response) {
+      return;
+    }
+    this.workflowService.completeReactTask(tenantId, taskId, String(response.answer ?? ""));
+    this.workflowService.attachSessionSnapshot(
+      tenantId,
+      taskId,
+      optionalString(response.traceId),
+      body.sessionId,
+      body.branchId,
+      body.messageId
+    );
+  }
+}
+
+async function* trackDoneEvents(stream: AsyncIterable<SseEvent>, onDone: (value: Record<string, unknown> | undefined) => void): AsyncGenerator<SseEvent> {
+  for await (const event of stream) {
+    if (event.event === "done") {
+      onDone(doneDataFromPayload(event.data));
+    }
+    yield event;
   }
 }
 
@@ -126,8 +163,7 @@ function streamDoneData(stream: string): Record<string, unknown> | undefined {
       return undefined;
     }
     try {
-      const parsed = JSON.parse(data) as { data?: Record<string, unknown> };
-      return parsed.data;
+      return doneDataFromPayload(JSON.parse(data));
     } catch {
       return undefined;
     }
@@ -135,6 +171,17 @@ function streamDoneData(stream: string): Record<string, unknown> | undefined {
   return undefined;
 }
 
+function doneDataFromPayload(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return isRecord(value.data) ? value.data : value;
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

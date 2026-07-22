@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
+import type { IngestionQueueService } from "./ingestion.queue.js";
+import { TenantIngestionJobRepository } from "./ingestion.repository.js";
 import { IngestionService } from "./ingestion.service.js";
 
 describe("IngestionService", () => {
@@ -26,7 +28,7 @@ describe("IngestionService", () => {
     });
 
     expect(second.jobId).toBe(first.jobId);
-    expect(ingestion.processOne("public", first.jobId)).toBe("processed");
+    await expect(ingestion.processOne("public", first.jobId)).resolves.toBe("processed");
     expect(retrieval.retrieve("shade water", "public", "chat-1")).toHaveLength(1);
   });
 
@@ -51,5 +53,46 @@ describe("IngestionService", () => {
       sourceName: "not-a-pdf.pdf",
       content: Buffer.from("plain text")
     })).rejects.toThrow("invalid pdf header");
+  });
+
+  it("republishes ready retries before reading an external queue", async () => {
+    const store = new PlatformStore();
+    store.ingestionJobs.clear();
+    const enqueued: string[] = [];
+    const queue = {
+      enabled: () => true,
+      enqueue: async (job: { jobId: string }) => { enqueued.push(job.jobId); },
+      next: async () => [],
+      ack: async () => undefined,
+      publishDlq: async () => undefined
+    } as unknown as IngestionQueueService;
+    const repository = new TenantIngestionJobRepository(store);
+    const retry = {
+      jobId: "job-retry",
+      tenantId: "public",
+      chatId: "chat-1",
+      sourceName: "retry.txt",
+      sourceType: "TEXT",
+      filePath: "/tmp/retry.txt",
+      idempotencyKey: "retry",
+      contentHash: "retry",
+      rawText: "retry content",
+      status: "RETRY" as const,
+      attemptCount: 1,
+      maxRetries: 3,
+      traceId: "trace-1",
+      queueBackend: "redis_stream",
+      nextRetryAt: new Date(0).toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    store.ingestionJobs.set(`public:${retry.jobId}`, retry);
+    const ingestion = new IngestionService(store, new RetrievalService(store), queue, repository);
+
+    await expect(ingestion.processReadyBatch()).resolves.toBe(0);
+
+    expect(enqueued).toEqual(["job-retry"]);
+    expect(retry.status).toBe("PENDING");
+    expect(retry.nextRetryAt).toBeUndefined();
   });
 });

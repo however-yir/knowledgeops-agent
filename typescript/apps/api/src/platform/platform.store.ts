@@ -49,6 +49,9 @@ export interface IngestionJobRecord extends IngestionJob {
   idempotencyKey: string;
   contentHash: string;
   rawText: string;
+  pages?: Array<{ pageNumber: number; text: string }>;
+  leaseToken?: string;
+  leaseExpiresAt?: string;
   nextRetryAt?: string;
   updatedAt?: string;
 }

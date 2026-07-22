@@ -11,6 +11,7 @@ import { TenantId } from "../common/tenant-id.decorator.js";
 import { env } from "../config/env.js";
 import { BusinessToolsService } from "../platform/business-tools.service.js";
 import { PlatformStore } from "../platform/platform.store.js";
+import { McpClient } from "./mcp.client.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,7 +20,8 @@ export class HarnessController {
   constructor(
     private readonly store: PlatformStore,
     private readonly retrievalService: RetrievalService,
-    private readonly businessTools: BusinessToolsService
+    private readonly businessTools: BusinessToolsService,
+    private readonly mcpClient: McpClient
   ) {}
 
   @Get("actions")
@@ -115,18 +117,26 @@ export class HarnessController {
         trustedOnly: true
       },
       {
+        action: "mcp_tools_list",
+        runtime: "mcp",
+        requiredKeys: ["server"],
+        optionalKeys: [],
+        riskLevel: "external_call",
+        trustedOnly: true
+      },
+      {
         action: "mcp_call",
         runtime: "mcp",
-        requiredKeys: ["server", "tool", "arguments"],
-        optionalKeys: ["url"],
+        requiredKeys: ["server", "tool"],
+        optionalKeys: ["arguments"],
         riskLevel: "external_call",
         trustedOnly: true
       },
       {
         action: "mcp_http_call",
         runtime: "mcp",
-        requiredKeys: ["url", "tool"],
-        optionalKeys: ["arguments", "server"],
+        requiredKeys: ["server", "tool"],
+        optionalKeys: ["arguments"],
         riskLevel: "external_call",
         trustedOnly: true
       },
@@ -161,7 +171,22 @@ export class HarnessController {
   preview(@TenantId() tenantId: string, @Body() request: Record<string, unknown>) {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     const trustedRequest = { ...request, tenantId };
-    const decision = evaluatePolicy(trustedRequest);
+    let decision = evaluatePolicy(trustedRequest);
+    if (decision.allowed && ["mcp_tools_list", "mcp_call", "mcp_http_call"].includes(String(request.action ?? ""))) {
+      const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
+      try {
+        this.mcpClient.assertConfigured(
+          String(input.server ?? ""),
+          request.action === "mcp_tools_list" ? undefined : String(input.tool ?? "")
+        );
+      } catch (error) {
+        decision = {
+          allowed: false,
+          message: error instanceof Error ? error.message : String(error),
+          riskLevel: "external_call"
+        };
+      }
+    }
     if (!decision.allowed) {
       return {
         ok: 0,
@@ -362,24 +387,25 @@ export class HarnessController {
         observation: await runShell(String(input.command ?? ""), Number(input.timeoutSeconds ?? env.APP_WORKSPACE_COMMAND_TIMEOUT_SECONDS))
       };
     }
+    if (request.action === "mcp_tools_list") {
+      const server = String(input.server ?? "").trim();
+      return {
+        source: "mcp",
+        action: "mcp_tools_list",
+        observation: { server, tools: await this.mcpClient.listTools(server) }
+      };
+    }
     if (request.action === "mcp_call" || request.action === "mcp_http_call") {
-      const url = String(input.url ?? "");
-      assertMcpAllowed(url);
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tool: input.tool, arguments: input.arguments ?? {} })
-      });
-      const payload = await response.text();
+      const server = String(input.server ?? "").trim();
+      const tool = String(input.tool ?? "").trim();
+      const argumentsValue = isRecord(input.arguments) ? input.arguments : {};
       return {
         source: "mcp",
         action: request.action,
         observation: {
-          server: input.server,
-          tool: input.tool,
-          statusCode: response.status,
-          ok: response.ok,
-          body: payload.slice(0, 20_000)
+          server,
+          tool,
+          result: await this.mcpClient.callTool(server, tool, argumentsValue)
         }
       };
     }
@@ -447,12 +473,16 @@ function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; m
   }
   const trustedActions = new Set([
     "mcp_call",
+    "mcp_http_call",
+    "mcp_tools_list",
     "workspace_list_files",
     "workspace_read_file",
     "workspace_search_text",
+    "workspace_diff",
     "workspace_propose_patch",
     "workspace_apply_patch",
-    "workspace_run_shell"
+    "workspace_run_shell",
+    "memory_save"
   ]);
   if (!trustedActions.has(action)) {
     return { allowed: false, message: `action does not require trusted runtime: ${action}`, riskLevel: "unknown" };
@@ -460,7 +490,7 @@ function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; m
   if (!env.APP_AGENT_HARNESS_TRUSTED_ENABLED) {
     return { allowed: false, message: "trusted runtime is disabled", riskLevel: "blocked" };
   }
-  if (["workspace_list_files", "workspace_read_file", "workspace_search_text", "workspace_propose_patch", "workspace_apply_patch"].includes(action)) {
+  if (["workspace_list_files", "workspace_read_file", "workspace_search_text", "workspace_diff", "workspace_propose_patch", "workspace_apply_patch"].includes(action)) {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
     try {
       resolveWorkspacePath(String(input.path ?? (action === "workspace_list_files" || action === "workspace_search_text" ? "." : "")));
@@ -474,12 +504,16 @@ function evaluatePolicy(request: Record<string, unknown>): { allowed: boolean; m
   if (action === "workspace_run_shell" && !env.APP_WORKSPACE_SHELL_ENABLED) {
     return { allowed: false, message: "workspace shell is disabled", riskLevel: "shell" };
   }
-  if (action === "mcp_call" || action === "mcp_http_call") {
+  if (action === "mcp_call" || action === "mcp_http_call" || action === "mcp_tools_list") {
     const input = (request.actionInput as Record<string, unknown> | undefined) ?? request;
-    try {
-      assertMcpAllowed(String(input.url ?? ""));
-    } catch (error) {
-      return { allowed: false, message: error instanceof Error ? error.message : String(error), riskLevel: "external_call" };
+    if (typeof input.url === "string" && input.url.trim()) {
+      return { allowed: false, message: "caller-provided MCP URLs are disabled; use a configured server", riskLevel: "external_call" };
+    }
+    if (!String(input.server ?? "").trim()) {
+      return { allowed: false, message: "MCP server is required", riskLevel: "external_call" };
+    }
+    if (action !== "mcp_tools_list" && !String(input.tool ?? "").trim()) {
+      return { allowed: false, message: "MCP tool is required", riskLevel: "external_call" };
     }
   }
   return { allowed: true, message: "allowed", riskLevel: action.includes("apply") || action.includes("save") ? "write" : "read" };
@@ -508,18 +542,8 @@ function sanitizeObservation(value: unknown): unknown {
   }
 }
 
-function assertMcpAllowed(value: string): void {
-  if (!value.trim()) {
-    throw new Error("MCP endpoint URL is required");
-  }
-  const url = new URL(value);
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("MCP HTTP adapter only supports http(s)");
-  }
-  const allowlist = env.APP_MCP_HTTP_ALLOWLIST.split(",").map((item) => item.trim()).filter(Boolean);
-  if (allowlist.length > 0 && !allowlist.some((prefix) => value.startsWith(prefix))) {
-    throw new Error("MCP endpoint is not in APP_MCP_HTTP_ALLOWLIST");
-  }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function listFiles(root: string, maxDepth: number): Array<Record<string, unknown>> {

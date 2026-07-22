@@ -1,22 +1,26 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import type { IngestionJob } from "@knowledgeops/shared";
 
 import { RetrievalService } from "../ai/retrieval.service.js";
 import { newId, nowIso } from "../common/ids.js";
+import { normalizeTenant } from "../common/tenant.js";
 import { env } from "../config/env.js";
 import { IngestionJobRecord, PlatformStore } from "../platform/platform.store.js";
 import { IngestionQueueService } from "./ingestion.queue.js";
+import { INGESTION_JOB_REPOSITORY, IngestionJobRepository, TenantIngestionJobRepository } from "./ingestion.repository.js";
+import { ParsedDocument, parsePdf } from "./pdf.parser.js";
 
 @Injectable()
 export class IngestionService {
   constructor(
     private readonly store: PlatformStore,
     private readonly retrievalService: RetrievalService,
-    @Optional() private readonly queue?: IngestionQueueService
+    @Optional() private readonly queue?: IngestionQueueService,
+    @Optional() @Inject(INGESTION_JOB_REPOSITORY) private readonly repository?: IngestionJobRepository
   ) {}
 
   async createJob(params: {
@@ -27,40 +31,39 @@ export class IngestionService {
     idempotencyKey?: string;
     traceId?: string;
   }): Promise<IngestionJob> {
-    if (!params.chatId?.trim()) {
-      throw new Error("chatId is required");
-    }
-    if (!params.content.length) {
-      throw new Error("file is required");
-    }
+    const tenantId = normalizeTenant(params.tenantId);
+    const chatId = params.chatId?.trim();
+    if (!chatId) throw new Error("chatId is required");
+    if (!params.content.length) throw new Error("file is required");
     const sourceName = sanitizeFilename(params.sourceName || "document.txt");
+    const sourceType = inferSourceType(sourceName);
     scanFile(sourceName, params.content);
     const contentHash = sha256Buffer(params.content);
-    const idempotencyKey = params.idempotencyKey?.trim()
-      ? `client:${params.idempotencyKey.trim()}`
-      : `auto:${sha256Text(`${params.tenantId}|${params.chatId}|${contentHash}`)}`;
-    const existingJobId = this.store.idempotencyIndex.get(`${params.tenantId}:${idempotencyKey}`);
-    if (existingJobId) {
-      const existing = this.store.ingestionJobs.get(`${params.tenantId}:${existingJobId}`);
-      if (existing) {
-        return toPublicJob(existing);
-      }
-    }
+    const providedKey = params.idempotencyKey?.trim();
+    if (providedKey && providedKey.length > 256) throw new Error("idempotency key is too long");
+    const idempotencyKey = providedKey
+      ? `client:${providedKey}`
+      : `auto:${sha256Text(`${tenantId}|${chatId}|${contentHash}`)}`;
+    const repository = this.jobRepository();
+    const existing = await repository.findByIdempotency(tenantId, idempotencyKey);
+    if (existing) return toPublicJob(existing);
+    const parsed = await parseUploadedDocument(sourceType, params.content);
 
     const jobId = newId("job");
     const now = nowIso();
     const filePath = await persistUpload(jobId, sourceName, params.content);
     const job: IngestionJobRecord = {
       jobId,
-      tenantId: params.tenantId,
-      chatId: params.chatId,
+      tenantId,
+      chatId,
       sourceName,
-      sourceType: inferSourceType(sourceName),
+      sourceType,
       filePath,
       idempotencyKey,
       contentHash,
-      rawText: extractText(sourceName, params.content),
-      status: env.APP_INGESTION_WORKER_ENABLED ? "QUEUED" : "PENDING",
+      rawText: parsed.text,
+      pages: parsed.pages,
+      status: "PENDING",
       attemptCount: 0,
       maxRetries: env.APP_INGESTION_MAX_RETRIES,
       traceId: params.traceId ?? "",
@@ -68,16 +71,22 @@ export class IngestionService {
       createdAt: now,
       updatedAt: now
     };
-    this.store.ingestionJobs.set(`${params.tenantId}:${job.jobId}`, job);
-    this.store.idempotencyIndex.set(`${params.tenantId}:${idempotencyKey}`, job.jobId);
-    this.store.incrementMetric("ingestion_jobs_submitted_total", { source: job.sourceType, tenant: params.tenantId });
+    const persisted = await repository.insertIfAbsent(job);
+    if (persisted.jobId !== job.jobId) await unlink(filePath).catch(() => undefined);
+    this.store.incrementMetric("ingestion_jobs_submitted_total", { source: persisted.sourceType, tenant: tenantId });
     this.store.persist();
-    void this.queue?.enqueue(job).catch(() => {
-      job.status = "RETRY";
-      job.errorMessage = `failed to enqueue ${env.APP_INGESTION_QUEUE_BACKEND} job`;
-      this.store.persist();
-    });
-    return toPublicJob(job);
+    if (persisted.jobId === job.jobId) {
+      try {
+        await this.queue?.enqueue(persisted);
+      } catch (error) {
+        persisted.status = "RETRY";
+        persisted.errorMessage = `failed to enqueue ${env.APP_INGESTION_QUEUE_BACKEND} job: ${truncateError(error instanceof Error ? error.message : String(error))}`;
+        persisted.nextRetryAt = new Date(Date.now() + env.APP_INGESTION_BASE_DELAY_SECONDS * 1000).toISOString();
+        persisted.updatedAt = nowIso();
+        await repository.save(persisted);
+      }
+    }
+    return toPublicJob(persisted);
   }
 
   getJob(tenantId: string, jobId: string): IngestionJob | undefined {
@@ -86,9 +95,9 @@ export class IngestionService {
   }
 
   listByChatId(tenantId: string, chatId: string, limit: number): IngestionJob[] {
-    return [...this.store.ingestionJobs.entries()]
-      .filter(([key, job]) => key.startsWith(`${tenantId}:`) && (!chatId || job.chatId === chatId))
-      .map(([, job]) => toPublicJob(job))
+    return [...this.store.ingestionJobs.values()]
+      .filter((job) => job.tenantId === tenantId && (!chatId || job.chatId === chatId))
+      .map(toPublicJob)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, Math.max(1, Math.min(limit, 100)));
   }
@@ -100,83 +109,102 @@ export class IngestionService {
     return latest ? { filePath: latest.filePath, sourceName: latest.sourceName } : undefined;
   }
 
-  processOne(tenantId: string, jobId?: string): string {
-    const candidates = [...this.store.ingestionJobs.entries()]
-      .filter(([key, job]) => key.startsWith(`${tenantId}:`) && (!jobId || job.jobId === jobId) && isReady(job))
-      .sort(([, a], [, b]) => a.createdAt.localeCompare(b.createdAt));
-    const [, job] = candidates[0] ?? [];
-    if (!job) {
-      return "empty";
-    }
-    job.status = "RUNNING";
-    job.startedAt = job.startedAt ?? nowIso();
-    job.updatedAt = nowIso();
+  async processOne(tenantId: string, jobId?: string): Promise<string> {
+    const repository = this.jobRepository();
+    const job = await repository.claim(tenantId, jobId);
+    if (!job) return "empty";
+    const leaseToken = job.leaseToken;
+    if (!leaseToken) throw new Error(`ingestion job ${job.jobId} was claimed without a lease`);
+    const leaseHeartbeat = setInterval(() => {
+      void repository.renewLease(job.tenantId, job.jobId, leaseToken);
+    }, Math.max(500, Math.floor(env.APP_INGESTION_CLAIM_IDLE_MS / 3)));
+    leaseHeartbeat.unref?.();
     try {
-      this.retrievalService.addDocumentChunks({
+      const parsed = await this.loadDocument(job);
+      await this.retrievalService.addDocumentChunks({
         tenantId: job.tenantId,
         chatId: job.chatId,
         jobId: job.jobId,
         fileName: job.sourceName,
         sourceType: job.sourceType,
-        text: job.rawText
+        text: parsed.text,
+        pages: parsed.pages
       });
       job.status = "SUCCEEDED";
       job.finishedAt = nowIso();
       job.errorMessage = undefined;
+      job.nextRetryAt = undefined;
       this.store.incrementMetric("ingestion_jobs_finished_total", { status: "succeeded", tenant: tenantId });
     } catch (error) {
-      job.attemptCount += 1;
       job.errorMessage = truncateError(error instanceof Error ? error.message : String(error));
-      job.status = job.attemptCount < job.maxRetries ? "RETRY" : "DLQ";
+      job.status = job.attemptCount < job.maxRetries ? "RETRY" : "FAILED";
       job.nextRetryAt = job.status === "RETRY"
         ? new Date(Date.now() + env.APP_INGESTION_BASE_DELAY_SECONDS * Math.max(1, job.attemptCount) * 1000).toISOString()
         : undefined;
       job.finishedAt = nowIso();
       this.store.incrementMetric("ingestion_jobs_finished_total", { status: job.status.toLowerCase(), tenant: tenantId });
-      if (job.status === "DLQ") {
-        void this.queue?.publishDlq(job, job.errorMessage ?? "max retries exceeded").catch(() => undefined);
-      }
+    } finally {
+      clearInterval(leaseHeartbeat);
     }
     job.updatedAt = nowIso();
-    this.store.persist();
+    if (!await repository.save(job, leaseToken)) return "lost-lease";
+    if (job.status === "FAILED") {
+      await this.queue?.publishDlq(job, job.errorMessage ?? "max retries exceeded").catch(() => undefined);
+    }
     return "processed";
   }
 
   async processReadyBatch(limit = env.APP_INGESTION_WORKER_CONCURRENCY): Promise<number> {
+    const batchSize = Math.max(1, limit);
     if (this.queue?.enabled()) {
-      const messages = await this.queue.next(limit);
+      await this.jobRepository().recoverStalled(batchSize);
+      await this.enqueueReadyRetries(undefined, batchSize);
+      const messages = await this.queue.next(batchSize);
       let processed = 0;
       for (const message of messages) {
-        if (this.processOne(message.tenantId, message.jobId) === "processed") {
-          processed += 1;
-          await this.queue.ack(message.streamId);
-        }
+        const outcome = await this.processOne(message.tenantId, message.jobId);
+        await this.queue.ack(message.streamId);
+        if (outcome === "processed") processed += 1;
       }
       return processed;
     }
-    const candidates = [...this.store.ingestionJobs.values()]
-      .filter((job) => isReady(job))
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(0, Math.max(1, limit));
+    const candidates = await this.jobRepository().findReady(undefined, batchSize);
     let processed = 0;
     for (const job of candidates) {
-      if (this.processOne(job.tenantId, job.jobId) === "processed") {
-        processed += 1;
-      }
+      if (await this.processOne(job.tenantId, job.jobId) === "processed") processed += 1;
     }
     return processed;
   }
 
-  enqueueReadyRetries(tenantId: string, limit = 50): number {
-    const ready = [...this.store.ingestionJobs.values()]
-      .filter((job) => job.tenantId === tenantId && job.status === "RETRY" && (!job.nextRetryAt || Date.parse(job.nextRetryAt) <= Date.now()))
-      .slice(0, Math.max(1, limit));
+  async enqueueReadyRetries(tenantId?: string, limit = 50): Promise<number> {
+    if (!this.queue?.enabled()) return 0;
+    const ready = (await this.jobRepository().findReady(tenantId, Math.max(1, limit)))
+      .filter((job) => job.status === "RETRY");
+    let enqueued = 0;
     for (const job of ready) {
-      job.status = "QUEUED";
-      job.updatedAt = nowIso();
+      const reserved = await this.jobRepository().reserveEnqueue(job);
+      if (!reserved) continue;
+      try {
+        await this.queue.enqueue(reserved);
+        if (await this.jobRepository().completeEnqueue(reserved)) enqueued += 1;
+      } catch (error) {
+        await this.jobRepository().releaseEnqueue(
+          reserved,
+          `failed to requeue job: ${truncateError(error instanceof Error ? error.message : String(error))}`
+        );
+      }
     }
-    this.store.persist();
-    return ready.length;
+    return enqueued;
+  }
+
+  private jobRepository(): IngestionJobRepository {
+    return this.repository ?? new TenantIngestionJobRepository(this.store);
+  }
+
+  private async loadDocument(job: IngestionJobRecord): Promise<ParsedDocument> {
+    if (job.rawText?.trim()) return { text: job.rawText, pages: job.pages };
+    const content = await readFile(job.filePath);
+    return parseUploadedDocument(job.sourceType, content);
   }
 }
 
@@ -200,40 +228,25 @@ function toPublicJob(job: IngestionJobRecord): IngestionJob {
 async function persistUpload(jobId: string, sourceName: string, content: Buffer): Promise<string> {
   await mkdir(env.APP_INGESTION_STORAGE_DIR, { recursive: true });
   const filePath = join(env.APP_INGESTION_STORAGE_DIR, `${jobId}_${sourceName}`);
-  await writeFile(filePath, content);
+  await writeFile(filePath, content, { flag: "wx" });
   return filePath;
 }
 
 function scanFile(sourceName: string, content: Buffer): void {
   const lower = sourceName.toLowerCase();
-  const head = content.subarray(0, 8192).toString("latin1");
-  if (content.length > env.APP_INGESTION_MAX_FILE_BYTES) {
-    throw new Error(`file exceeds max size ${env.APP_INGESTION_MAX_FILE_BYTES} bytes`);
-  }
+  if (content.length > env.APP_INGESTION_MAX_FILE_BYTES) throw new Error(`file exceeds max size ${env.APP_INGESTION_MAX_FILE_BYTES} bytes`);
   const mimeType = inferMimeType(lower);
   const allowed = new Set(env.APP_ALLOWED_UPLOAD_MIME_TYPES.split(",").map((item) => item.trim()).filter(Boolean));
-  if (!allowed.has(mimeType) && !allowed.has("application/octet-stream")) {
-    throw new Error(`file mime type ${mimeType} is not allowed`);
-  }
-  if (head.includes("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")) {
-    throw new Error("file blocked by malware signature");
-  }
-  if (lower.endsWith(".pdf") && !head.startsWith("%PDF-")) {
-    throw new Error("invalid pdf header");
-  }
+  if (!allowed.has(mimeType) && !allowed.has("application/octet-stream")) throw new Error(`file mime type ${mimeType} is not allowed`);
+  const head = content.subarray(0, 8192).toString("latin1");
+  if (head.includes("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")) throw new Error("file blocked by malware signature");
+  if (lower.endsWith(".pdf") && !head.startsWith("%PDF-")) throw new Error("invalid pdf header");
 }
 
-function extractText(sourceName: string, content: Buffer): string {
-  const lower = sourceName.toLowerCase();
-  const raw = content.toString(lower.endsWith(".pdf") ? "latin1" : "utf8").replace(/\u0000/g, " ");
-  const text = lower.endsWith(".pdf")
-    ? raw.replace(/%PDF-[^\n]+/g, "").replace(/[^\p{L}\p{N}\p{P}\p{Zs}\n]+/gu, " ")
-    : raw;
-  const normalized = text.replace(/[ \t]+/g, " ").trim();
-  if (normalized) {
-    return normalized;
-  }
-  return `Binary document (${content.length} bytes) uploaded.`;
+async function parseUploadedDocument(sourceType: string, content: Buffer): Promise<ParsedDocument> {
+  if (sourceType === "PDF") return parsePdf(content);
+  const text = content.toString("utf8").replace(/\u0000/g, "").replace(/\r\n/g, "\n").trim();
+  return { text: text || `Binary document (${content.length} bytes) uploaded.` };
 }
 
 function sanitizeFilename(value: string): string {
@@ -245,15 +258,9 @@ function inferSourceType(sourceName: string): string {
 }
 
 function inferMimeType(sourceName: string): string {
-  if (sourceName.endsWith(".pdf")) {
-    return "application/pdf";
-  }
-  if (sourceName.endsWith(".md") || sourceName.endsWith(".markdown")) {
-    return "text/markdown";
-  }
-  if (sourceName.endsWith(".txt") || sourceName.endsWith(".text")) {
-    return "text/plain";
-  }
+  if (sourceName.endsWith(".pdf")) return "application/pdf";
+  if (sourceName.endsWith(".md") || sourceName.endsWith(".markdown")) return "text/markdown";
+  if (sourceName.endsWith(".txt") || sourceName.endsWith(".text")) return "text/plain";
   return "application/octet-stream";
 }
 
@@ -263,11 +270,6 @@ function sha256Buffer(content: Buffer): string {
 
 function sha256Text(value: string): string {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function isReady(job: IngestionJobRecord): boolean {
-  return ["PENDING", "QUEUED"].includes(job.status)
-    || (job.status === "RETRY" && (!job.nextRetryAt || Date.parse(job.nextRetryAt) <= Date.now()));
 }
 
 function truncateError(value: string): string {

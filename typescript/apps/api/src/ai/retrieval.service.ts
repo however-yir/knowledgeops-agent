@@ -34,15 +34,18 @@ export class RetrievalService {
     @Optional() private readonly vectorClient?: VectorClient
   ) {}
 
-  addDocumentChunks(params: {
+  async addDocumentChunks(params: {
     tenantId: string;
     chatId: string;
     jobId: string;
     fileName: string;
     sourceType: string;
     text: string;
-  }): KnowledgeChunk[] {
-    const chunks = splitIntoChunks(params.text, env.RAG_CHUNK_SIZE).map((content, index) => ({
+    pages?: Array<{ pageNumber: number; text: string }>;
+  }): Promise<KnowledgeChunk[]> {
+    const parts = splitDocument(params.text, params.pages, env.RAG_CHUNK_SIZE);
+    const createdAt = new Date().toISOString();
+    const chunks = parts.map(({ content, pageNumber }, index) => ({
       chunkId: `${params.jobId}:${index}`,
       tenantId: params.tenantId,
       chatId: params.chatId,
@@ -56,14 +59,34 @@ export class RetrievalService {
       metadata: {
         tenant_id: params.tenantId,
         chat_id: params.chatId,
+        job_id: params.jobId,
         file_name: params.fileName,
-        chunk_index: index
+        source_type: params.sourceType,
+        chunk_index: index,
+        ...(pageNumber === undefined ? {} : { page_number: pageNumber })
       },
-      createdAt: new Date().toISOString()
+      createdAt
     }));
-    this.store.knowledgeChunks.push(...chunks);
-    void this.vectorClient?.upsertChunks(chunks).catch(() => undefined);
-    return chunks;
+    const previous = this.store.knowledgeChunks.filter((chunk) =>
+      chunk.tenantId === params.tenantId && chunk.jobId === params.jobId
+    );
+    const retained = this.store.knowledgeChunks.filter((chunk) =>
+      chunk.tenantId !== params.tenantId || chunk.jobId !== params.jobId
+    );
+    this.store.knowledgeChunks.splice(0, this.store.knowledgeChunks.length, ...retained, ...chunks);
+    try {
+      await this.vectorClient?.upsertChunks(chunks);
+      this.store.persist();
+      return chunks;
+    } catch (error) {
+      if (env.APP_VECTOR_LOCAL_FALLBACK_ENABLED) {
+        this.store.incrementMetric("vector_local_fallback_total", { operation: "upsert" });
+        this.store.persist();
+        return chunks;
+      }
+      this.store.knowledgeChunks.splice(0, this.store.knowledgeChunks.length, ...retained, ...previous);
+      throw error;
+    }
   }
 
   retrieve(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K): ScoredChunk[] {
@@ -137,7 +160,13 @@ export class RetrievalService {
   }
 
   private async vectorRetrieveAsync(query: string, tenantId: string, chatId: string, topK: number): Promise<ScoredChunk[]> {
-    const external = await this.vectorClient?.searchPgVector(query, tenantId, chatId, topK).catch(() => undefined);
+    let external: Array<Partial<ScoredChunk>> | undefined;
+    try {
+      external = await this.vectorClient?.searchPgVector(query, tenantId, chatId, topK);
+    } catch (error) {
+      if (!env.APP_VECTOR_LOCAL_FALLBACK_ENABLED) throw error;
+      this.store.incrementMetric("vector_local_fallback_total", { operation: "search" });
+    }
     if (external?.length) {
       return external.map((doc, index) => scored({
         chunkId: String(doc.chunkId ?? `pgvector:${index}`),
@@ -444,36 +473,73 @@ function normalizeWebResults(payload: unknown, topK: number, backend: "generic" 
   }).filter((item) => item.snippet || item.title);
 }
 
-function splitIntoChunks(text: string, maxChunkSize: number): string[] {
-  const normalized = text.replace(/\r/g, "").replace(/[ \t]+/g, " ").trim();
-  if (!normalized) {
-    return [];
+interface DocumentPart {
+  content: string;
+  pageNumber?: number;
+}
+
+function splitDocument(
+  text: string,
+  pages: Array<{ pageNumber: number; text: string }> | undefined,
+  maxChunkSize: number
+): DocumentPart[] {
+  const sources = pages?.length
+    ? pages.map((page) => ({ text: page.text, pageNumber: page.pageNumber }))
+    : [{ text, pageNumber: undefined }];
+  const chunks: DocumentPart[] = [];
+  for (const source of sources) {
+    for (const content of splitText(source.text, maxChunkSize)) {
+      chunks.push({ content, pageNumber: source.pageNumber });
+      if (chunks.length >= env.RAG_MAX_NUM_CHUNKS) return chunks;
+    }
   }
-  const paragraphs = normalized.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  return chunks;
+}
+
+function splitText(text: string, maxChunkSize: number): string[] {
+  const normalized = text.replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").trim();
+  if (!normalized) return [];
+  const units = normalized
+    .split(/\n{2,}|(?<=[.!?。！？])\s+/u)
+    .map((unit) => unit.trim())
+    .filter(Boolean)
+    .flatMap((unit) => hardSplit(unit, maxChunkSize));
   const chunks: string[] = [];
   let current = "";
-  for (const paragraph of paragraphs.length ? paragraphs : [normalized]) {
-    if ((current + "\n\n" + paragraph).trim().length > maxChunkSize && current) {
-      chunks.push(current.trim());
-      current = paragraph;
-    } else {
-      current = [current, paragraph].filter(Boolean).join("\n\n");
+  for (const unit of units) {
+    const candidate = current ? `${current}\n\n${unit}` : unit;
+    if (candidate.length <= maxChunkSize) {
+      current = candidate;
+      continue;
     }
-    while (current.length > maxChunkSize) {
-      const next = current.slice(0, maxChunkSize).trim();
-      if (next.length >= env.RAG_MIN_CHUNK_SIZE || chunks.length === 0) {
-        chunks.push(next);
-      }
-      current = current.slice(maxChunkSize);
-      if (chunks.length >= env.RAG_MAX_NUM_CHUNKS) {
-        return chunks;
-      }
+    if (current) chunks.push(current);
+    current = unit;
+  }
+  if (current) chunks.push(current);
+  if (chunks.length > 1 && chunks.at(-1)!.length < env.RAG_MIN_CHUNK_SIZE) {
+    const tail = chunks.pop()!;
+    const previous = chunks.pop()!;
+    chunks.push(`${previous}\n\n${tail}`);
+  }
+  return chunks;
+}
+
+function hardSplit(text: string, maxChunkSize: number): string[] {
+  if (text.length <= maxChunkSize) return [text];
+  const parts: string[] = [];
+  let offset = 0;
+  while (offset < text.length) {
+    const limit = Math.min(offset + maxChunkSize, text.length);
+    let end = limit;
+    if (limit < text.length) {
+      const boundary = text.lastIndexOf(" ", limit);
+      if (boundary > offset + Math.floor(maxChunkSize / 2)) end = boundary;
     }
+    parts.push(text.slice(offset, end).trim());
+    offset = end;
+    while (text[offset] === " ") offset += 1;
   }
-  if (current.trim()) {
-    chunks.push(current.trim());
-  }
-  return chunks.slice(0, env.RAG_MAX_NUM_CHUNKS);
+  return parts.filter(Boolean);
 }
 
 function clampScore(value: number): number {
