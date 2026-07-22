@@ -427,6 +427,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             require_evidence=True,
             settings=active_settings,
             ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+            graph_repository=graph_repository,
             session_repository=session_repository,
         )
         return ok(data, trace_id=ctx.trace_id)
@@ -532,6 +533,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     payload,
                     active_settings,
                     ingestion_service.repository if ingestion_service is not None else None,
+                    graph_repository,
                 ),
                 trace_id=ctx.trace_id,
             )
@@ -551,6 +553,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     EvaluationRunRequestDto(datasetId=datasetId, modelProfile=payload.modelProfile),
                     active_settings,
                     ingestion_service.repository if ingestion_service is not None else None,
+                    graph_repository,
                 ),
                 trace_id=ctx.trace_id,
             )
@@ -702,6 +705,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             require_evidence=True,
             settings=active_settings,
             ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+            graph_repository=graph_repository,
             session_repository=session_repository,
         )
         return ok(data, trace_id=ctx.trace_id)
@@ -1709,13 +1713,17 @@ async def rag_response_with_provider(
     require_evidence: bool,
     settings: Settings,
     ingestion_repository: SqlAlchemyIngestionRepository | None = None,
+    graph_repository: SqlAlchemyGraphRepository | None = None,
     session_repository: SqlAlchemySessionRepository | None = None,
     record_session: bool = True,
 ) -> RagResponseDto:
-    rag = (
-        await retrieve_persisted(ingestion_repository, ctx.tenant_id, request.chatId, request.prompt)
-        if ingestion_repository is not None
-        else retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
+    rag = await retrieve_hybrid(
+        store,
+        ctx.tenant_id,
+        request.chatId,
+        request.prompt,
+        ingestion_repository,
+        graph_repository,
     )
     base = await chat_response_with_provider(
         store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session
@@ -1786,6 +1794,66 @@ async def retrieve_persisted(
     prompt: str,
 ) -> dict[str, Any]:
     return retrieve_chunks(await repository.chunks(tenant_id, chat_id), prompt)
+
+
+async def retrieve_hybrid(
+    store: PlatformStore,
+    tenant_id: str,
+    chat_id: str,
+    prompt: str,
+    ingestion_repository: SqlAlchemyIngestionRepository | None,
+    graph_repository: SqlAlchemyGraphRepository | None,
+) -> dict[str, Any]:
+    chunks = (
+        await ingestion_repository.chunks(tenant_id, chat_id)
+        if ingestion_repository is not None
+        else [chunk for chunk in store.chunks if chunk["tenantId"] == tenant_id and chunk["chatId"] == chat_id]
+    )
+    if graph_repository is not None:
+        chunks.extend(await graph_chunks(graph_repository, tenant_id, prompt))
+    return retrieve_chunks(chunks, prompt)
+
+
+async def graph_chunks(repository: SqlAlchemyGraphRepository, tenant_id: str, prompt: str) -> list[dict[str, Any]]:
+    keyword = graph_keyword(prompt)
+    if not keyword:
+        return []
+    entities = await repository.list_entities(tenant_id, keyword, limit=5)
+    chunks: list[dict[str, Any]] = []
+    for entity in entities:
+        neighbors = await repository.neighbors(tenant_id, entity["entityId"])
+        neighbor_context = "; ".join(
+            f"{item['relationType']} → {item['entity']['name']}" for item in (neighbors or [])
+        )
+        content = f"{entity['name']}: {entity.get('description') or ''}".strip()
+        if neighbor_context:
+            content = f"{content} | {neighbor_context}"
+        chunks.append(
+            {
+                "chunkId": entity["entityId"],
+                "sourceName": "graph",
+                "title": f"{entity['name']} ({entity['type']})",
+                "content": content,
+                "tokens": set(tokenize(content)),
+            }
+        )
+    for fact in await repository.search_facts(tenant_id, keyword, limit=5):
+        content = f"{fact['subject']} {fact['predicate']} {fact['object']}"
+        chunks.append(
+            {
+                "chunkId": fact["factId"],
+                "sourceName": "graph",
+                "title": content,
+                "content": content,
+                "tokens": set(tokenize(content)),
+            }
+        )
+    return chunks
+
+
+def graph_keyword(prompt: str) -> str:
+    tokens = tokenize(prompt)
+    return max(tokens, key=len) if tokens else prompt.strip()
 
 
 def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]:
@@ -1996,6 +2064,7 @@ async def create_persisted_eval_run(
     payload: EvaluationRunRequestDto,
     settings: Settings,
     ingestion_repository: SqlAlchemyIngestionRepository | None,
+    graph_repository: SqlAlchemyGraphRepository | None,
 ) -> dict[str, Any]:
     dataset_id = payload.datasetId or "default"
     dataset = await repository.get_dataset(ctx.tenant_id, dataset_id)
@@ -2019,6 +2088,7 @@ async def create_persisted_eval_run(
                 require_evidence=False,
                 settings=settings,
                 ingestion_repository=ingestion_repository,
+                graph_repository=graph_repository,
                 record_session=False,
             )
             answer = response.answer

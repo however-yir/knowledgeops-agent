@@ -229,6 +229,15 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
             ).json()
         )
         assert graph_action["result"][0]["entityId"] == graph_source_id
+        graph_rag = assert_envelope(
+            second_app.post(
+                "/ai/pdf/chat",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"chatId": "graph-only", "prompt": "shade", "modelProfile": "balanced"},
+            ).json()
+        )
+        assert graph_rag["citations"][0]["source"] == "graph"
+        assert "Water and shade" in graph_rag["evidence"][0]
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0
