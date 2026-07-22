@@ -34,6 +34,7 @@ test = [
   "httpx>=0.27,<1",
   "pytest>=9.0.3,<10",
   "pytest-cov>=6.0,<7",
+  "asyncmy>=0.2.11,<1",
   "testcontainers[postgres]>=4.9,<5"
 ]
 mysql = [
