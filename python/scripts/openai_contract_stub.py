@@ -9,6 +9,8 @@ from typing import Any
 
 
 class ContractStubHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
             self.send_json({"status": "UP"})
@@ -17,8 +19,7 @@ class ContractStubHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         try:
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length) or b"{}")
+            payload = json.loads(self.read_request_body() or b"{}")
         except (ValueError, json.JSONDecodeError):
             self.send_json({"error": {"message": "invalid JSON"}}, HTTPStatus.BAD_REQUEST)
             return
@@ -32,6 +33,22 @@ class ContractStubHandler(BaseHTTPRequestHandler):
             self.send_json({"scores": [1.0 for _ in payload.get("documents", [])]})
             return
         self.send_error(HTTPStatus.NOT_FOUND)
+
+    def read_request_body(self) -> bytes:
+        if self.headers.get("Transfer-Encoding", "").lower() != "chunked":
+            return self.rfile.read(int(self.headers.get("Content-Length", "0")))
+
+        chunks: list[bytes] = []
+        while True:
+            size_line = self.rfile.readline().strip()
+            chunk_size = int(size_line.split(b";", maxsplit=1)[0], 16)
+            if chunk_size == 0:
+                while self.rfile.readline().strip():
+                    pass
+                return b"".join(chunks)
+            chunks.append(self.rfile.read(chunk_size))
+            if self.rfile.read(2) != b"\r\n":
+                raise ValueError("invalid chunk terminator")
 
     def chat_completion(self, payload: dict[str, Any]) -> None:
         messages = payload.get("messages", [])
@@ -47,11 +64,14 @@ class ContractStubHandler(BaseHTTPRequestHandler):
         if payload.get("stream"):
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
             self.end_headers()
             for chunk in (answer,):
                 event = {"choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}]}
                 self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
             self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+            self.close_connection = True
             return
         self.send_json(
             {
