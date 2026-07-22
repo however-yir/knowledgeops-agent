@@ -74,6 +74,16 @@ def test_canonical_sessions_use_java_paged_result_and_state_shape() -> None:
     assert isinstance(state.json()["updatedAt"], int)
 
 
+def test_canonical_evaluation_datasets_hide_cases_behind_java_summary_dto() -> None:
+    response = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a"))).get(
+        "/ai/evaluation/datasets", headers=AUTH_HEADERS
+    )
+
+    dataset = response.json()[0]
+    assert {"datasetId", "tenantId", "name", "description", "baselineRunId", "caseCount", "createdAt", "updatedAt"} <= set(dataset)
+    assert "cases" not in dataset
+
+
 def test_python_v1_keeps_legacy_envelope_and_java_errors_return_result() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
 

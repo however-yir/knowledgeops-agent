@@ -178,6 +178,8 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     if feedback.get("ok") != 1 or feedback.get("data") is not None:
         failures.append("canonical feedback response did not match Result")
     datasets = client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS).json()
+    if not datasets or "cases" in datasets[0] or "caseCount" not in datasets[0]:
+        failures.append("canonical evaluation dataset response did not match EvalDatasetVO")
     run = client.post("/ai/evaluation/runs", headers=AUTH_HEADERS, json={"datasetId": datasets[0]["datasetId"], "modelProfile": "balanced"}).json()
     if run.get("status") != "COMPLETED":
         failures.append("evaluation run did not complete")

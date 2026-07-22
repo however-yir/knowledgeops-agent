@@ -95,6 +95,10 @@ def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]
         return {"ok": 1, "msg": message, "job": ingestion_job_payload(data)}
     if path in {"/ai/react/chat", "/ai/workflow/react/chat"}:
         return react_response_payload(data)
+    if path == "/ai/evaluation/datasets":
+        if isinstance(data, list):
+            return [evaluation_dataset_payload(item) for item in data]
+        return evaluation_dataset_payload(data)
     if path == "/ai/sessions":
         return paged_session_payload(data, query)
     if is_session_state_path(path):
@@ -197,6 +201,21 @@ def model_data(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
         return value.model_dump()
     return {}
+
+
+def evaluation_dataset_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    cases = source.get("cases")
+    return {
+        "datasetId": source.get("datasetId"),
+        "tenantId": source.get("tenantId"),
+        "name": source.get("name"),
+        "description": source.get("description"),
+        "baselineRunId": source.get("baselineRunId"),
+        "caseCount": source.get("caseCount") if source.get("caseCount") is not None else len(cases or []),
+        "createdAt": source.get("createdAt"),
+        "updatedAt": source.get("updatedAt"),
+    }
 
 
 def paged_session_payload(data: Any, query: Mapping[str, str]) -> dict[str, Any]:
