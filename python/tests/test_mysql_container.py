@@ -20,11 +20,11 @@ def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.Mo
     monkeypatch.setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
     try:
         with MySqlContainer(
-            "mysql:8.4",
-            username="root",
-            password="knowledgeops-root",
+            "mysql:8.0.36",
+            username="knowledgeops",
+            password="knowledgeops",
             dbname="knowledgeops",
-        ).with_env("MYSQL_ROOT_HOST", "%") as container:
+        ).with_command("--default-authentication-plugin=mysql_native_password") as container:
             database_url = str(make_url(container.get_connection_url()).set(drivername="mysql+asyncmy"))
             monkeypatch.setenv("APP_DATABASE_URL", database_url)
             command.upgrade(Config(str(Path(__file__).resolve().parents[1] / "alembic.ini")), "head")
@@ -45,7 +45,7 @@ def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.Mo
             asyncio.run(verify())
     except DockerException as exc:
         detail = str(exc)
-        if not os.getenv("CI") and ("registry-1.docker.io" in detail or "No such image: mysql:8.4" in detail):
+        if not os.getenv("CI") and ("registry-1.docker.io" in detail or "No such image: mysql:" in detail):
             pytest.skip("Docker Hub is unavailable for the local MySQL Testcontainer")
         raise
 
