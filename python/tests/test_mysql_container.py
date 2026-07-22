@@ -38,6 +38,8 @@ def test_mysql_alembic_and_skip_locked_claims_are_durable(monkeypatch: pytest.Mo
                 repository = SqlAlchemyIngestionRepository(create_session_factory(engine))
                 first = await repository.create(job("job_mysql_a", "tenant-a", "key-a"))
                 second = await repository.create(job("job_mysql_b", "tenant-b", "key-b"))
+                duplicate = await repository.create(job("job_mysql_duplicate", "tenant-b", "key-b"))
+                assert duplicate.job_id == second.job_id
                 claims = await asyncio.gather(repository.claim_next(), repository.claim_next())
                 claimed_ids = {claim.job_id for claim in claims if claim is not None}
                 assert claimed_ids <= {first.job_id, second.job_id}
