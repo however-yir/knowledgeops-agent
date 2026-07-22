@@ -64,7 +64,11 @@ from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
-from .infrastructure.providers import OpenAICompatibleChatProvider, OpenAICompatibleEmbeddingProvider
+from .infrastructure.providers import (
+    OpenAICompatibleChatProvider,
+    OpenAICompatibleEmbeddingProvider,
+    RemoteHttpReranker,
+)
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
@@ -2323,6 +2327,13 @@ async def rag_response_with_provider(
         request.prompt,
         ingestion_repository,
         graph_repository,
+        OpenAICompatibleEmbeddingProvider(settings.model_base_url, settings.model_api_key, settings.embedding_model)
+        if settings.model_base_url and settings.model_api_key
+        else None,
+        RemoteHttpReranker(settings.reranker_url)
+        if settings.reranker_backend == "remote" and settings.reranker_url
+        else None,
+        settings.is_production,
     )
     base = await chat_response_with_provider(
         store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session
@@ -2402,6 +2413,9 @@ async def retrieve_hybrid(
     prompt: str,
     ingestion_repository: SqlAlchemyIngestionRepository | None,
     graph_repository: SqlAlchemyGraphRepository | None,
+    embedding_provider: OpenAICompatibleEmbeddingProvider | None = None,
+    reranker: RemoteHttpReranker | None = None,
+    require_provider_success: bool = False,
 ) -> dict[str, Any]:
     chunks = (
         await ingestion_repository.chunks(tenant_id, chat_id)
@@ -2410,7 +2424,68 @@ async def retrieve_hybrid(
     )
     if graph_repository is not None:
         chunks.extend(await graph_chunks(graph_repository, tenant_id, prompt))
-    return retrieve_chunks(chunks, prompt)
+    return await retrieve_chunks_with_semantics(
+        chunks,
+        prompt,
+        TenantContext("", tenant_id, "retrieval", (), (), "retrieval"),
+        embedding_provider,
+        reranker,
+        require_provider_success,
+    )
+
+
+async def retrieve_chunks_with_semantics(
+    chunks: list[dict[str, Any]],
+    prompt: str,
+    context: TenantContext,
+    embedding_provider: OpenAICompatibleEmbeddingProvider | None,
+    reranker: RemoteHttpReranker | None,
+    require_provider_success: bool,
+) -> dict[str, Any]:
+    lexical = retrieve_chunks(chunks, prompt)
+    if embedding_provider is None:
+        return lexical
+    try:
+        embeddings = await embedding_provider.embed(context, [prompt])
+        query_embedding = embeddings[0] if embeddings else []
+        semantic_hits = [
+            (vector_cosine(query_embedding, chunk.get("embedding")), chunk)
+            for chunk in chunks
+            if isinstance(chunk.get("embedding"), list)
+        ]
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        if require_provider_success:
+            raise HTTPException(status_code=502, detail="embedding provider request failed") from exc
+        return lexical
+    semantic_hits = [(score, chunk) for score, chunk in semantic_hits if score >= 0.45]
+    semantic_hits.sort(key=lambda item: item[0], reverse=True)
+    chunk_by_id = {str(chunk["chunkId"]): chunk for chunk in chunks}
+    candidates = [chunk for _, chunk in semantic_hits]
+    candidates.extend(chunk_by_id[str(citation.chunkId)] for citation in lexical["citations"] if str(citation.chunkId) in chunk_by_id)
+    unique: dict[str, dict[str, Any]] = {}
+    for chunk in candidates:
+        unique.setdefault(str(chunk["chunkId"]), chunk)
+    selected = list(unique.values())[:5]
+    if reranker is not None and selected:
+        try:
+            scores = await reranker.rank(context, prompt, [str(chunk["content"]) for chunk in selected])
+            if len(scores) != len(selected):
+                raise ValueError("reranker returned an invalid score set")
+            selected = [chunk for _, chunk in sorted(zip(scores, selected, strict=True), key=lambda item: item[0], reverse=True)]
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            if require_provider_success:
+                raise HTTPException(status_code=502, detail="reranker provider request failed") from exc
+    return {
+        "citations": [build_citation(index, chunk) for index, chunk in enumerate(selected, start=1)],
+        "evidence": [chunk["content"] for chunk in selected],
+        "retrievalStats": {
+            **lexical["retrievalStats"],
+            "vectorMatches": len(semantic_hits),
+            "hybridMatches": len(unique),
+            "evidenceAccepted": len(selected),
+            "refused": len(selected) == 0,
+        },
+    }
 
 
 async def graph_chunks(repository: SqlAlchemyGraphRepository, tenant_id: str, prompt: str) -> list[dict[str, Any]]:
@@ -3035,6 +3110,20 @@ def cosine_like(left: set[str], right: set[str]) -> float:
     if not left or not right:
         return 0.0
     return len(left.intersection(right)) / math.sqrt(len(left) * len(right))
+
+
+def vector_cosine(query: list[float], document: Any) -> float:
+    if not isinstance(document, list) or not query or len(query) != len(document):
+        return 0.0
+    try:
+        values = [float(value) for value in document]
+    except (TypeError, ValueError):
+        return 0.0
+    query_norm = math.sqrt(sum(value * value for value in query))
+    document_norm = math.sqrt(sum(value * value for value in values))
+    if not query_norm or not document_norm:
+        return 0.0
+    return sum(left * right for left, right in zip(query, values, strict=True)) / (query_norm * document_norm)
 
 
 def normalize_tenant(value: Any = None) -> str:

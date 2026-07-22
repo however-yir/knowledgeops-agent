@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from redis.exceptions import RedisError
 
+from knowledgeops_py.app import retrieve_chunks_with_semantics
 from knowledgeops_py.application.ingestion import IngestionApplicationService
 from knowledgeops_py.domain.context import TenantContext
 from knowledgeops_py.domain.ports import (
@@ -152,6 +153,37 @@ def test_openai_compatible_and_remote_reranker_adapters(monkeypatch) -> None:
         assert scores == [0.9]
 
     asyncio.run(exercise())
+
+
+def test_semantic_retrieval_merges_vectors_and_applies_reranker() -> None:
+    class Embeddings:
+        async def embed(self, context: TenantContext, texts: list[str]) -> list[list[float]]:
+            assert context.tenant_id == "tenant-a" and texts == ["heat safety"]
+            return [[1.0, 0.0]]
+
+    class Reranker:
+        async def rank(self, context: TenantContext, query: str, documents: list[str]) -> list[float]:
+            assert query == "heat safety" and len(documents) == 2
+            return [0.1, 0.9]
+
+    chunks = [
+        {"chunkId": "chunk-a", "sourceName": "policy", "title": "A", "content": "heat safety guidance", "embedding": [1.0, 0.0]},
+        {"chunkId": "chunk-b", "sourceName": "policy", "title": "B", "content": "hydration protocol", "embedding": [0.9, 0.1]},
+    ]
+
+    result = asyncio.run(
+        retrieve_chunks_with_semantics(
+            chunks,
+            "heat safety",
+            TenantContext("trace", "tenant-a", "alice", (), (), "jwt"),
+            Embeddings(),  # type: ignore[arg-type]
+            Reranker(),  # type: ignore[arg-type]
+            True,
+        )
+    )
+
+    assert [citation.chunkId for citation in result["citations"]] == ["chunk-b", "chunk-a"]
+    assert result["retrievalStats"]["vectorMatches"] == 2
 
 
 def test_redis_streams_and_mysql_skip_locked_queue_adapters() -> None:
