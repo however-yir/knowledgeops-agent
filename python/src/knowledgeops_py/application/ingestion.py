@@ -10,7 +10,7 @@ from uuid import uuid4
 from pypdf import PdfReader
 
 from knowledgeops_py.domain.context import TenantContext
-from knowledgeops_py.domain.ports import IngestionQueue
+from knowledgeops_py.domain.ports import EmbeddingProvider, IngestionQueue
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from knowledgeops_py.infrastructure.models import IngestionJobRecord
@@ -22,6 +22,7 @@ class IngestionApplicationService:
     files: LocalFileStore
     queue_backend: str
     queue: IngestionQueue | None = None
+    embedding_provider: EmbeddingProvider | None = None
     max_retries: int = 3
     retry_delay_seconds: int = 10
 
@@ -76,7 +77,7 @@ class IngestionApplicationService:
             if not job.file_path:
                 raise RuntimeError("ingestion file path is missing")
             content = await self.files.read(job.tenant_id, job.file_path)
-            chunks = self._chunks(job, extract_text(content))
+            chunks = await self._chunks(job, extract_text(content))
             await self.repository.complete(job.job_id, chunks)
             return await self.repository.get(job.tenant_id, job.job_id)
         except Exception as exc:
@@ -113,9 +114,9 @@ class IngestionApplicationService:
             await self.queue.publish_dead_letter(context, job.job_id, job.error_message or "ingestion failed")
         return job
 
-    def _chunks(self, job: PersistedIngestionJob, text: str) -> list[dict[str, Any]]:
+    async def _chunks(self, job: PersistedIngestionJob, text: str) -> list[dict[str, Any]]:
         parts = split_text(text)
-        return [
+        chunks: list[dict[str, Any]] = [
             {
                 "chunk_id": f"chunk_{uuid4().hex[:16]}",
                 "job_id": job.job_id,
@@ -129,6 +130,15 @@ class IngestionApplicationService:
             }
             for index, part in enumerate(parts)
         ]
+        if self.embedding_provider is None:
+            return chunks
+        context = TenantContext(job.trace_id or "", job.tenant_id, "worker", (), (), "worker")
+        embeddings = await self.embedding_provider.embed(context, parts)
+        if len(embeddings) != len(chunks) or any(not embedding for embedding in embeddings):
+            raise RuntimeError("embedding provider returned an invalid chunk vector set")
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
+            chunk["embedding"] = [float(value) for value in embedding]
+        return chunks
 
 
 def normalize_idempotency_key(

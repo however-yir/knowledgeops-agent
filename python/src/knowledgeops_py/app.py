@@ -64,7 +64,7 @@ from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
-from .infrastructure.providers import OpenAICompatibleChatProvider
+from .infrastructure.providers import OpenAICompatibleChatProvider, OpenAICompatibleEmbeddingProvider
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
@@ -189,12 +189,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allowed_git_subcommands=active_settings.workspace_allowed_git_subcommands,
     )
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
+    embedding_provider = (
+        OpenAICompatibleEmbeddingProvider(
+            active_settings.model_base_url,
+            active_settings.model_api_key,
+            active_settings.embedding_model,
+        )
+        if active_settings.model_base_url and active_settings.model_api_key
+        else None
+    )
     ingestion_service = (
         IngestionApplicationService(
             SqlAlchemyIngestionRepository(session_factory),
             LocalFileStore(Path(active_settings.storage_path)),
             active_settings.ingestion_queue_backend,
             ingestion_queue,
+            embedding_provider,
         )
         if session_factory is not None
         else None

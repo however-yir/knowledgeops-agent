@@ -443,6 +443,11 @@ def test_sql_graph_repository_persists_entities_relations_facts_and_tenant_bound
 
 
 def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tmp_path: Path) -> None:
+    class RecordingEmbeddingProvider:
+        async def embed(self, context: TenantContext, texts: list[str]) -> list[list[float]]:
+            assert context.tenant_id == "tenant-a" and context.auth_source == "worker"
+            return [[float(index + 1), 0.5] for index, _ in enumerate(texts)]
+
     class RecordingQueue:
         def __init__(self) -> None:
             self.published: list[str] = []
@@ -471,7 +476,15 @@ def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tm
         repository = SqlAlchemyIngestionRepository(create_session_factory(engine))
         files = LocalFileStore(tmp_path / "uploads")
         queue = RecordingQueue()
-        service = IngestionApplicationService(repository, files, "db_polling", queue, max_retries=2, retry_delay_seconds=1)
+        service = IngestionApplicationService(
+            repository,
+            files,
+            "db_polling",
+            queue,
+            embedding_provider=RecordingEmbeddingProvider(),
+            max_retries=2,
+            retry_delay_seconds=1,
+        )
         context = TenantContext("trace", "tenant-a", "alice", ("USER",), ("PERM_INGESTION_WRITE",), "jwt")
 
         submitted = await service.submit(context, "chat-a", "policy.txt", b"Water, rest, and shade prevent heat injury.")
@@ -482,6 +495,7 @@ def test_durable_ingestion_is_idempotent_recovers_chunks_and_retries_failures(tm
         assert await service.process(submitted.job_id) is None
         chunks = await repository.chunks("tenant-a", "chat-a")
         assert chunks[0]["content"].startswith("Water")
+        assert chunks[0]["embedding"] == [1.0, 0.5]
         reloaded = await repository.get("tenant-a", submitted.job_id)
         assert reloaded is not None and reloaded.file_path == submitted.file_path
         assert (await repository.list_jobs("tenant-a", "chat-a", 10))[0].job_id == submitted.job_id

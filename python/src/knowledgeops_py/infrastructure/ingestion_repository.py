@@ -224,6 +224,7 @@ class SqlAlchemyIngestionRepository:
                     "title": item.source_name,
                     "chunkIndex": item.chunk_index,
                     "content": item.content,
+                    "embedding": item.embedding,
                 }
                 for item in records
             ]

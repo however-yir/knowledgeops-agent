@@ -36,6 +36,7 @@ class Settings:
     model_base_url: str | None = None
     model_api_key: str | None = None
     model_name: str = "qwen-plus"
+    embedding_model: str = "text-embedding-v4"
     reranker_backend: str = "identity"
     reranker_url: str | None = None
     trusted_runtime_enabled: bool = False
@@ -105,6 +106,7 @@ def load_settings() -> Settings:
         model_base_url=os.getenv("APP_MODEL_BASE_URL"),
         model_api_key=os.getenv("APP_MODEL_API_KEY"),
         model_name=os.getenv("APP_MODEL_NAME", "qwen-plus"),
+        embedding_model=os.getenv("APP_EMBEDDING_MODEL", "text-embedding-v4"),
         reranker_backend=os.getenv("APP_RERANKER_BACKEND", "identity"),
         reranker_url=os.getenv("APP_RERANKER_URL"),
         trusted_runtime_enabled=os.getenv("APP_AGENT_HARNESS_TRUSTED_ENABLED", "false").lower() == "true",
