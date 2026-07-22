@@ -15,6 +15,8 @@ AUTH_PATHS = {"/auth/token", "/auth/refresh"}
 API_KEY_PATHS = {"/auth/api-keys", "/auth/api-keys/rotate", "/auth/api-keys/revoke"}
 UPLOAD_PATHS = {"/ai/pdf/upload", "/ingestion/upload"}
 INGESTION_PROCESS_PATH = "/ingestion/jobs/process"
+WORKFLOW_TASKS_PATH = "/ai/workflow/tasks"
+RESEARCH_TASKS_PATH = "/ai/research/tasks"
 
 
 def prepare_contract_path(request: Request) -> None:
@@ -100,6 +102,16 @@ def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]
         return ingestion_job_payload(data)
     if path in {"/ai/react/chat", "/ai/workflow/react/chat"}:
         return react_response_payload(data)
+    if path == WORKFLOW_TASKS_PATH:
+        return [workflow_task_payload(item) for item in data] if isinstance(data, list) else data
+    if is_workflow_events_path(path) or is_research_events_path(path):
+        return [workflow_event_payload(item) for item in data] if isinstance(data, list) else data
+    if is_workflow_task_path(path) or is_research_task_path(path):
+        return workflow_task_payload(data)
+    if path == RESEARCH_TASKS_PATH:
+        return deep_research_payload(data)
+    if is_research_report_path(path):
+        return research_report_payload(data)
     if path == "/ai/evaluation/datasets":
         if isinstance(data, list):
             return [evaluation_dataset_payload(item) for item in data]
@@ -126,6 +138,8 @@ def failure_payload(path: str, message: str) -> dict[str, Any]:
         return auth_token_payload({}, 0, message)
     if path in API_KEY_PATHS:
         return api_key_payload({}, 0, message)
+    if is_workflow_task_path(path) or is_research_task_path(path) or is_research_report_path(path):
+        return {"ok": 0, "msg": message}
     return result_payload(0, message, code="REQUEST_FAILED")
 
 
@@ -177,6 +191,118 @@ def ingestion_job_payload(data: Any) -> Any:
 
 def java_local_datetime(value: Any) -> Any:
     return value.removesuffix("Z") if isinstance(value, str) else value
+
+
+def is_workflow_task_path(path: str) -> bool:
+    return path.startswith(f"{WORKFLOW_TASKS_PATH}/") and not path.endswith("/events")
+
+
+def is_workflow_events_path(path: str) -> bool:
+    return path.startswith(f"{WORKFLOW_TASKS_PATH}/") and path.endswith("/events")
+
+
+def is_research_task_path(path: str) -> bool:
+    return path.startswith(f"{RESEARCH_TASKS_PATH}/") and not path.endswith(("/events", "/report"))
+
+
+def is_research_events_path(path: str) -> bool:
+    return path.startswith(f"{RESEARCH_TASKS_PATH}/") and path.endswith("/events")
+
+
+def is_research_report_path(path: str) -> bool:
+    return path.startswith(f"{RESEARCH_TASKS_PATH}/") and path.endswith("/report")
+
+
+def workflow_task_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    task_id = source.get("taskId")
+    model_profile = source.get("modelProfile") or "balanced"
+    return {
+        "taskId": task_id,
+        "tenantId": source.get("tenantId"),
+        "type": workflow_type(source.get("type")),
+        "status": workflow_status(source.get("status")),
+        "userInput": source.get("userInput") or source.get("topic") or "",
+        "finalOutput": source.get("finalOutput") if source.get("finalOutput") is not None else source.get("report"),
+        "modelProfile": model_profile,
+        "chatId": source.get("chatId"),
+        "sessionId": source.get("sessionId"),
+        "createdAt": java_local_datetime(source.get("createdAt")),
+        "updatedAt": java_local_datetime(source.get("updatedAt") or source.get("createdAt")),
+        "steps": [workflow_step_payload(item, task_id, model_profile) for item in source.get("steps") or []],
+        "events": [workflow_event_payload(item, task_id) for item in source.get("events") or []],
+    }
+
+
+def workflow_type(value: Any) -> str:
+    return "DEEP_RESEARCH" if value in {"RESEARCH", "DEEP_RESEARCH"} else str(value or "REACT")
+
+
+def workflow_status(value: Any) -> str:
+    return "DONE" if value in {"COMPLETED", "DONE"} else str(value or "CREATED")
+
+
+def workflow_step_payload(data: Any, task_id: Any, model_profile: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "stepId": source.get("stepId"),
+        "taskId": source.get("taskId") or task_id,
+        "agentName": source.get("agentName") or source.get("action") or "planner",
+        "status": source.get("status") or "COMPLETED",
+        "stepOrder": integer_or_zero(source.get("stepOrder", source.get("step"))),
+        "thought": source.get("thought") or source.get("thoughtSummary"),
+        "action": source.get("action"),
+        "actionInput": source.get("actionInput") if isinstance(source.get("actionInput"), dict) else {},
+        "observation": source.get("observation"),
+        "modelProfile": source.get("modelProfile") or model_profile,
+        "inputTokens": integer_or_zero(source.get("inputTokens")),
+        "outputTokens": integer_or_zero(source.get("outputTokens")),
+        "latencyMs": integer_or_zero(source.get("latencyMs")),
+        "errorMessage": source.get("errorMessage"),
+        "startedAt": java_local_datetime(source.get("startedAt")),
+        "endedAt": java_local_datetime(source.get("endedAt")),
+    }
+
+
+def workflow_event_payload(data: Any, task_id: Any | None = None) -> dict[str, Any]:
+    source = model_data(data)
+    payload = source.get("payload")
+    if not isinstance(payload, dict):
+        payload = {
+            key: value
+            for key, value in source.items()
+            if key not in {"eventId", "taskId", "stepId", "eventType", "type", "createdAt"}
+        }
+    return {
+        "eventId": source.get("eventId"),
+        "taskId": source.get("taskId") or task_id,
+        "stepId": source.get("stepId"),
+        "eventType": source.get("eventType") or source.get("type"),
+        "payload": payload,
+        "createdAt": java_local_datetime(source.get("createdAt")),
+    }
+
+
+def deep_research_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "taskId": source.get("taskId"),
+        "topic": source.get("topic") or source.get("userInput") or "",
+        "report": source.get("report") if source.get("report") is not None else source.get("finalOutput"),
+        "status": workflow_status(source.get("status")),
+    }
+
+
+def research_report_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {"taskId": source.get("taskId"), "report": source.get("report")}
+
+
+def integer_or_zero(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def react_response_payload(data: Any) -> dict[str, Any]:

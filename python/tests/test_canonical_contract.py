@@ -228,6 +228,42 @@ def test_canonical_ingestion_matches_java_job_lifecycle_and_admin_contract() -> 
     assert requeued.json() == {"ok": 1, "msg": "requeue=0", "job": None}
 
 
+def test_canonical_workflow_and_research_match_java_task_and_event_contracts() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+    body = {"chatId": "workflow-contract", "prompt": "plan a heat safety response", "modelProfile": "quality"}
+
+    legacy_workflow = client.post("/python/v1/ai/workflow/react/chat", headers=AUTH_HEADERS, json=body).json()["data"]
+    task_id = legacy_workflow["taskId"]
+    tasks = client.get("/ai/workflow/tasks?page=1&pageSize=20", headers=AUTH_HEADERS)
+    task = client.get(f"/ai/workflow/tasks/{task_id}", headers=AUTH_HEADERS)
+    events = client.get(f"/ai/workflow/tasks/{task_id}/events", headers=AUTH_HEADERS)
+    missing_task = client.get("/ai/workflow/tasks/missing", headers=AUTH_HEADERS)
+    missing_events = client.get("/ai/workflow/tasks/missing/events", headers=AUTH_HEADERS)
+
+    task_fields = {
+        "taskId", "tenantId", "type", "status", "userInput", "finalOutput", "modelProfile", "chatId",
+        "sessionId", "createdAt", "updatedAt", "steps", "events",
+    }
+    event_fields = {"eventId", "taskId", "stepId", "eventType", "payload", "createdAt"}
+    assert isinstance(tasks.json(), list) and tasks.json()[0]["taskId"] == task_id
+    assert set(task.json()) == task_fields and task.json()["status"] == "DONE"
+    assert set(events.json()[0]) == event_fields
+    assert missing_task.status_code == 404 and missing_task.json() == {"ok": 0, "msg": "task not found"}
+    assert missing_events.json() == []
+
+    research = client.post("/ai/research/tasks", headers=AUTH_HEADERS, json={"topic": "Heat safety", "modelProfile": "quality"})
+    research_id = research.json()["taskId"]
+    research_task = client.get(f"/ai/research/tasks/{research_id}", headers=AUTH_HEADERS)
+    research_events = client.get(f"/ai/research/tasks/{research_id}/events", headers=AUTH_HEADERS)
+    report = client.get(f"/ai/research/tasks/{research_id}/report", headers=AUTH_HEADERS)
+
+    assert set(research.json()) == {"taskId", "topic", "report", "status"}
+    assert research.json()["status"] == "DONE"
+    assert set(research_task.json()) == task_fields and research_task.json()["type"] == "DEEP_RESEARCH"
+    assert isinstance(research_events.json(), list) and set(research_events.json()[0]) == event_fields
+    assert report.json() == {"taskId": research_id, "report": research.json()["report"]}
+
+
 def test_canonical_evaluation_comparison_and_report_match_java_contract() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
     dataset_id = client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS).json()[0]["datasetId"]

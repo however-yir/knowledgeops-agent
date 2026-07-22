@@ -63,7 +63,11 @@ Python target: FastAPI enterprise service edition.
 | POST | `/ai/workflow/react/chat/stream` | implemented |
 | GET | `/ai/workflow/tasks` | implemented |
 | GET | `/ai/workflow/tasks/{taskId}` | implemented |
+| GET | `/ai/workflow/tasks/{taskId}/events` | implemented |
+| POST | `/ai/research/tasks` | implemented |
 | GET | `/ai/research/tasks/{taskId}` | implemented |
+| GET | `/ai/research/tasks/{taskId}/events` | implemented |
+| GET | `/ai/research/tasks/{taskId}/report` | implemented |
 | POST | `/ai/memory/items` | implemented |
 | GET | `/ai/memory/items` | implemented |
 | POST | `/ai/graph/entities` | implemented |

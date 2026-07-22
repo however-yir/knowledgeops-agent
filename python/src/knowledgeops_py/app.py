@@ -996,7 +996,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/ai/workflow/tasks")
-    async def workflow_list(page: int = Query(default=1, ge=1), pageSize: int = Query(default=20, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
+    async def workflow_list(
+        request: Request,
+        page: int = Query(default=1, ge=1),
+        pageSize: int = Query(default=20, ge=1, le=200),
+        ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ")),
+    ):
+        if not is_legacy_request(request):
+            limit = bounded(page * pageSize, 1, 2000)
+            tasks = (
+                await workflow_repository.list_tasks(ctx.tenant_id, limit)
+                if workflow_repository is not None
+                else [task for task in store.workflow_tasks.values() if task["tenantId"] == ctx.tenant_id]
+            )
+            start = (page - 1) * pageSize
+            return ok(tasks[start : start + pageSize], trace_id=ctx.trace_id)
         if workflow_repository is not None:
             tasks = await workflow_repository.list_tasks(ctx.tenant_id, bounded(page * pageSize, 1, 2000))
             return ok(page_data(tasks, page, pageSize), trace_id=ctx.trace_id)
@@ -1016,15 +1030,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(task, trace_id=ctx.trace_id)
 
     @app.get("/ai/workflow/tasks/{taskId}/events")
-    async def workflow_events(taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
+    async def workflow_events(
+        request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))
+    ):
         if workflow_repository is not None:
             events = await workflow_repository.events(ctx.tenant_id, taskId)
             if events is None:
-                raise HTTPException(status_code=404, detail="task not found")
+                if is_legacy_request(request):
+                    raise HTTPException(status_code=404, detail="task not found")
+                return ok([], trace_id=ctx.trace_id)
             return ok(events, trace_id=ctx.trace_id)
         task = store.workflow_tasks.get(taskId)
         if not task or task["tenantId"] != ctx.tenant_id:
-            raise HTTPException(status_code=404, detail="task not found")
+            if is_legacy_request(request):
+                raise HTTPException(status_code=404, detail="task not found")
+            return ok([], trace_id=ctx.trace_id)
         return ok(task["events"], trace_id=ctx.trace_id)
 
     @app.post("/ai/research/tasks")
@@ -1036,7 +1056,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task = (
             await workflow_repository.create_completed(
                 ctx.tenant_id,
-                "RESEARCH",
+                "DEEP_RESEARCH",
                 topic,
                 "quality",
                 "",
@@ -1054,33 +1074,50 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(task, trace_id=ctx.trace_id)
 
     @app.get("/ai/research/tasks/{taskId}")
-    async def research_task(taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def research_task(
+        request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))
+    ):
+        legacy = is_legacy_request(request)
         if workflow_repository is not None:
             task = await workflow_repository.get(ctx.tenant_id, taskId)
-            if task is None or task["type"] != "RESEARCH":
+            if task is None or (legacy and task["type"] not in {"RESEARCH", "DEEP_RESEARCH"}):
                 raise HTTPException(status_code=404, detail="task not found")
             return ok(task, trace_id=ctx.trace_id)
-        task = require_research_task(store, ctx, taskId)
+        task = require_research_task(store, ctx, taskId) if legacy else require_workflow_task(store, ctx, taskId)
         return ok(task, trace_id=ctx.trace_id)
 
     @app.get("/ai/research/tasks/{taskId}/events")
-    async def research_events(taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def research_events(
+        request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))
+    ):
+        legacy = is_legacy_request(request)
         if workflow_repository is not None:
             task = await workflow_repository.get(ctx.tenant_id, taskId)
             events = await workflow_repository.events(ctx.tenant_id, taskId)
-            if task is None or task["type"] != "RESEARCH" or events is None:
+            if not legacy and (task is None or events is None):
+                return ok([], trace_id=ctx.trace_id)
+            if task is None or task["type"] not in {"RESEARCH", "DEEP_RESEARCH"} or events is None:
                 raise HTTPException(status_code=404, detail="task not found")
             return ok(events, trace_id=ctx.trace_id)
-        return ok(require_research_task(store, ctx, taskId)["events"], trace_id=ctx.trace_id)
+        if legacy:
+            return ok(require_research_task(store, ctx, taskId)["events"], trace_id=ctx.trace_id)
+        task = store.workflow_tasks.get(taskId)
+        return ok(task["events"] if task and task["tenantId"] == ctx.tenant_id else [], trace_id=ctx.trace_id)
 
     @app.get("/ai/research/tasks/{taskId}/report")
-    async def research_report(taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+    async def research_report(request: Request, taskId: str, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_READ"))):
+        legacy = is_legacy_request(request)
         if workflow_repository is not None:
             task = await workflow_repository.get(ctx.tenant_id, taskId)
-            if task is None or task["type"] != "RESEARCH":
+            if task is None or (legacy and task["type"] not in {"RESEARCH", "DEEP_RESEARCH"}):
                 raise HTTPException(status_code=404, detail="task not found")
-            return PlainTextResponse(str(task["finalOutput"] or ""), media_type="text/markdown; charset=utf-8")
-        return PlainTextResponse(require_research_task(store, ctx, taskId)["report"], media_type="text/markdown; charset=utf-8")
+            report = str(task["finalOutput"] or "")
+        else:
+            task = require_research_task(store, ctx, taskId) if legacy else require_workflow_task(store, ctx, taskId)
+            report = str(task.get("report") or task.get("finalOutput") or "")
+        if not legacy:
+            return ok({"taskId": task["taskId"], "report": report}, trace_id=ctx.trace_id)
+        return PlainTextResponse(report, media_type="text/markdown; charset=utf-8")
 
     @app.post("/ai/memory/items")
     async def memory_create(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
@@ -1424,8 +1461,13 @@ def create_workflow_task(store: PlatformStore, ctx: RequestContext, request: Cha
     task = {
         "taskId": new_id("task"),
         "tenantId": ctx.tenant_id,
+        "type": "REACT",
         "chatId": request.chatId,
         "status": "COMPLETED",
+        "userInput": request.prompt,
+        "finalOutput": response.answer,
+        "modelProfile": request.modelProfile,
+        "sessionId": request.chatId,
         "createdAt": now_iso(),
         "updatedAt": now_iso(),
         "steps": response.trace,
@@ -1439,19 +1481,29 @@ def create_workflow_task(store: PlatformStore, ctx: RequestContext, request: Cha
 
 
 def create_research_task(store: PlatformStore, ctx: RequestContext, topic: str) -> dict[str, Any]:
+    report = f"# {topic}\n\nNo tenant-scoped evidence has been ingested yet. Add sources before relying on this report.\n"
     task = {
         "taskId": new_id("research"),
         "tenantId": ctx.tenant_id,
         "topic": topic,
+        "type": "DEEP_RESEARCH",
+        "chatId": "",
         "status": "COMPLETED",
+        "userInput": topic,
+        "finalOutput": report,
+        "modelProfile": "quality",
+        "sessionId": None,
         "createdAt": now_iso(),
+        "updatedAt": now_iso(),
+        "steps": [],
         "events": [
             {"type": "PLANNED", "createdAt": now_iso()},
             {"type": "EVIDENCE_JUDGED", "createdAt": now_iso(), "evidenceCount": 0},
             {"type": "REPORT_WRITTEN", "createdAt": now_iso()},
         ],
-        "report": f"# {topic}\n\nNo tenant-scoped evidence has been ingested yet. Add sources before relying on this report.\n",
+        "report": report,
     }
+    store.workflow_tasks[task["taskId"]] = task
     store.research_tasks[task["taskId"]] = task
     return task
 
@@ -1536,6 +1588,13 @@ def require_research_task(store: PlatformStore, ctx: RequestContext, task_id: st
     task = store.research_tasks.get(task_id)
     if not task or task["tenantId"] != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="research task not found")
+    return task
+
+
+def require_workflow_task(store: PlatformStore, ctx: RequestContext, task_id: str) -> dict[str, Any]:
+    task = store.workflow_tasks.get(task_id)
+    if not task or task["tenantId"] != ctx.tenant_id:
+        raise HTTPException(status_code=404, detail="task not found")
     return task
 
 
