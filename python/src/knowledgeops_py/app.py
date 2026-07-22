@@ -52,7 +52,7 @@ from .application.sessions import (
 from .application.workflow import ReactWorkflowApplicationService, WorkflowNotResumable
 from .config import Settings, load_settings
 from .domain.context import TenantContext
-from .domain.ports import EmbeddingProvider, Reranker, VectorStore
+from .domain.ports import EmbeddingProvider, OidcStateStore, Reranker, VectorStore
 from .dto import (
     AgentTraceDto,
     ApiKeyData,
@@ -82,7 +82,7 @@ from .infrastructure.file_store import LocalFileStore
 from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
-from .infrastructure.oidc_state import OidcStateStore, RedisOidcStateStore
+from .infrastructure.oidc_state import RedisOidcStateStore
 from .infrastructure.pgvector_store import PgVectorProjection, VectorStoreUnavailable
 from .infrastructure.providers import (
     RerankerUnavailable,

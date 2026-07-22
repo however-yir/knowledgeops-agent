@@ -15,7 +15,7 @@ from jwt import InvalidTokenError
 
 from knowledgeops_py.application.security import ROLE_PERMISSIONS, Identity, normalize_tenant, permissions_for_roles
 from knowledgeops_py.config import Settings
-from knowledgeops_py.infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable
+from knowledgeops_py.domain.ports import OidcStateStore, OidcStateUnavailable
 
 
 @dataclass(frozen=True, slots=True)

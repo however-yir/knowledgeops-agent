@@ -42,3 +42,13 @@ class ToolRuntime(Protocol):
 
 class TrustedWorkspaceRuntime(Protocol):
     def execute(self, action: str, action_input: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class OidcStateUnavailable(RuntimeError):
+    """Raised when the production OIDC replay-protection store is unavailable."""
+
+
+class OidcStateStore(Protocol):
+    async def put(self, namespace: str, key: str, value: dict[str, Any], ttl_seconds: int) -> None: ...
+
+    async def consume(self, namespace: str, key: str) -> dict[str, Any] | None: ...

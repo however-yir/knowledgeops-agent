@@ -2,20 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 import redis.asyncio as redis
 from redis.exceptions import RedisError
 
+from knowledgeops_py.domain.ports import OidcStateStore, OidcStateUnavailable
 
-class OidcStateUnavailable(RuntimeError):
-    """Raised when the production OIDC replay-protection store is unavailable."""
-
-
-class OidcStateStore(Protocol):
-    async def put(self, namespace: str, key: str, value: dict[str, Any], ttl_seconds: int) -> None: ...
-
-    async def consume(self, namespace: str, key: str) -> dict[str, Any] | None: ...
+__all__ = ["OidcStateStore", "OidcStateUnavailable", "RedisOidcStateStore"]
 
 
 @dataclass(slots=True)
