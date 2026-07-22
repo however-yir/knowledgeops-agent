@@ -35,6 +35,14 @@ from .application.harness import CanonicalHarnessApplicationService, harness_err
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
 from .application.research import DeepResearchApplicationService, ResearchNotResumable
+from .application.security import (
+    ROLE_PERMISSIONS,
+    Identity,
+    bearer_token,
+    permissions_for_roles,
+    sign_payload,
+    verify_access_token,
+)
 from .application.sessions import (
     SessionBranchValidationError,
     compare_session_branches,
@@ -93,52 +101,6 @@ from .observability.setup import configure_observability
 TENANT_HEADER = "x-tenant-id"
 API_KEY_HEADER = "x-api-key"
 AUTH_HEADER = "authorization"
-
-ROLE_PERMISSIONS: dict[str, list[str]] = {
-    "ADMIN": [
-        "ROLE_ADMIN",
-        "PERM_AUTH_KEY_MANAGE",
-        "PERM_CHAT_READ",
-        "PERM_CHAT_WRITE",
-        "PERM_INGESTION_READ",
-        "PERM_INGESTION_WRITE",
-        "PERM_RAG_READ",
-        "PERM_METRICS_READ",
-        "PERM_AUDIT_READ",
-        "PERM_SESSION_READ",
-        "PERM_SESSION_WRITE",
-        "PERM_FEEDBACK_WRITE",
-        "PERM_COST_READ",
-        "PERM_COST_WRITE",
-        "PERM_AGENT_TRUSTED",
-        "PERM_EVAL_READ",
-        "PERM_EVAL_WRITE",
-    ],
-    "USER": [
-        "ROLE_USER",
-        "PERM_CHAT_READ",
-        "PERM_CHAT_WRITE",
-        "PERM_INGESTION_READ",
-        "PERM_INGESTION_WRITE",
-        "PERM_RAG_READ",
-        "PERM_SESSION_READ",
-        "PERM_SESSION_WRITE",
-        "PERM_FEEDBACK_WRITE",
-        "PERM_COST_READ",
-        "PERM_EVAL_READ",
-        "PERM_EVAL_WRITE",
-    ],
-    "OPS": [
-        "ROLE_OPS",
-        "PERM_INGESTION_READ",
-        "PERM_METRICS_READ",
-        "PERM_AUDIT_READ",
-        "PERM_SESSION_READ",
-        "PERM_COST_READ",
-        "PERM_EVAL_READ",
-    ],
-}
-
 
 @dataclass
 class RequestContext:
@@ -1859,15 +1821,6 @@ def should_rate_limit(path: str) -> bool:
     return not path.startswith(("/actuator", "/health", "/metrics", "/v3/api-docs"))
 
 
-@dataclass
-class Identity:
-    principal: str
-    tenant_id: str
-    roles: list[str]
-    permissions: list[str]
-    auth_source: str
-
-
 def authenticate_api_key(store: PlatformStore, api_key: str | None) -> Identity | None:
     if not api_key:
         return None
@@ -2185,32 +2138,6 @@ async def issue_tokens(
         roles=identity.roles,
         permissions=identity.permissions,
     )
-
-
-def sign_payload(settings: Settings, payload: dict[str, Any]) -> str:
-    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
-
-
-def verify_access_token(settings: Settings, token: str | None) -> Identity | None:
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], options={"require": ["exp", "sub", "jti"]})
-    except InvalidTokenError:
-        return None
-    roles = [str(role) for role in payload.get("roles", ["USER"])]
-    return Identity(str(payload["sub"]), normalize_tenant(payload.get("tenantId")), roles, permissions_for_roles(roles), "jwt")
-
-
-def bearer_token(header: str | None) -> str | None:
-    if not header:
-        return None
-    prefix = "Bearer "
-    return header[len(prefix) :].strip() if header.startswith(prefix) else None
-
-
-def permissions_for_roles(roles: list[str]) -> list[str]:
-    return sorted({permission for role in roles for permission in ROLE_PERMISSIONS.get(role, [])})
 
 
 def chat_response(
