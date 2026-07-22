@@ -27,6 +27,7 @@ from .api.canonical import (
     react_response_payload,
     react_trace_payload,
 )
+from .api.conversation_routes import register_conversation_routes
 from .api.evaluation_routes import register_evaluation_routes
 from .api.harness_routes import register_harness_routes
 from .api.ingestion_routes import register_ingestion_routes
@@ -50,7 +51,6 @@ from .domain.ports import EmbeddingProvider, OidcStateStore, Reranker, VectorSto
 from .dto import (
     AgentTraceDto,
     AuditLogDto,
-    ChatEnvelope,
     ChatRequestDto,
     ChatResponseDto,
     CitationDto,
@@ -438,62 +438,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         process_pending_jobs=process_pending_jobs,
         process_ingestion_job=process_ingestion_job,
     )
-
-    @app.post("/ai/chat", response_model=ChatEnvelope)
-    async def ai_chat(
-        request: Request,
-        payload: ChatRequestDto | None = None,
-        prompt: str | None = Query(default=None),
-        chatId: str | None = Query(default=None),
-        modelProfile: str | None = Query(default=None),
-        ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
-        payload = chat_request_payload(payload, prompt, chatId, modelProfile)
-        data = await chat_response_with_provider(
-            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings,
-            session_repository=session_repository, memory_service=memory_service
-        )
-        return ok(data, trace_id=ctx.trace_id)
-
-    @app.post("/ai/chat/stream")
-    async def ai_chat_stream(
-        request: Request,
-        payload: ChatRequestDto | None = None,
-        prompt: str | None = Query(default=None),
-        chatId: str | None = Query(default=None),
-        modelProfile: str | None = Query(default=None),
-        ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
-        payload = chat_request_payload(payload, prompt, chatId, modelProfile)
-        data = await chat_response_with_provider(
-            store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings,
-            session_repository=session_repository, memory_service=memory_service
-        )
-        if not is_legacy_request(request):
-            return PlainTextResponse(f"data: {data.answer}\n\n", media_type="text/event-stream")
-        return PlainTextResponse(to_sse(data, ctx.trace_id, legacy=True), media_type="text/event-stream")
-
-    @app.post("/ai/react/chat", response_model=ChatEnvelope)
-    async def react_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        data = await chat_response_with_provider(
-            store, ctx, payload, mode="react", require_evidence=False, settings=active_settings,
-            session_repository=session_repository, memory_service=memory_service
-        )
-        return ok(data, trace_id=ctx.trace_id)
-
-    @app.post("/ai/react/chat/stream")
-    async def react_chat_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        legacy = is_legacy_request(request)
-        try:
-            data = await chat_response_with_provider(
-                store, ctx, payload, mode="react", require_evidence=False, settings=active_settings,
-                session_repository=session_repository, memory_service=memory_service
-            )
-        except Exception as exc:
-            return PlainTextResponse(to_sse_error(exc, ctx.trace_id, legacy), media_type="text/event-stream")
-        return PlainTextResponse(
-            to_sse(data, ctx.trace_id, legacy=legacy, react=True), media_type="text/event-stream"
-        )
+    register_conversation_routes(
+        app,
+        store=store,
+        settings=active_settings,
+        session_repository=session_repository,
+        memory_service=memory_service,
+        require_permissions=require_permissions,
+        ok=ok,
+        is_legacy_request=is_legacy_request,
+        chat_request_payload=chat_request_payload,
+        chat_response_with_provider=chat_response_with_provider,
+        to_sse=to_sse,
+        to_sse_error=to_sse_error,
+    )
 
     @app.post("/ai/pdf/chat", response_model=RagEnvelope)
     async def pdf_chat(
@@ -523,21 +481,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record = payload.model_dump() | {"tenantId": ctx.tenant_id, "principal": ctx.principal, "createdAt": now_iso()}
         store.feedback.append(record)
         return ok(record, msg="saved", trace_id=ctx.trace_id)
-
-    @app.get("/ai/chat")
-    @app.get("/ai/service")
-    async def html_chat(prompt: str = Query(..., min_length=1), chatId: str = Query(default="default"), ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
-        response = await chat_response_with_provider(
-            store,
-            ctx,
-            ChatRequestDto(chatId=chatId, prompt=prompt),
-            mode="chat",
-            require_evidence=False,
-            settings=active_settings,
-            session_repository=session_repository,
-            memory_service=memory_service,
-        )
-        return PlainTextResponse(response.answer, media_type="text/html; charset=utf-8")
 
     @app.get("/ai/pdf/chat")
     async def pdf_chat_get(prompt: str = Query(..., min_length=1), chatId: str = Query(..., min_length=1), ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
