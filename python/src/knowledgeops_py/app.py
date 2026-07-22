@@ -50,6 +50,7 @@ from .dto import (
     UsageDto,
 )
 from .infrastructure.database import create_engine, create_session_factory
+from .infrastructure.evaluation_repository import SqlAlchemyEvaluationRepository
 from .infrastructure.file_store import LocalFileStore
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
@@ -164,6 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     session_repository = SqlAlchemySessionRepository(session_factory) if session_factory is not None else None
     workflow_repository = SqlAlchemyWorkflowRepository(session_factory) if session_factory is not None else None
     memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
+    evaluation_repository = SqlAlchemyEvaluationRepository(session_factory) if session_factory is not None else None
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     ingestion_service = (
         IngestionApplicationService(
@@ -186,6 +188,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 active_settings.demo_tenant_id,
                 "ADMIN",
             )
+        if evaluation_repository is not None:
+            default_dataset = store.eval_datasets["default"]
+            await evaluation_repository.ensure_default_dataset(
+                active_settings.demo_tenant_id,
+                default_dataset["name"],
+                default_dataset["cases"],
+            )
         try:
             yield
         finally:
@@ -206,6 +215,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_repository = session_repository
     app.state.workflow_repository = workflow_repository
     app.state.memory_repository = memory_repository
+    app.state.evaluation_repository = evaluation_repository
     app.state.oidc_state_store = oidc_state_store
     app.state.ingestion_service = ingestion_service
     app.state.tracer = tracer
@@ -476,12 +486,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(record, msg="saved", trace_id=ctx.trace_id)
 
     @app.get("/ai/evaluation/datasets")
-    def evaluation_datasets(ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_datasets(ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+        if evaluation_repository is not None:
+            return ok(await evaluation_repository.list_datasets(ctx.tenant_id), trace_id=ctx.trace_id)
         data = [dataset for dataset in store.eval_datasets.values() if dataset["tenantId"] == ctx.tenant_id]
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/evaluation/datasets")
-    def evaluation_dataset_create(payload: EvaluationDatasetCreateDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_WRITE"))):
+    async def evaluation_dataset_create(
+        payload: EvaluationDatasetCreateDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_WRITE"))
+    ):
+        if evaluation_repository is not None:
+            dataset = await evaluation_repository.create_dataset(
+                ctx.tenant_id,
+                new_id("ds"),
+                payload.name,
+                payload.description,
+                payload.cases,
+            )
+            return ok(dataset, trace_id=ctx.trace_id)
         dataset = {
             "datasetId": new_id("ds"),
             "tenantId": ctx.tenant_id,
@@ -495,12 +518,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(dataset, trace_id=ctx.trace_id)
 
     @app.post("/ai/evaluation/runs")
-    def evaluation_run(payload: EvaluationRunRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_run(payload: EvaluationRunRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+        if evaluation_repository is not None:
+            return ok(
+                await create_persisted_eval_run(
+                    evaluation_repository,
+                    store,
+                    ctx,
+                    payload,
+                    active_settings,
+                    ingestion_service.repository if ingestion_service is not None else None,
+                ),
+                trace_id=ctx.trace_id,
+            )
         run = create_eval_run(store, ctx, payload)
         return ok(run, trace_id=ctx.trace_id)
 
     @app.post("/ai/evaluation/datasets/{datasetId}/runs")
-    def evaluation_dataset_run(datasetId: str, payload: EvaluationRunRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_dataset_run(
+        datasetId: str, payload: EvaluationRunRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))
+    ):
+        if evaluation_repository is not None:
+            return ok(
+                await create_persisted_eval_run(
+                    evaluation_repository,
+                    store,
+                    ctx,
+                    EvaluationRunRequestDto(datasetId=datasetId, modelProfile=payload.modelProfile),
+                    active_settings,
+                    ingestion_service.repository if ingestion_service is not None else None,
+                ),
+                trace_id=ctx.trace_id,
+            )
         dataset = store.eval_datasets.get(datasetId)
         if not dataset or dataset["tenantId"] != ctx.tenant_id:
             raise HTTPException(status_code=404, detail="dataset not found")
@@ -508,18 +557,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(run, trace_id=ctx.trace_id)
 
     @app.get("/ai/evaluation/runs/{runId}")
-    def evaluation_run_get(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_run_get(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+        if evaluation_repository is not None:
+            run = await evaluation_repository.get_run(ctx.tenant_id, runId)
+            if run is None:
+                raise HTTPException(status_code=404, detail="evaluation run not found")
+            return ok(run, trace_id=ctx.trace_id)
         run = require_eval_run(store, ctx, runId)
         return ok(run, trace_id=ctx.trace_id)
 
     @app.post("/ai/evaluation/runs/{runId}/baseline")
-    def evaluation_run_baseline(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_WRITE"))):
+    async def evaluation_run_baseline(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_WRITE"))):
+        if evaluation_repository is not None:
+            run = await evaluation_repository.mark_baseline(ctx.tenant_id, runId)
+            if run is None:
+                raise HTTPException(status_code=404, detail="evaluation run not found")
+            return ok(run, trace_id=ctx.trace_id)
         run = require_eval_run(store, ctx, runId)
         run["isBaseline"] = True
         return ok(run, trace_id=ctx.trace_id)
 
     @app.get("/ai/evaluation/datasets/{datasetId}/comparison")
-    def evaluation_comparison(datasetId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_comparison(datasetId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+        if evaluation_repository is not None:
+            dataset = await evaluation_repository.get_dataset(ctx.tenant_id, datasetId)
+            if dataset is None:
+                raise HTTPException(status_code=404, detail="dataset not found")
+            runs = await evaluation_repository.list_runs(ctx.tenant_id, datasetId)
+            return ok({"datasetId": datasetId, "runs": runs}, trace_id=ctx.trace_id)
         dataset = store.eval_datasets.get(datasetId)
         if not dataset or dataset["tenantId"] != ctx.tenant_id:
             raise HTTPException(status_code=404, detail="dataset not found")
@@ -527,7 +592,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok({"datasetId": datasetId, "runs": runs}, trace_id=ctx.trace_id)
 
     @app.get("/ai/evaluation/runs/{runId}/report")
-    def evaluation_report(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+    async def evaluation_report(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
+        if evaluation_repository is not None:
+            run = await evaluation_repository.get_run(ctx.tenant_id, runId)
+            if run is None:
+                raise HTTPException(status_code=404, detail="evaluation run not found")
+            return PlainTextResponse(
+                f"# Evaluation {runId}\n\nScore: {run['metrics']['runScore']}\n",
+                media_type="text/markdown; charset=utf-8",
+            )
         run = require_eval_run(store, ctx, runId)
         return PlainTextResponse(f"# Evaluation {runId}\n\nScore: {run['metrics']['runScore']}\n", media_type="text/markdown; charset=utf-8")
 
@@ -1464,9 +1537,18 @@ async def chat_response_with_provider(
     settings: Settings,
     rag: dict[str, Any] | None = None,
     session_repository: SqlAlchemySessionRepository | None = None,
+    record_session: bool = True,
 ) -> ChatResponseDto:
     rag = rag or retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
-    response = chat_response(store, ctx, request, mode, require_evidence, rag, record_session=session_repository is None)
+    response = chat_response(
+        store,
+        ctx,
+        request,
+        mode,
+        require_evidence,
+        rag,
+        record_session=record_session and session_repository is None,
+    )
     if settings.model_base_url and settings.model_api_key and (not require_evidence or rag["evidence"]):
         grounded_prompt = request.prompt
         if rag["evidence"]:
@@ -1528,6 +1610,7 @@ async def rag_response_with_provider(
     settings: Settings,
     ingestion_repository: SqlAlchemyIngestionRepository | None = None,
     session_repository: SqlAlchemySessionRepository | None = None,
+    record_session: bool = True,
 ) -> RagResponseDto:
     rag = (
         await retrieve_persisted(ingestion_repository, ctx.tenant_id, request.chatId, request.prompt)
@@ -1535,7 +1618,7 @@ async def rag_response_with_provider(
         else retrieve(store, ctx.tenant_id, request.chatId, request.prompt)
     )
     base = await chat_response_with_provider(
-        store, ctx, request, "rag", require_evidence, settings, rag, session_repository
+        store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session
     )
     return RagResponseDto(
         answer=base.answer,
@@ -1804,6 +1887,113 @@ def create_eval_run(store: PlatformStore, ctx: RequestContext, payload: Evaluati
     }
     store.eval_runs[run["runId"]] = run
     return run
+
+
+async def create_persisted_eval_run(
+    repository: SqlAlchemyEvaluationRepository,
+    store: PlatformStore,
+    ctx: RequestContext,
+    payload: EvaluationRunRequestDto,
+    settings: Settings,
+    ingestion_repository: SqlAlchemyIngestionRepository | None,
+) -> dict[str, Any]:
+    dataset_id = payload.datasetId or "default"
+    dataset = await repository.get_dataset(ctx.tenant_id, dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    results: list[dict[str, Any]] = []
+    for index, case in enumerate(dataset["cases"]):
+        started = time.perf_counter()
+        answer = ""
+        status_value = "SUCCESS"
+        error_message: str | None = None
+        try:
+            response = await rag_response_with_provider(
+                store,
+                ctx,
+                ChatRequestDto(
+                    chatId=str(case.get("chatId") or f"eval-{index}"),
+                    prompt=str(case["question"]),
+                    modelProfile=payload.modelProfile,
+                ),
+                require_evidence=False,
+                settings=settings,
+                ingestion_repository=ingestion_repository,
+                record_session=False,
+            )
+            answer = response.answer
+            if not answer:
+                status_value = "FAILED"
+                error_message = "empty answer"
+        except Exception as exc:  # Evaluation stores per-case failure instead of losing the complete run.
+            status_value = "FAILED"
+            error_message = str(exc)
+        citations = [f"{item.source}:{item.title}:{item.chunkId}" for item in response.citations] if answer else []
+        evidence = response.evidence if answer else []
+        scores = score_evaluation_case(case, answer, citations, evidence, status_value == "FAILED")
+        results.append(
+            {
+                "resultId": new_id("result"),
+                "caseId": str(case.get("caseId") or f"case-{index + 1}"),
+                "status": status_value,
+                "question": str(case["question"]),
+                "answer": answer,
+                "citations": citations,
+                "evidence": evidence,
+                "retrievalHit": scores["retrievalHit"],
+                "citationCoverage": scores["citationCoverage"],
+                "keywordScore": scores["keywordScore"],
+                "answerFaithfulness": scores["answerFaithfulness"],
+                "score": scores["score"],
+                "latencyMs": round((time.perf_counter() - started) * 1000),
+                "errorMessage": error_message,
+            }
+        )
+    return await repository.create_completed_run(ctx.tenant_id, dataset_id, payload.modelProfile, results)
+
+
+def score_evaluation_case(
+    case: dict[str, Any], answer: str, citations: list[str], evidence: list[str], failed: bool
+) -> dict[str, float]:
+    answer_pool = (answer + "\n" + "\n".join(evidence)).lower()
+    expected_keywords = [str(item).lower() for item in case.get("expectedKeywords", [])]
+    expected_citations = [str(item).lower() for item in case.get("expectedCitations", [])]
+    forbidden_keywords = [str(item).lower() for item in case.get("forbiddenKeywords", [])]
+    keyword_score = hit_rate(expected_keywords, answer_pool) if expected_keywords else float(bool(answer))
+    citation_coverage = hit_rate(expected_citations, "\n".join(citations).lower()) if expected_citations else 1.0
+    retrieval_hit = (
+        float(bool(citations) or bool(evidence) or keyword_score > 0)
+        if not expected_citations
+        else float(citation_coverage > 0)
+    )
+    if failed or not answer:
+        answer_faithfulness = 0.0
+    elif not citations:
+        answer_faithfulness = 0.5
+    else:
+        answer_faithfulness = min(
+            1.0,
+            sum(f"[{index}]" in answer for index in range(1, len(citations) + 1)) / len(citations),
+        )
+    if any(keyword and keyword in answer_pool for keyword in forbidden_keywords):
+        keyword_score = 0.0
+        answer_faithfulness = min(answer_faithfulness, 0.2)
+    return {
+        "retrievalHit": round4(retrieval_hit),
+        "citationCoverage": round4(citation_coverage),
+        "keywordScore": round4(keyword_score),
+        "answerFaithfulness": round4(answer_faithfulness),
+        "score": round4(
+            0.30 * retrieval_hit
+            + 0.25 * citation_coverage
+            + 0.25 * keyword_score
+            + 0.20 * answer_faithfulness
+        ),
+    }
+
+
+def hit_rate(expected: list[str], actual: str) -> float:
+    return sum(item in actual for item in expected) / len(expected) if expected else 1.0
 
 
 def cost_summary_data(store: PlatformStore, tenant_id: str) -> CostSummaryDto:

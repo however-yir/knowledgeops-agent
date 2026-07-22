@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -157,9 +157,80 @@ class WorkflowEventRecord(Base, TenantScopedRecord):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class EvaluationDatasetRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_evaluation_datasets"
+    __table_args__ = (UniqueConstraint("tenant_id", "dataset_id", name="uq_py_eval_dataset_tenant_dataset"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dataset_id: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str | None] = mapped_column(String(512))
+    baseline_run_id: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class EvaluationCaseRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_evaluation_cases"
+    __table_args__ = (UniqueConstraint("tenant_id", "dataset_id", "case_id", name="uq_py_eval_case_tenant_dataset_case"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str] = mapped_column(String(64), index=True)
+    dataset_id: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str | None] = mapped_column(String(64))
+    chat_id: Mapped[str | None] = mapped_column(String(128))
+    question_text: Mapped[str] = mapped_column(Text)
+    expected_citations: Mapped[list[str]] = mapped_column(JSON, default=list)
+    expected_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    forbidden_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+
 class EvaluationRunRecord(Base, TenantScopedRecord):
     __tablename__ = "py_evaluation_runs"
     run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     dataset_id: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[str] = mapped_column(String(32))
-    results: Mapped[dict[str, Any]] = mapped_column(JSON)
+    model_profile: Mapped[str] = mapped_column(String(32), default="balanced")
+    total_cases: Mapped[int] = mapped_column(Integer, default=0)
+    passed_cases: Mapped[int] = mapped_column(Integer, default=0)
+    run_score: Mapped[float] = mapped_column(Float, default=0.0)
+    retrieval_hit_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    citation_coverage_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    answer_faithfulness_score: Mapped[float] = mapped_column(Float, default=0.0)
+    avg_latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    failure_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    error_message: Mapped[str | None] = mapped_column(String(1024))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    results: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class EvaluationResultRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_evaluation_results"
+    __table_args__ = (UniqueConstraint("tenant_id", "result_id", name="uq_py_eval_result_tenant_result"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    result_id: Mapped[str] = mapped_column(String(64), index=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    dataset_id: Mapped[str] = mapped_column(String(64), index=True)
+    case_id: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(32))
+    question_text: Mapped[str] = mapped_column(Text)
+    answer_text: Mapped[str | None] = mapped_column(Text)
+    citations: Mapped[list[str]] = mapped_column(JSON, default=list)
+    evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
+    retrieval_hit: Mapped[float] = mapped_column(Float, default=0.0)
+    citation_coverage: Mapped[float] = mapped_column(Float, default=0.0)
+    keyword_score: Mapped[float] = mapped_column(Float, default=0.0)
+    answer_faithfulness: Mapped[float] = mapped_column(Float, default=0.0)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(String(1024))

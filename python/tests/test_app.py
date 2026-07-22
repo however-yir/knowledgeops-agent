@@ -6,7 +6,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from knowledgeops_py.app import create_api_key, create_app
+from knowledgeops_py.app import create_api_key, create_app, score_evaluation_case
 from knowledgeops_py.config import Settings, load_settings
 from knowledgeops_py.infrastructure.database import create_engine
 from knowledgeops_py.infrastructure.models import Base
@@ -75,6 +75,8 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
     )
     workflow_task_id = ""
     research_task_id = ""
+    evaluation_dataset_id = ""
+    evaluation_run_id = ""
     with TestClient(create_app(settings)) as first_app:
         token = assert_envelope(first_app.post("/auth/token", headers={"X-API-Key": "persistent-admin"}).json())
         issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
@@ -87,6 +89,23 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
                 json={"chatId": "durable-chat", "prompt": "Persist this conversation.", "modelProfile": "balanced"},
             ).json()
         )
+        evaluation_dataset_id = assert_envelope(
+            first_app.post(
+                "/ai/evaluation/datasets",
+                headers={"X-API-Key": "persistent-admin"},
+                json={
+                    "name": "Durable evaluation",
+                    "cases": [{"caseId": "durable-case", "question": "KnowledgeOps", "expectedKeywords": ["KnowledgeOps"]}],
+                },
+            ).json()
+        )["datasetId"]
+        evaluation_run_id = assert_envelope(
+            first_app.post(
+                f"/ai/evaluation/datasets/{evaluation_dataset_id}/runs",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"modelProfile": "balanced"},
+            ).json()
+        )["runId"]
         workflow_task_id = assert_envelope(
             first_app.post(
                 "/ai/workflow/react/chat",
@@ -129,6 +148,23 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         assert research_report.status_code == 200 and "heat safety" in research_report.text
         memories = assert_envelope(second_app.get("/ai/memory/items?sessionId=durable-chat", headers={"X-API-Key": "persistent-admin"}).json())
         assert memories[0]["content"] == "Water and shade are important."
+        evaluation = assert_envelope(
+            second_app.get(f"/ai/evaluation/runs/{evaluation_run_id}", headers={"X-API-Key": "persistent-admin"}).json()
+        )
+        assert evaluation["datasetId"] == evaluation_dataset_id and evaluation["results"][0]["caseId"] == "durable-case"
+        assert assert_envelope(
+            second_app.post(
+                f"/ai/evaluation/runs/{evaluation_run_id}/baseline",
+                headers={"X-API-Key": "persistent-admin"},
+            ).json()
+        )["isBaseline"]
+        comparison = assert_envelope(
+            second_app.get(
+                f"/ai/evaluation/datasets/{evaluation_dataset_id}/comparison",
+                headers={"X-API-Key": "persistent-admin"},
+            ).json()
+        )
+        assert comparison["runs"][0]["runId"] == evaluation_run_id
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0
@@ -250,6 +286,38 @@ def test_sessions_feedback_evaluation_cost_and_audit_contract() -> None:
     assert {"tenantId", "monthCostUsd", "monthlyBudgetUsd", "budgetRemainingUsd"} <= set(cost_data)
     audit_item = assert_envelope(audit.json())[0]
     assert {"tenantId", "principal", "method", "path", "status", "createdAt"} <= set(audit_item)
+
+
+def test_evaluation_scoring_matches_java_keyword_citation_and_forbidden_rules() -> None:
+    case = {
+        "expectedKeywords": ["heat", "risk"],
+        "expectedCitations": ["heat-policy"],
+        "forbiddenKeywords": ["invented"],
+    }
+    perfect = score_evaluation_case(
+        case,
+        "Heat risk guidance is cited [1].",
+        ["vector:heat-policy:chunk-1"],
+        ["Heat risk includes dehydration."],
+        False,
+    )
+    assert perfect == {
+        "retrievalHit": 1.0,
+        "citationCoverage": 1.0,
+        "keywordScore": 1.0,
+        "answerFaithfulness": 1.0,
+        "score": 1.0,
+    }
+    forbidden = score_evaluation_case(
+        {"expectedKeywords": ["heat"], "expectedCitations": [], "forbiddenKeywords": ["invented"]},
+        "This invented heat claim is unsupported.",
+        [],
+        [],
+        False,
+    )
+    assert forbidden["keywordScore"] == 0.0
+    assert forbidden["answerFaithfulness"] <= 0.2
+    assert forbidden["score"] < 0.7
 
 
 def test_admin_key_lifecycle_and_tenant_write_boundaries() -> None:

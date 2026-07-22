@@ -18,6 +18,7 @@ from knowledgeops_py.domain.ports import (
     VectorStore,
 )
 from knowledgeops_py.infrastructure.database import create_engine, create_session_factory, session_scope
+from knowledgeops_py.infrastructure.evaluation_repository import SqlAlchemyEvaluationRepository
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
 from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository
 from knowledgeops_py.infrastructure.memory_repository import SqlAlchemyMemoryRepository
@@ -25,6 +26,9 @@ from knowledgeops_py.infrastructure.models import (
     ApiKeyRecord,
     AuditLogRecord,
     Base,
+    EvaluationCaseRecord,
+    EvaluationDatasetRecord,
+    EvaluationResultRecord,
     EvaluationRunRecord,
     GraphEntityRecord,
     IngestionJobRecord,
@@ -87,7 +91,10 @@ def test_async_database_metadata_and_transaction_scope() -> None:
         WorkflowTaskRecord,
         WorkflowStepRecord,
         WorkflowEventRecord,
+        EvaluationDatasetRecord,
+        EvaluationCaseRecord,
         EvaluationRunRecord,
+        EvaluationResultRecord,
     }
 
 
@@ -331,6 +338,66 @@ def test_sql_memory_repository_scopes_items_by_tenant_principal_and_session() ->
         assert (await repository.list("tenant-a", "alice", "session-1"))[0]["memoryId"] == first["memoryId"]
         assert {item["content"] for item in await repository.list("tenant-a", "alice")} == {"Use concise answers.", "A separate session."}
         assert await repository.list("tenant-b", "alice")
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_sql_evaluation_repository_persists_cases_results_baselines_and_tenant_boundaries() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemyEvaluationRepository(create_session_factory(engine))
+        dataset = await repository.create_dataset(
+            "tenant-a",
+            "dataset-1",
+            "Heat safety",
+            "grounded checks",
+            [
+                {
+                    "caseId": "case-1",
+                    "category": "safety",
+                    "chatId": "heat-chat",
+                    "question": "What prevents heat injury?",
+                    "expectedCitations": ["policy"],
+                    "expectedKeywords": ["water"],
+                    "forbiddenKeywords": ["invented"],
+                }
+            ],
+        )
+        assert dataset["caseCount"] == 1 and dataset["cases"][0]["chatId"] == "heat-chat"
+        run = await repository.create_completed_run(
+            "tenant-a",
+            "dataset-1",
+            "quality",
+            [
+                {
+                    "resultId": "result-1",
+                    "caseId": "case-1",
+                    "status": "SUCCESS",
+                    "question": "What prevents heat injury?",
+                    "answer": "Water and shade.",
+                    "citations": ["vector:policy:chunk-1"],
+                    "evidence": ["Water prevents heat injury."],
+                    "retrievalHit": 1.0,
+                    "citationCoverage": 1.0,
+                    "keywordScore": 1.0,
+                    "answerFaithfulness": 1.0,
+                    "score": 1.0,
+                    "latencyMs": 12,
+                    "errorMessage": None,
+                }
+            ],
+        )
+        assert run["metrics"]["runScore"] == 1.0 and run["results"][0]["resultId"] == "result-1"
+        assert (await repository.get_run("tenant-b", run["runId"])) is None
+        baseline = await repository.mark_baseline("tenant-a", run["runId"])
+        assert baseline is not None and baseline["isBaseline"] is True
+        current_dataset = await repository.get_dataset("tenant-a", "dataset-1")
+        assert current_dataset is not None and current_dataset["baselineRunId"] == run["runId"]
+        assert len(await repository.list_runs("tenant-a", "dataset-1")) == 1
+        assert await repository.get_dataset("tenant-b", "dataset-1") is None
         await engine.dispose()
 
     asyncio.run(exercise())
