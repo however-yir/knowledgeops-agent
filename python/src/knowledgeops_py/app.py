@@ -400,14 +400,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok({"loggedOut": True}, trace_id=ensure_trace_id(request))
 
     @app.post("/ai/chat", response_model=ChatEnvelope)
-    async def ai_chat(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+    async def ai_chat(
+        request: Request,
+        payload: ChatRequestDto | None = None,
+        prompt: str | None = Query(default=None),
+        chatId: str | None = Query(default=None),
+        modelProfile: str | None = Query(default=None),
+        ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE")),
+    ):
+        payload = chat_request_payload(payload, prompt, chatId, modelProfile)
         data = await chat_response_with_provider(
             store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
         )
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/chat/stream")
-    async def ai_chat_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+    async def ai_chat_stream(
+        request: Request,
+        payload: ChatRequestDto | None = None,
+        prompt: str | None = Query(default=None),
+        chatId: str | None = Query(default=None),
+        modelProfile: str | None = Query(default=None),
+        ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE")),
+    ):
+        payload = chat_request_payload(payload, prompt, chatId, modelProfile)
         data = await chat_response_with_provider(
             store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
         )
@@ -432,7 +448,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.post("/ai/pdf/chat", response_model=RagEnvelope)
-    async def pdf_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+    async def pdf_chat(
+        payload: ChatRequestDto | None = None,
+        prompt: str | None = Query(default=None),
+        chatId: str | None = Query(default=None),
+        modelProfile: str | None = Query(default=None),
+        ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE")),
+    ):
+        payload = chat_request_payload(payload, prompt, chatId, modelProfile)
         data = await rag_response_with_provider(
             store,
             ctx,
@@ -1209,6 +1232,21 @@ def fail(msg: str, code: str, trace_id: str) -> dict[str, Any]:
 
 def error_payload(msg: str, code: str, trace_id: str) -> dict[str, Any]:
     return {"ok": 0, "msg": msg, "code": code, "traceId": trace_id}
+
+
+def chat_request_payload(
+    payload: ChatRequestDto | None,
+    prompt: str | None,
+    chat_id: str | None,
+    model_profile: str | None,
+) -> ChatRequestDto:
+    if payload is not None:
+        return payload
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is required")
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="chatId is required")
+    return ChatRequestDto(chatId=chat_id, prompt=prompt, modelProfile=model_profile or "balanced")
 
 
 async def resolve_context(

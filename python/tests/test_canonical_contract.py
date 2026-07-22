@@ -32,6 +32,33 @@ def test_unprefixed_auth_and_business_routes_use_java_response_shapes() -> None:
     assert "data" not in cost.json()
 
 
+def test_canonical_chat_and_pdf_post_accept_java_query_contract() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+
+    chat = client.post("/ai/chat?prompt=query-contract&chatId=query-chat&modelProfile=quality", headers=AUTH_HEADERS)
+    stream = client.post("/ai/chat/stream?prompt=query-contract&chatId=query-chat", headers=AUTH_HEADERS)
+    rag = client.post("/ai/pdf/chat?prompt=query-contract&chatId=query-chat", headers=AUTH_HEADERS)
+
+    assert chat.status_code == 200 and chat.headers["content-type"].startswith("text/html")
+    assert stream.status_code == 200 and stream.text.startswith("data: ")
+    assert rag.status_code == 200 and rag.headers["content-type"].startswith("text/html")
+
+
+def test_canonical_chat_query_validation_uses_java_result() -> None:
+    response = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a"))).post(
+        "/ai/chat?chatId=query-chat", headers=AUTH_HEADERS
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "ok": 0,
+        "msg": "prompt is required",
+        "code": "REQUEST_FAILED",
+        "traceId": None,
+        "data": None,
+    }
+
+
 def test_python_v1_keeps_legacy_envelope_and_java_errors_return_result() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
 

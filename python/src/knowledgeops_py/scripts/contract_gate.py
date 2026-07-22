@@ -128,6 +128,9 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     chat = client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body)
     if chat.status_code != 200 or not chat.text:
         failures.append("canonical chat response did not return Java text output")
+    query_chat = client.post("/ai/chat?prompt=query-contract&chatId=query-chat&modelProfile=quality", headers=AUTH_HEADERS)
+    if query_chat.status_code != 200 or not query_chat.text:
+        failures.append("canonical chat did not accept Java query parameters")
     legacy_chat = envelope_data(legacy_client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body))
     if not legacy_chat.get("answer"):
         failures.append("legacy /python/v1 chat adapter returned no answer")
@@ -164,6 +167,9 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     rag = envelope_data(legacy_client.post("/ai/pdf/chat", headers=AUTH_HEADERS, json={"chatId": "contract-rag", "prompt": "citations heat", "modelProfile": "quality"}))
     assert_keys(failures, "rag", rag, ["answer", "citations", "evidence", "retrievalStats"])
     assert_keys(failures, "citation", rag["citations"][0], ["id", "source", "title", "chunkId", "snippet"])
+    query_rag = client.post("/ai/pdf/chat?prompt=citations%20heat&chatId=contract-rag", headers=AUTH_HEADERS)
+    if query_rag.status_code != 200 or not query_rag.text:
+        failures.append("canonical PDF chat did not accept Java query parameters")
 
     sessions = client.get("/ai/sessions", headers=AUTH_HEADERS).json()
     if "data" in sessions:
