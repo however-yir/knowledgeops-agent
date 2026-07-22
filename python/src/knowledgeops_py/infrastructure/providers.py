@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from functools import lru_cache
+from importlib import import_module
 from typing import Any
 
 import httpx
@@ -156,9 +157,8 @@ def local_cross_encoder_scores(model_name: str, query: str, documents: list[str]
 
 @lru_cache(maxsize=2)
 def cross_encoder(model_name: str) -> Any:
-    from sentence_transformers import CrossEncoder
-
-    return CrossEncoder(model_name)
+    module = import_module("sentence_transformers")
+    return module.CrossEncoder(model_name)
 
 
 class RerankerUnavailable(RuntimeError):
