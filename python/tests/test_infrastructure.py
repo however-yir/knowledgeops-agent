@@ -45,6 +45,7 @@ from knowledgeops_py.infrastructure.models import (
     WorkflowTaskRecord,
 )
 from knowledgeops_py.infrastructure.oidc_state import OidcStateUnavailable, RedisOidcStateStore
+from knowledgeops_py.infrastructure.pgvector_store import PgVectorProjection, asyncpg_url, vector_literal
 from knowledgeops_py.infrastructure.providers import (
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
@@ -184,6 +185,72 @@ def test_semantic_retrieval_merges_vectors_and_applies_reranker() -> None:
 
     assert [citation.chunkId for citation in result["citations"]] == ["chunk-b", "chunk-a"]
     assert result["retrievalStats"]["vectorMatches"] == 2
+
+
+def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Connection:
+        def __init__(self) -> None:
+            self.upsert_rows: list[tuple[object, ...]] = []
+            self.search_args: tuple[object, ...] = ()
+            self.closed = False
+
+        async def executemany(self, query: str, rows: list[tuple[object, ...]]) -> None:
+            assert "ON CONFLICT (chunk_id)" in query and "$7::vector" in query
+            self.upsert_rows = rows
+
+        async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
+            assert "WHERE tenant_id = $1 AND chat_id = $2" in query
+            self.search_args = args
+            return [
+                {
+                    "chunk_id": "chunk-1",
+                    "tenant_id": "tenant-a",
+                    "chat_id": "chat-1",
+                    "source_name": "source.txt",
+                    "chunk_index": 0,
+                    "content": "heat safety",
+                    "score": 0.91,
+                }
+            ]
+
+        async def close(self) -> None:
+            self.closed = True
+
+    connection = Connection()
+
+    async def connect(url: str) -> Connection:
+        assert url == "postgresql://postgres:secret@pgvector/knowledgeops"
+        return connection
+
+    monkeypatch.setattr("knowledgeops_py.infrastructure.pgvector_store.asyncpg.connect", connect)
+    projection = PgVectorProjection("postgresql+asyncpg://postgres:secret@pgvector/knowledgeops")
+    context = TenantContext("trace", "tenant-a", "alice", (), (), "jwt")
+
+    async def exercise() -> None:
+        await projection.upsert(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "tenant_id": "tenant-a",
+                    "chat_id": "chat-1",
+                    "source_name": "source.txt",
+                    "chunk_index": 0,
+                    "content": "heat safety",
+                    "embedding": [1.0, 0.5],
+                }
+            ]
+        )
+        records = await projection.search(context, "chat-1", [0.5, 1.0], 3)
+        assert records[0]["chunk_id"] == "chunk-1"
+
+    asyncio.run(exercise())
+    assert connection.upsert_rows[0][-1] == "[1.0,0.5]"
+    assert connection.search_args == ("tenant-a", "chat-1", "[0.5,1.0]", 3)
+    assert connection.closed
+    assert asyncpg_url("postgresql+asyncpg://db") == "postgresql://db"
+    assert vector_literal([1, 0.5]) == "[1.0,0.5]"
+    with pytest.raises(ValueError, match="non-empty"):
+        vector_literal([])
 
 
 def test_redis_streams_and_mysql_skip_locked_queue_adapters() -> None:
