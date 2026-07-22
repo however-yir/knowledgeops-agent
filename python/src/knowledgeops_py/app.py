@@ -33,6 +33,7 @@ from .api.harness_routes import register_harness_routes
 from .api.ingestion_routes import register_ingestion_routes
 from .api.knowledge_routes import register_knowledge_routes
 from .api.operations_routes import register_operations_routes
+from .api.payloads import chat_request_payload, error_payload, fail, ok
 from .api.rag_routes import register_rag_routes
 from .api.research_routes import register_research_routes
 from .api.session_routes import register_session_routes
@@ -767,34 +768,6 @@ def require_workflow_task(store: PlatformStore, ctx: RequestContext, task_id: st
     if not task or task["tenantId"] != ctx.tenant_id:
         raise HTTPException(status_code=404, detail="task not found")
     return task
-
-
-def ok(data: Any, msg: str = "ok", trace_id: str | None = None) -> dict[str, Any]:
-    payload = data.model_dump() if hasattr(data, "model_dump") else data
-    return {"ok": 1, "msg": msg, "data": payload, "traceId": trace_id}
-
-
-def fail(msg: str, code: str, trace_id: str) -> dict[str, Any]:
-    return {"ok": 0, "msg": msg, "code": code, "traceId": trace_id}
-
-
-def error_payload(msg: str, code: str, trace_id: str) -> dict[str, Any]:
-    return {"ok": 0, "msg": msg, "code": code, "traceId": trace_id}
-
-
-def chat_request_payload(
-    payload: ChatRequestDto | None,
-    prompt: str | None,
-    chat_id: str | None,
-    model_profile: str | None,
-) -> ChatRequestDto:
-    if payload is not None:
-        return payload
-    if not prompt:
-        raise HTTPException(status_code=400, detail="prompt is required")
-    if not chat_id:
-        raise HTTPException(status_code=400, detail="chatId is required")
-    return ChatRequestDto(chatId=chat_id, prompt=prompt, modelProfile=model_profile or "balanced")
 
 
 async def resolve_context(
