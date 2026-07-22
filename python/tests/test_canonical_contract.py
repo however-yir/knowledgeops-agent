@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 from knowledgeops_py.app import create_app
@@ -63,3 +65,32 @@ def test_canonical_rate_limit_returns_java_result_instead_of_a_stream_error() ->
         "traceId": None,
         "data": None,
     }
+
+
+def test_canonical_react_sse_uses_java_event_payloads_while_python_v1_keeps_envelopes() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+    body = {"chatId": "react-stream", "prompt": "hello", "modelProfile": "balanced"}
+
+    canonical = client.post("/ai/react/chat/stream", headers=AUTH_HEADERS, json=body).text
+    legacy = client.post("/python/v1/ai/react/chat/stream", headers=AUTH_HEADERS, json=body).text
+    canonical_data = [line.removeprefix("data: ") for line in canonical.splitlines() if line.startswith("data: ")]
+    canonical_done = json.loads(canonical_data[-1])
+    legacy_done = json.loads([line.removeprefix("data: ") for line in legacy.splitlines() if line.startswith("data: ")][-1])
+
+    assert {"event: trace", "event: token", "event: done"} <= set(canonical.splitlines())
+    assert {"ok", "msg", "chatId", "answer", "routeProfile", "trace"} <= set(canonical_done)
+    assert "data" not in canonical_done
+    assert canonical_done["trace"][0]["thought"] == canonical_done["trace"][0]["thoughtSummary"]
+    assert legacy_done["ok"] == 1 and "data" in legacy_done
+
+
+def test_canonical_chat_stream_is_raw_text_while_python_v1_keeps_named_events() -> None:
+    client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+    body = {"chatId": "chat-stream", "prompt": "hello", "modelProfile": "balanced"}
+
+    canonical = client.post("/ai/chat/stream", headers=AUTH_HEADERS, json=body).text
+    legacy = client.post("/python/v1/ai/chat/stream", headers=AUTH_HEADERS, json=body).text
+
+    assert canonical.startswith("data: ")
+    assert "event:" not in canonical
+    assert "event: done" in legacy

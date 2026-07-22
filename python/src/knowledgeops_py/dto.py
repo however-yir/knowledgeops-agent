@@ -60,6 +60,7 @@ class AgentTraceDto(BaseModel):
 
 
 class ChatResponseDto(BaseModel):
+    chatId: str | None = None
     answer: str
     model: str
     usage: UsageDto

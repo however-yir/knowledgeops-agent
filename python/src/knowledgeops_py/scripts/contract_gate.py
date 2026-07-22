@@ -131,12 +131,19 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     legacy_chat = envelope_data(legacy_client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body))
     if not legacy_chat.get("answer"):
         failures.append("legacy /python/v1 chat adapter returned no answer")
+    assert_raw_chat_sse(failures, "canonical chat stream", client.post("/ai/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
     assert_sse(failures, "legacy chat stream", legacy_client.post("/ai/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
     react = client.post("/ai/react/chat", headers=AUTH_HEADERS, json=chat_body).json()
     if "data" in react:
         failures.append("canonical react response retained the Python envelope")
     assert_keys(failures, "react trace", react["trace"][0], ["step", "thoughtSummary", "action", "actionInput", "observation"])
+    assert_react_sse(failures, "canonical react stream", client.post("/ai/react/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
     assert_sse(failures, "legacy react stream", legacy_client.post("/ai/react/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
+    assert_react_sse(
+        failures,
+        "canonical workflow react stream",
+        client.post("/ai/workflow/react/chat/stream", headers=AUTH_HEADERS, json=chat_body).text,
+    )
 
     upload = client.post(
         "/ai/pdf/upload/contract-rag",
@@ -201,6 +208,22 @@ def assert_sse(failures: list[str], label: str, text: str) -> None:
     payload = json.loads(done)
     if payload.get("ok") != 1 or "data" not in payload:
         failures.append(f"{label} done event is not an envelope")
+
+
+def assert_raw_chat_sse(failures: list[str], label: str, text: str) -> None:
+    if not text.startswith("data: ") or "event:" in text:
+        failures.append(f"{label} did not return Java raw text SSE")
+
+
+def assert_react_sse(failures: list[str], label: str, text: str) -> None:
+    events = [line.removeprefix("event: ") for line in text.splitlines() if line.startswith("event: ")]
+    payloads = [json.loads(line.removeprefix("data: ")) for line in text.splitlines() if line.startswith("data: ")]
+    if not {"trace", "token", "done"} <= set(events):
+        failures.append(f"{label} missing trace/token/done events")
+        return
+    done = payloads[-1]
+    if done.get("ok") != 1 or "data" in done or not done.get("chatId"):
+        failures.append(f"{label} done event did not match ReactChatResponseVO")
 
 
 if __name__ == "__main__":

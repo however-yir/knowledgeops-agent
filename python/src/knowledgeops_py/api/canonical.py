@@ -87,6 +87,8 @@ def success_payload(path: str, data: Any, message: str) -> Any:
         return api_key_payload(data, 1, message)
     if any(path.startswith(prefix) for prefix in UPLOAD_PATHS):
         return {"ok": 1, "msg": message, "job": ingestion_job_payload(data)}
+    if path in {"/ai/react/chat", "/ai/workflow/react/chat"}:
+        return react_response_payload(data)
     if path == "/ai/feedback":
         return result_payload(1, "ok")
     return data
@@ -143,6 +145,48 @@ def ingestion_job_payload(data: Any) -> Any:
         "startedAt": data.get("startedAt"),
         "finishedAt": data.get("finishedAt"),
     }
+
+
+def react_response_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    model = str(source.get("model") or "")
+    profile = model.rsplit("-", maxsplit=1)[-1] if "-" in model else model
+    return {
+        "ok": 1,
+        "msg": "ok",
+        "chatId": source.get("chatId"),
+        "answer": source.get("answer"),
+        "citations": source.get("citations") or [],
+        "evidence": source.get("evidence") or [],
+        "routeProfile": profile,
+        "routeReason": "python profile routing",
+        "routeCostTier": profile,
+        "experimentKey": "",
+        "experimentVariant": "",
+        "experimentBucket": None,
+        "trace": [react_trace_payload(trace) for trace in source.get("trace") or []],
+    }
+
+
+def react_trace_payload(trace: Any) -> dict[str, Any]:
+    source = model_data(trace)
+    thought = source.get("thought") or source.get("thoughtSummary") or ""
+    return {
+        "step": source.get("step"),
+        "thought": thought,
+        "thoughtSummary": thought,
+        "action": source.get("action"),
+        "actionInput": source.get("actionInput") or {},
+        "observation": source.get("observation"),
+    }
+
+
+def model_data(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    return {}
 
 
 def result_payload(ok: int, message: str, code: str | None = None) -> dict[str, Any]:

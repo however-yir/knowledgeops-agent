@@ -24,7 +24,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from jwt import InvalidTokenError
 
-from .api.canonical import canonicalize_response, prepare_contract_path
+from .api.canonical import (
+    canonicalize_response,
+    is_legacy_request,
+    prepare_contract_path,
+    react_response_payload,
+    react_trace_payload,
+)
 from .application.ingestion import IngestionApplicationService
 from .config import Settings, load_settings
 from .domain.context import TenantContext
@@ -401,11 +407,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/chat/stream")
-    async def ai_chat_stream(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+    async def ai_chat_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
         data = await chat_response_with_provider(
             store, ctx, payload, mode="chat", require_evidence=False, settings=active_settings, session_repository=session_repository
         )
-        return PlainTextResponse(to_sse(data, ctx.trace_id), media_type="text/event-stream")
+        if not is_legacy_request(request):
+            return PlainTextResponse(f"data: {data.answer}\n\n", media_type="text/event-stream")
+        return PlainTextResponse(to_sse(data, ctx.trace_id, legacy=True), media_type="text/event-stream")
 
     @app.post("/ai/react/chat", response_model=ChatEnvelope)
     async def react_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
@@ -415,11 +423,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(data, trace_id=ctx.trace_id)
 
     @app.post("/ai/react/chat/stream")
-    async def react_chat_stream(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+    async def react_chat_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
         data = await chat_response_with_provider(
             store, ctx, payload, mode="react", require_evidence=False, settings=active_settings, session_repository=session_repository
         )
-        return PlainTextResponse(to_sse(data, ctx.trace_id), media_type="text/event-stream")
+        return PlainTextResponse(
+            to_sse(data, ctx.trace_id, legacy=is_legacy_request(request), react=True), media_type="text/event-stream"
+        )
 
     @app.post("/ai/pdf/chat", response_model=RagEnvelope)
     async def pdf_chat(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
@@ -849,7 +859,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(result, trace_id=ctx.trace_id)
 
     @app.post("/ai/workflow/react/chat/stream")
-    async def workflow_stream(payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+    async def workflow_stream(request: Request, payload: ChatRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
         response = await chat_response_with_provider(
             store, ctx, payload, mode="workflow", require_evidence=False, settings=active_settings, session_repository=session_repository
         )
@@ -865,7 +875,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         else:
             create_workflow_task(store, ctx, payload, response)
-        return PlainTextResponse(to_sse(response, ctx.trace_id), media_type="text/event-stream")
+        return PlainTextResponse(
+            to_sse(response, ctx.trace_id, legacy=is_legacy_request(request), react=True), media_type="text/event-stream"
+        )
 
     @app.get("/ai/workflow/tasks")
     async def workflow_list(page: int = Query(default=1, ge=1), pageSize: int = Query(default=20, ge=1, le=200), ctx: RequestContext = Depends(require_permissions("PERM_SESSION_READ"))):
@@ -1632,7 +1644,7 @@ def chat_response(
                 {"role": "assistant", "content": answer, "createdAt": now_iso()},
             ]
         )
-    return ChatResponseDto(answer=answer, model=model, usage=usage, traceId=ctx.trace_id, trace=trace)
+    return ChatResponseDto(chatId=request.chatId, answer=answer, model=model, usage=usage, traceId=ctx.trace_id, trace=trace)
 
 
 async def chat_response_with_provider(
@@ -2212,12 +2224,15 @@ def select_audit_fields(log: dict[str, Any]) -> dict[str, Any]:
     return {key: log[key] for key in ["tenantId", "principal", "method", "path", "status", "createdAt"]}
 
 
-def to_sse(data: ChatResponseDto, trace_id: str) -> str:
+def to_sse(data: ChatResponseDto, trace_id: str, legacy: bool, react: bool = False) -> str:
     events = []
     for trace in data.trace:
-        events.append(f"event: trace\ndata: {json.dumps(ok(trace, msg='trace', trace_id=trace_id), ensure_ascii=False)}\n\n")
-    events.append(f"event: token\ndata: {json.dumps(ok({'token': data.answer}, msg='token', trace_id=trace_id), ensure_ascii=False)}\n\n")
-    events.append(f"event: done\ndata: {json.dumps(ok(data, trace_id=trace_id), ensure_ascii=False)}\n\n")
+        payload = ok(trace, msg="trace", trace_id=trace_id) if legacy else react_trace_payload(trace)
+        events.append(f"event: trace\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n")
+    token = ok({"token": data.answer}, msg="token", trace_id=trace_id) if legacy else {"token": data.answer}
+    events.append(f"event: token\ndata: {json.dumps(token, ensure_ascii=False)}\n\n")
+    done = ok(data, trace_id=trace_id) if legacy else react_response_payload(data) if react else data.model_dump()
+    events.append(f"event: done\ndata: {json.dumps(done, ensure_ascii=False)}\n\n")
     return "".join(events)
 
 
