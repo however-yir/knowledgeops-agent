@@ -24,6 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from jwt import InvalidTokenError
 
+from .api.canonical import canonicalize_response, prepare_contract_path
 from .application.ingestion import IngestionApplicationService
 from .config import Settings, load_settings
 from .domain.context import TenantContext
@@ -246,8 +247,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def context_audit_rate_limit(request: Request, call_next):
-        if request.scope["path"].startswith("/python/v1/"):
-            request.scope["path"] = request.scope["path"].removeprefix("/python/v1")
+        prepare_contract_path(request)
         trace_id = request.headers.get("x-request-id") or new_id("trace")
         request.state.trace_id = trace_id
         try:
@@ -260,7 +260,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await enforce_rate_limit(store, active_settings, ctx)
             except HTTPException as exc:
                 code = "RATE_LIMIT_UNAVAILABLE" if exc.status_code == 503 else "RATE_LIMIT_EXCEEDED"
-                return JSONResponse(status_code=exc.status_code, content=error_payload(str(exc.detail), code, trace_id))
+                return await canonicalize_response(
+                    request,
+                    JSONResponse(status_code=exc.status_code, content=error_payload(str(exc.detail), code, trace_id)),
+                )
         started = time.perf_counter()
         with tracer.start_as_current_span("http.request") as span:
             span.set_attribute("http.request.method", request.method)
@@ -283,7 +286,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 | {"latencyMs": round((time.perf_counter() - started) * 1000, 2)}
             )
         metric_inc(store, "http_requests_total")
-        return response
+        return await canonicalize_response(request, response)
 
     async def optional_ctx(request: Request) -> RequestContext:
         return await resolve_context(request, store, active_settings, security_repository, allow_anonymous=True)

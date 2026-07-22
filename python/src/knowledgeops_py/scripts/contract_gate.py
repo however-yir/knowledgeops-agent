@@ -63,19 +63,30 @@ REQUIRED_OPENAPI_ENDPOINTS = [
 ]
 
 
+class LegacyTestClient(TestClient):
+    """Exercise the explicitly versioned Python-envelope compatibility surface."""
+
+    def request(self, method, url, *args, **kwargs):
+        if isinstance(url, str) and url.startswith("/") and not url.startswith("/python/v1/"):
+            url = f"/python/v1{url}"
+        return super().request(method, url, *args, **kwargs)
+
+
 def main() -> None:
-    client = TestClient(create_app())
+    app = create_app()
+    client = TestClient(app)
+    legacy_client = LegacyTestClient(app)
     failures: list[str] = []
     failures.extend(check_openapi(client))
-    failures.extend(check_runtime_contract(client))
+    failures.extend(check_runtime_contract(client, legacy_client))
     if failures:
         raise SystemExit("\n".join(failures))
-    print(f"python enterprise contract gate ok: {len(REQUIRED_OPENAPI_ENDPOINTS)} OpenAPI endpoints plus runtime envelope checks")
+    print(f"python enterprise contract gate ok: {len(REQUIRED_OPENAPI_ENDPOINTS)} OpenAPI endpoints plus canonical and legacy checks")
 
 
 def check_openapi(client: TestClient) -> list[str]:
     response = client.get("/v3/api-docs")
-    data = envelope_data(response)
+    data = response.json()
     paths = data["paths"]
     failures = []
     for method, path in REQUIRED_OPENAPI_ENDPOINTS:
@@ -89,62 +100,83 @@ def check_openapi(client: TestClient) -> list[str]:
     return failures
 
 
-def check_runtime_contract(client: TestClient) -> list[str]:
+def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) -> list[str]:
     failures: list[str] = []
-    token = envelope_data(client.post("/auth/token", headers=AUTH_HEADERS))
+    token_response = client.post("/auth/token", headers=AUTH_HEADERS)
+    token = token_response.json()
     if not token.get("token") or not token.get("refreshToken"):
         failures.append("auth token response missing token/refreshToken")
-    refresh = envelope_data(client.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}))
+    if "data" in token or token.get("ok") != 1:
+        failures.append("canonical auth token response retained the Python envelope")
+    refresh = client.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()
     if not refresh.get("token"):
         failures.append("refresh response missing token")
-    envelope_data(client.post("/auth/api-keys?keyName=contract-user&role=USER", headers=AUTH_HEADERS))
-    envelope_data(client.get("/actuator/health"))
+    api_key = client.post("/auth/api-keys?keyName=contract-user&role=USER", headers=AUTH_HEADERS).json()
+    if "data" in api_key or not api_key.get("rawApiKey"):
+        failures.append("canonical api key response did not match ApiKeyIssueVO")
+    health = client.get("/actuator/health").json()
+    if health.get("status") != "UP" or "data" in health:
+        failures.append("canonical health response retained the Python envelope")
     prometheus = client.get("/actuator/prometheus", headers=AUTH_HEADERS)
     if prometheus.status_code != 200 or "knowledgeops_python_up 1" not in prometheus.text:
         failures.append("canonical Prometheus endpoint did not return native metrics")
-    envelope_data(client.get("/metrics", headers=AUTH_HEADERS))
+    metrics = client.get("/metrics", headers=AUTH_HEADERS).json()
+    if "data" in metrics or "prometheus" not in metrics:
+        failures.append("canonical metrics response retained the Python envelope")
 
     chat_body = {"chatId": "contract-chat", "prompt": "contract smoke", "modelProfile": "balanced"}
-    chat = envelope_data(client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body))
-    legacy_chat = envelope_data(client.post("/python/v1/ai/chat", headers=AUTH_HEADERS, json=chat_body))
+    chat = client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body)
+    if chat.status_code != 200 or not chat.text:
+        failures.append("canonical chat response did not return Java text output")
+    legacy_chat = envelope_data(legacy_client.post("/ai/chat", headers=AUTH_HEADERS, json=chat_body))
     if not legacy_chat.get("answer"):
         failures.append("legacy /python/v1 chat adapter returned no answer")
-    assert_keys(failures, "chat", chat, ["answer", "model", "usage", "traceId"])
-    assert_sse(failures, "chat stream", client.post("/ai/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
-    react = envelope_data(client.post("/ai/react/chat", headers=AUTH_HEADERS, json=chat_body))
+    assert_sse(failures, "legacy chat stream", legacy_client.post("/ai/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
+    react = client.post("/ai/react/chat", headers=AUTH_HEADERS, json=chat_body).json()
+    if "data" in react:
+        failures.append("canonical react response retained the Python envelope")
     assert_keys(failures, "react trace", react["trace"][0], ["step", "thoughtSummary", "action", "actionInput", "observation"])
-    assert_sse(failures, "react stream", client.post("/ai/react/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
+    assert_sse(failures, "legacy react stream", legacy_client.post("/ai/react/chat/stream", headers=AUTH_HEADERS, json=chat_body).text)
 
-    upload = envelope_data(
-        client.post(
-            "/ai/pdf/upload/contract-rag",
-            headers=AUTH_HEADERS,
-            files={"file": ("contract.txt", b"Contract evidence includes citations and heat safety.", "text/plain")},
-        )
-    )
-    job_id = upload["jobId"]
-    envelope_data(client.post("/ingestion/upload/contract-rag-2", headers=AUTH_HEADERS, content=b"second document"))
-    envelope_data(client.get("/ingestion/jobs", headers=AUTH_HEADERS))
-    envelope_data(client.get(f"/ingestion/jobs/{job_id}", headers=AUTH_HEADERS))
+    upload = client.post(
+        "/ai/pdf/upload/contract-rag",
+        headers=AUTH_HEADERS,
+        files={"file": ("contract.txt", b"Contract evidence includes citations and heat safety.", "text/plain")},
+    ).json()
+    if upload.get("ok") != 1 or not upload.get("job"):
+        failures.append("canonical upload response did not match IngestionSubmitVO")
+    job_id = upload["job"]["jobId"]
+    client.post("/ingestion/upload/contract-rag-2", headers=AUTH_HEADERS, content=b"second document")
+    jobs = client.get("/ingestion/jobs", headers=AUTH_HEADERS).json()
+    if not isinstance(jobs, list):
+        failures.append("canonical ingestion jobs response retained the Python envelope")
+    job = client.get(f"/ingestion/jobs/{job_id}", headers=AUTH_HEADERS).json()
+    if job.get("jobId") != job_id:
+        failures.append("canonical ingestion job response did not return IngestionJobVO")
 
-    rag = envelope_data(client.post("/ai/pdf/chat", headers=AUTH_HEADERS, json={"chatId": "contract-rag", "prompt": "citations heat", "modelProfile": "quality"}))
+    rag = envelope_data(legacy_client.post("/ai/pdf/chat", headers=AUTH_HEADERS, json={"chatId": "contract-rag", "prompt": "citations heat", "modelProfile": "quality"}))
     assert_keys(failures, "rag", rag, ["answer", "citations", "evidence", "retrievalStats"])
     assert_keys(failures, "citation", rag["citations"][0], ["id", "source", "title", "chunkId", "snippet"])
 
-    envelope_data(client.get("/ai/sessions", headers=AUTH_HEADERS))
-    envelope_data(client.get("/ai/sessions/contract-chat", headers=AUTH_HEADERS))
-    envelope_data(client.post("/ai/feedback", headers=AUTH_HEADERS, json={"chatId": "contract-chat", "rating": 1}))
-    datasets = envelope_data(client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS))
-    run = envelope_data(client.post("/ai/evaluation/runs", headers=AUTH_HEADERS, json={"datasetId": datasets[0]["datasetId"], "modelProfile": "balanced"}))
+    sessions = client.get("/ai/sessions", headers=AUTH_HEADERS).json()
+    if "data" in sessions:
+        failures.append("canonical sessions response retained the Python envelope")
+    feedback = client.post("/ai/feedback", headers=AUTH_HEADERS, json={"chatId": "contract-chat", "rating": 1}).json()
+    if feedback.get("ok") != 1 or feedback.get("data") is not None:
+        failures.append("canonical feedback response did not match Result")
+    datasets = client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS).json()
+    run = client.post("/ai/evaluation/runs", headers=AUTH_HEADERS, json={"datasetId": datasets[0]["datasetId"], "modelProfile": "balanced"}).json()
     if run.get("status") != "COMPLETED":
         failures.append("evaluation run did not complete")
-    cost = envelope_data(client.get("/cost/summary", headers=AUTH_HEADERS))
+    cost = client.get("/cost/summary", headers=AUTH_HEADERS).json()
     assert_keys(failures, "cost", cost, ["tenantId", "monthCostUsd", "monthlyBudgetUsd", "budgetRemainingUsd"])
-    envelope_data(client.post("/cost/budget", headers=AUTH_HEADERS, json={"monthlyBudgetUsd": 30}))
-    audit = envelope_data(client.get("/audit/logs", headers=AUTH_HEADERS))
+    client.post("/cost/budget", headers=AUTH_HEADERS, json={"monthlyBudgetUsd": 30})
+    audit = client.get("/audit/logs", headers=AUTH_HEADERS).json()
     if audit:
         assert_keys(failures, "audit", audit[0], ["tenantId", "principal", "method", "path", "status", "createdAt"])
-    envelope_data(client.get("/ai/harness/actions", headers=AUTH_HEADERS))
+    harness = client.get("/ai/harness/actions", headers=AUTH_HEADERS).json()
+    if "data" in harness:
+        failures.append("canonical harness response retained the Python envelope")
     return failures
 
 

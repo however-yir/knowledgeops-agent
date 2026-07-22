@@ -15,14 +15,14 @@ def main() -> None:
     p95_limit_ms = float(os.getenv("P95_MS", "1500"))
     client = TestClient(create_app())
     client.post(
-        "/ai/pdf/upload/perf-chat",
+        "/python/v1/ai/pdf/upload/perf-chat",
         headers=AUTH_HEADERS,
         files={"file": ("policy.txt", b"Heat safety requires shade water rest and supervisor review.", "text/plain")},
     )
     latencies: list[float] = []
     failures = 0
     for index in range(iterations):
-        endpoint = "/ai/chat" if index % 2 == 0 else "/ai/pdf/chat"
+        endpoint = "/python/v1/ai/chat" if index % 2 == 0 else "/python/v1/ai/pdf/chat"
         body = {"chatId": "perf-chat", "prompt": "heat safety requirements", "modelProfile": "balanced"}
         started = time.perf_counter()
         response = client.post(endpoint, headers=AUTH_HEADERS, json=body)

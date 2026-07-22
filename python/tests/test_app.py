@@ -14,8 +14,17 @@ from knowledgeops_py.infrastructure.models import Base
 AUTH_HEADERS = {"X-API-Key": "test-key", "X-Tenant-ID": "tenant-a"}
 
 
-def client() -> TestClient:
-    return TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
+class LegacyTestClient(TestClient):
+    """Keep the existing Python-envelope tests on the explicitly versioned surface."""
+
+    def request(self, method, url, *args, **kwargs):
+        if isinstance(url, str) and url.startswith("/") and not url.startswith("/python/v1/"):
+            url = f"/python/v1{url}"
+        return super().request(method, url, *args, **kwargs)
+
+
+def client() -> LegacyTestClient:
+    return LegacyTestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
 
 
 def assert_envelope(payload: dict) -> dict:
@@ -80,7 +89,7 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
     graph_source_id = ""
     graph_target_id = ""
     graph_fact_id = ""
-    with TestClient(create_app(settings)) as first_app:
+    with LegacyTestClient(create_app(settings)) as first_app:
         token = assert_envelope(first_app.post("/auth/token", headers={"X-API-Key": "persistent-admin"}).json())
         issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
         rotated = assert_envelope(first_app.post("/auth/api-keys/rotate?keyName=persisted", headers={"X-API-Key": "persistent-admin"}).json())
@@ -170,7 +179,7 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
         assert assert_envelope(first_app.post("/ingestion/jobs/process", headers={"X-API-Key": "persistent-admin"}).json())["processed"] == 1
         assert assert_envelope(first_app.get(f"/ingestion/jobs/{queued['jobId']}", headers={"X-API-Key": "persistent-admin"}).json())["status"] == "COMPLETED"
 
-    with TestClient(create_app(settings)) as second_app:
+    with LegacyTestClient(create_app(settings)) as second_app:
         new_key_token = assert_envelope(second_app.post("/auth/token", headers={"X-API-Key": rotated["rawApiKey"]}).json())
         assert new_key_token["tenantId"] == "tenant-a"
         durable_session = assert_envelope(second_app.get("/ai/sessions/durable-chat", headers={"X-API-Key": "persistent-admin"}).json())
@@ -395,7 +404,7 @@ def test_evaluation_scoring_matches_java_keyword_citation_and_forbidden_rules() 
 
 def test_admin_key_lifecycle_and_tenant_write_boundaries() -> None:
     app = create_app(Settings(demo_api_key="admin-key", demo_tenant_id="tenant-a"))
-    test_client = TestClient(app)
+    test_client = LegacyTestClient(app)
     headers = {"X-API-Key": "admin-key", "X-Tenant-ID": "tenant-a"}
 
     assert test_client.post("/auth/api-keys?keyName=blocked").status_code == 401
