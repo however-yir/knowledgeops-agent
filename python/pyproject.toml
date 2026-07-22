@@ -38,6 +38,9 @@ test = [
 mysql = [
   "asyncmy>=0.2.11,<1"
 ]
+local-reranker = [
+  "sentence-transformers>=3.4,<6"
+]
 quality = [
   "ruff>=0.9,<1",
   "mypy>=1.14,<2",

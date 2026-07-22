@@ -10,6 +10,7 @@ from redis.exceptions import RedisError
 
 from knowledgeops_py.app import retrieve_chunks_with_semantics
 from knowledgeops_py.application.ingestion import IngestionApplicationService
+from knowledgeops_py.config import Settings
 from knowledgeops_py.domain.context import TenantContext
 from knowledgeops_py.domain.ports import (
     ChatProvider,
@@ -48,9 +49,15 @@ from knowledgeops_py.infrastructure.models import (
 from knowledgeops_py.infrastructure.oidc_state import OidcStateUnavailable, RedisOidcStateStore
 from knowledgeops_py.infrastructure.pgvector_store import PgVectorProjection, asyncpg_url, vector_literal
 from knowledgeops_py.infrastructure.providers import (
+    LocalCrossEncoderReranker,
+    OllamaChatProvider,
+    OllamaEmbeddingProvider,
     OpenAICompatibleChatProvider,
     OpenAICompatibleEmbeddingProvider,
     RemoteHttpReranker,
+    create_chat_provider,
+    create_embedding_provider,
+    create_reranker,
 )
 from knowledgeops_py.infrastructure.queues import MySqlPollingIngestionQueue, RedisStreamsIngestionQueue
 from knowledgeops_py.infrastructure.security_repository import SqlAlchemySecurityRepository, StoredIdentity
@@ -141,6 +148,10 @@ def test_openai_compatible_and_remote_reranker_adapters(monkeypatch) -> None:
                 return Response({"model": "test", "choices": [{"message": {"content": "answer"}}], "usage": {"prompt_tokens": 2}})
             if path == "/embeddings":
                 return Response({"data": [{"embedding": [0.1, 0.2]}]})
+            if path == "/api/chat":
+                return Response({"model": "qwen3:1.7b", "message": {"content": "ollama answer"}, "prompt_eval_count": 3, "eval_count": 5})
+            if path == "/api/embed":
+                return Response({"embeddings": [[0.3, 0.4]]})
             return Response({"scores": [0.9]})
 
     monkeypatch.setattr("knowledgeops_py.infrastructure.providers.httpx.AsyncClient", Client)
@@ -153,8 +164,20 @@ def test_openai_compatible_and_remote_reranker_adapters(monkeypatch) -> None:
         assert chat["answer"] == "answer"
         assert embeddings == [[0.1, 0.2]]
         assert scores == [0.9]
+        ollama_chat = await OllamaChatProvider("http://ollama", "qwen3:1.7b").complete(context, "prompt", "quality")
+        ollama_embeddings = await OllamaEmbeddingProvider("http://ollama", "nomic-embed-text").embed(context, ["prompt"])
+        assert ollama_chat == {
+            "answer": "ollama answer",
+            "model": "qwen3:1.7b",
+            "usage": {"prompt_tokens": 3, "completion_tokens": 5},
+        }
+        assert ollama_embeddings == [[0.3, 0.4]]
 
     asyncio.run(exercise())
+    ollama_settings = Settings(model_backend="ollama", reranker_backend="local")
+    assert isinstance(create_chat_provider(ollama_settings), OllamaChatProvider)
+    assert isinstance(create_embedding_provider(ollama_settings), OllamaEmbeddingProvider)
+    assert isinstance(create_reranker(ollama_settings), LocalCrossEncoderReranker)
 
 
 def test_semantic_retrieval_merges_vectors_and_applies_reranker() -> None:

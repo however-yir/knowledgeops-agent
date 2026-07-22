@@ -36,10 +36,15 @@ class Settings:
     oidc_redirect_uri: str | None = None
     model_base_url: str | None = None
     model_api_key: str | None = None
+    model_backend: str = "openai_compatible"
     model_name: str = "qwen-plus"
     embedding_model: str = "text-embedding-v4"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_chat_model: str = "qwen3:1.7b"
+    ollama_embedding_model: str = "nomic-embed-text"
     reranker_backend: str = "identity"
     reranker_url: str | None = None
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
     trusted_runtime_enabled: bool = False
     trusted_runtime_disabled_actions: tuple[str, ...] = ()
     trusted_runtime_tenant_allowed_actions: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -72,12 +77,20 @@ class Settings:
             raise ValueError("APP_VECTOR_BACKEND=pgvector and APP_PGVECTOR_URL are required in production")
         if not self.redis_url:
             raise ValueError("APP_REDIS_URL is required in production")
-        if not self.model_base_url or not self.model_api_key:
+        if self.model_backend not in {"openai_compatible", "ollama"}:
+            raise ValueError("APP_MODEL_BACKEND must be openai_compatible or ollama")
+        if self.model_backend == "openai_compatible" and (not self.model_base_url or not self.model_api_key):
             raise ValueError("APP_MODEL_BASE_URL and APP_MODEL_API_KEY are required in production")
+        if self.model_backend == "ollama" and not self.ollama_base_url:
+            raise ValueError("APP_OLLAMA_BASE_URL is required for the Ollama production provider")
         if self.reranker_backend == "identity":
             raise ValueError("APP_RERANKER_BACKEND cannot be identity in production")
+        if self.reranker_backend not in {"remote", "local"}:
+            raise ValueError("APP_RERANKER_BACKEND must be remote or local in production")
         if self.reranker_backend == "remote" and not self.reranker_url:
             raise ValueError("APP_RERANKER_URL is required for the remote production reranker")
+        if self.reranker_backend == "local" and not self.reranker_model:
+            raise ValueError("APP_RERANKER_MODEL is required for the local production reranker")
         if self.pgvector_dimensions <= 0:
             raise ValueError("APP_PGVECTOR_DIMENSIONS must be positive")
 
@@ -111,10 +124,15 @@ def load_settings() -> Settings:
         oidc_redirect_uri=os.getenv("APP_OIDC_REDIRECT_URI"),
         model_base_url=os.getenv("APP_MODEL_BASE_URL"),
         model_api_key=os.getenv("APP_MODEL_API_KEY"),
+        model_backend=os.getenv("APP_MODEL_BACKEND", "openai_compatible"),
         model_name=os.getenv("APP_MODEL_NAME", "qwen-plus"),
         embedding_model=os.getenv("APP_EMBEDDING_MODEL", "text-embedding-v4"),
+        ollama_base_url=os.getenv("APP_OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_chat_model=os.getenv("APP_OLLAMA_CHAT_MODEL", "qwen3:1.7b"),
+        ollama_embedding_model=os.getenv("APP_OLLAMA_EMBEDDING_MODEL", "nomic-embed-text"),
         reranker_backend=os.getenv("APP_RERANKER_BACKEND", "identity"),
         reranker_url=os.getenv("APP_RERANKER_URL"),
+        reranker_model=os.getenv("APP_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3"),
         trusted_runtime_enabled=os.getenv("APP_AGENT_HARNESS_TRUSTED_ENABLED", "false").lower() == "true",
         trusted_runtime_disabled_actions=_csv(os.getenv("APP_AGENT_HARNESS_DISABLED_ACTIONS")),
         trusted_runtime_tenant_allowed_actions=_tenant_allowed_actions(os.getenv("APP_AGENT_HARNESS_TENANT_ALLOWED_ACTIONS")),

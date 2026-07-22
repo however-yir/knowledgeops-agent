@@ -67,9 +67,10 @@ from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
 from .infrastructure.pgvector_store import PgVectorProjection, VectorStoreUnavailable
 from .infrastructure.providers import (
-    OpenAICompatibleChatProvider,
-    OpenAICompatibleEmbeddingProvider,
-    RemoteHttpReranker,
+    RerankerUnavailable,
+    create_chat_provider,
+    create_embedding_provider,
+    create_reranker,
 )
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
@@ -195,15 +196,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allowed_git_subcommands=active_settings.workspace_allowed_git_subcommands,
     )
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
-    embedding_provider = (
-        OpenAICompatibleEmbeddingProvider(
-            active_settings.model_base_url,
-            active_settings.model_api_key,
-            active_settings.embedding_model,
-        )
-        if active_settings.model_base_url and active_settings.model_api_key
-        else None
-    )
+    embedding_provider = create_embedding_provider(active_settings)
     vector_store = (
         PgVectorProjection(active_settings.pgvector_url, active_settings.pgvector_dimensions)
         if active_settings.vector_backend == "pgvector" and active_settings.pgvector_url
@@ -264,6 +257,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.oidc_state_store = oidc_state_store
     app.state.ingestion_service = ingestion_service
     app.state.vector_store = vector_store
+    app.state.embedding_provider = embedding_provider
     app.state.tracer = tracer
 
     app.add_middleware(
@@ -2269,14 +2263,14 @@ async def chat_response_with_provider(
         rag,
         record_session=record_session and session_repository is None,
     )
-    if settings.model_base_url and settings.model_api_key and (not require_evidence or rag["evidence"]):
+    provider = create_chat_provider(settings)
+    if provider is not None and (not require_evidence or rag["evidence"]):
         grounded_prompt = request.prompt
         if rag["evidence"]:
             grounded_prompt = f"{request.prompt}\n\nEvidence:\n" + "\n".join(rag["evidence"][:5])
-        provider = OpenAICompatibleChatProvider(settings.model_base_url, settings.model_api_key, settings.model_name)
         try:
             completion = await provider.complete(tenant_context(ctx), grounded_prompt, request.modelProfile)
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             if settings.is_production:
                 raise HTTPException(status_code=502, detail="model provider request failed") from exc
         else:
@@ -2341,12 +2335,8 @@ async def rag_response_with_provider(
         request.prompt,
         ingestion_repository,
         graph_repository,
-        OpenAICompatibleEmbeddingProvider(settings.model_base_url, settings.model_api_key, settings.embedding_model)
-        if settings.model_base_url and settings.model_api_key
-        else None,
-        RemoteHttpReranker(settings.reranker_url)
-        if settings.reranker_backend == "remote" and settings.reranker_url
-        else None,
+        create_embedding_provider(settings),
+        create_reranker(settings),
         settings.is_production,
         vector_store,
     )
@@ -2482,7 +2472,7 @@ async def retrieve_chunks_with_semantics(
                 and record.get("chat_id") == chat_id
                 and isinstance(record.get("score"), (float, int))
             )
-    except (httpx.HTTPError, ValueError, TypeError, VectorStoreUnavailable) as exc:
+    except (httpx.HTTPError, ValueError, TypeError, VectorStoreUnavailable, RerankerUnavailable) as exc:
         if require_provider_success:
             raise HTTPException(status_code=502, detail="embedding provider request failed") from exc
         return lexical
@@ -2501,7 +2491,7 @@ async def retrieve_chunks_with_semantics(
             if len(scores) != len(selected):
                 raise ValueError("reranker returned an invalid score set")
             selected = [chunk for _, chunk in sorted(zip(scores, selected, strict=True), key=lambda item: item[0], reverse=True)]
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
+        except (httpx.HTTPError, ValueError, TypeError, RerankerUnavailable) as exc:
             if require_provider_success:
                 raise HTTPException(status_code=502, detail="reranker provider request failed") from exc
     return {
