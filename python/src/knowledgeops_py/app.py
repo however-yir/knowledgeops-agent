@@ -47,6 +47,7 @@ from .api.system_routes import register_system_routes
 from .api.workflow_execution_routes import register_workflow_execution_routes
 from .api.workflow_task_routes import register_workflow_task_routes
 from .application.authentication import AuthApplicationService
+from .application.evaluation_scoring import score_evaluation_case
 from .application.harness import CanonicalHarnessApplicationService, harness_error
 from .application.ingestion import IngestionApplicationService, normalize_idempotency_key
 from .application.memory import MemoryApplicationService, memory_context
@@ -1462,50 +1463,6 @@ async def create_persisted_eval_run(
             }
         )
     return await repository.create_completed_run(ctx.tenant_id, dataset_id, payload.modelProfile, results)
-
-
-def score_evaluation_case(
-    case: dict[str, Any], answer: str, citations: list[str], evidence: list[str], failed: bool
-) -> dict[str, float]:
-    answer_pool = (answer + "\n" + "\n".join(evidence)).lower()
-    expected_keywords = [str(item).lower() for item in case.get("expectedKeywords", [])]
-    expected_citations = [str(item).lower() for item in case.get("expectedCitations", [])]
-    forbidden_keywords = [str(item).lower() for item in case.get("forbiddenKeywords", [])]
-    keyword_score = hit_rate(expected_keywords, answer_pool) if expected_keywords else float(bool(answer))
-    citation_coverage = hit_rate(expected_citations, "\n".join(citations).lower()) if expected_citations else 1.0
-    retrieval_hit = (
-        float(bool(citations) or bool(evidence) or keyword_score > 0)
-        if not expected_citations
-        else float(citation_coverage > 0)
-    )
-    if failed or not answer:
-        answer_faithfulness = 0.0
-    elif not citations:
-        answer_faithfulness = 0.5
-    else:
-        answer_faithfulness = min(
-            1.0,
-            sum(f"[{index}]" in answer for index in range(1, len(citations) + 1)) / len(citations),
-        )
-    if any(keyword and keyword in answer_pool for keyword in forbidden_keywords):
-        keyword_score = 0.0
-        answer_faithfulness = min(answer_faithfulness, 0.2)
-    return {
-        "retrievalHit": round4(retrieval_hit),
-        "citationCoverage": round4(citation_coverage),
-        "keywordScore": round4(keyword_score),
-        "answerFaithfulness": round4(answer_faithfulness),
-        "score": round4(
-            0.30 * retrieval_hit
-            + 0.25 * citation_coverage
-            + 0.25 * keyword_score
-            + 0.20 * answer_faithfulness
-        ),
-    }
-
-
-def hit_rate(expected: list[str], actual: str) -> float:
-    return sum(item in actual for item in expected) / len(expected) if expected else 1.0
 
 
 def optional_payload_text(value: Any) -> str | None:
