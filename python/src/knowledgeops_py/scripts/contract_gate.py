@@ -56,6 +56,10 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("GET", "/ai/memory/items"),
     ("POST", "/ai/graph/entities"),
     ("GET", "/ai/graph/entities"),
+    ("POST", "/ai/graph/relations"),
+    ("GET", "/ai/graph/entities/{entityId}/neighbors"),
+    ("POST", "/ai/graph/facts"),
+    ("GET", "/ai/graph/facts"),
 ]
 
 

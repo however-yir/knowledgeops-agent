@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -52,6 +53,7 @@ from .dto import (
 from .infrastructure.database import create_engine, create_session_factory
 from .infrastructure.evaluation_repository import SqlAlchemyEvaluationRepository
 from .infrastructure.file_store import LocalFileStore
+from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
 from .infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from .infrastructure.oidc_state import OidcStateStore, OidcStateUnavailable, RedisOidcStateStore
@@ -166,6 +168,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     workflow_repository = SqlAlchemyWorkflowRepository(session_factory) if session_factory is not None else None
     memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
     evaluation_repository = SqlAlchemyEvaluationRepository(session_factory) if session_factory is not None else None
+    graph_repository = SqlAlchemyGraphRepository(session_factory) if session_factory is not None else None
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     ingestion_service = (
         IngestionApplicationService(
@@ -216,6 +219,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.workflow_repository = workflow_repository
     app.state.memory_repository = memory_repository
     app.state.evaluation_repository = evaluation_repository
+    app.state.graph_repository = graph_repository
     app.state.oidc_state_store = oidc_state_store
     app.state.ingestion_service = ingestion_service
     app.state.tracer = tracer
@@ -660,6 +664,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 action_input.get("sessionId"),
             )
             observation = {"action": "memory_save", "status": "COMPLETED", "result": item}
+        elif graph_repository is not None and confirmation["action"] == "graph_search":
+            action_input = confirmation["actionInput"]
+            observation = {
+                "action": "graph_search",
+                "status": "COMPLETED",
+                "result": await graph_repository.list_entities(
+                    ctx.tenant_id,
+                    str(action_input["query"]),
+                    limit=bounded(int(action_input.get("limit", 20)), 1, 100),
+                ),
+            }
         else:
             observation = execute_trusted_action(store, ctx, confirmation["action"], confirmation["actionInput"])
         return ok(observation, trace_id=ctx.trace_id)
@@ -970,7 +985,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(matched[:10], trace_id=ctx.trace_id)
 
     @app.get("/ai/graph/entities")
-    def graph_entities(ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
+    async def graph_entities(
+        query: str = "",
+        entityType: str | None = Query(default=None),
+        limit: int = Query(default=100),
+        ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ")),
+    ):
+        if graph_repository is not None:
+            return ok(
+                await graph_repository.list_entities(ctx.tenant_id, query, entityType, bounded(limit, 1, 200)),
+                trace_id=ctx.trace_id,
+            )
         return ok([item for item in store.graph_entities.values() if item["tenantId"] == ctx.tenant_id], trace_id=ctx.trace_id)
 
     @app.post("/ai/graph/entities")
@@ -979,12 +1004,87 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         name = str(payload.get("name", "")).strip()
         if not name:
             raise HTTPException(status_code=422, detail="entity name is required")
+        if graph_repository is not None:
+            aliases = payload.get("aliases")
+            return ok(
+                await graph_repository.create_entity(
+                    ctx.tenant_id,
+                    name,
+                    str(payload.get("type") or "CONCEPT"),
+                    [str(item) for item in aliases] if isinstance(aliases, list) else [],
+                    optional_payload_text(payload.get("description")),
+                    optional_payload_text(payload.get("sourceId")),
+                    payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+                ),
+                trace_id=ctx.trace_id,
+            )
         entity = {"entityId": new_id("entity"), "tenantId": ctx.tenant_id, "name": name, "type": str(payload.get("type") or "CONCEPT"), "createdAt": now_iso()}
         store.graph_entities[entity["entityId"]] = entity
         return ok(entity, trace_id=ctx.trace_id)
 
+    @app.post("/ai/graph/relations")
+    async def graph_relation_create(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+        payload = await request.json()
+        source_entity_id = str(payload.get("sourceEntityId", "")).strip()
+        target_entity_id = str(payload.get("targetEntityId", "")).strip()
+        if not source_entity_id or not target_entity_id:
+            raise HTTPException(status_code=422, detail="sourceEntityId and targetEntityId are required")
+        if graph_repository is None:
+            raise HTTPException(status_code=503, detail="graph persistence is unavailable")
+        relation = await graph_repository.create_relation(
+            ctx.tenant_id,
+            source_entity_id,
+            target_entity_id,
+            str(payload.get("relationType") or "RELATED_TO"),
+            optional_payload_text(payload.get("evidenceId")),
+            float(payload.get("weight", 1.0)),
+            payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+        )
+        if relation is None:
+            raise HTTPException(status_code=404, detail="graph entity not found")
+        return ok(relation, trace_id=ctx.trace_id)
+
+    @app.get("/ai/graph/entities/{entityId}/neighbors")
+    async def graph_neighbors(entityId: str, ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
+        if graph_repository is None:
+            raise HTTPException(status_code=503, detail="graph persistence is unavailable")
+        neighbors = await graph_repository.neighbors(ctx.tenant_id, entityId)
+        if neighbors is None:
+            raise HTTPException(status_code=404, detail="graph entity not found")
+        return ok(neighbors, trace_id=ctx.trace_id)
+
+    @app.post("/ai/graph/facts")
+    async def graph_fact_create(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_CHAT_WRITE"))):
+        payload = await request.json()
+        subject = str(payload.get("subject", "")).strip()
+        predicate = str(payload.get("predicate", "")).strip()
+        object_value = str(payload.get("object", "")).strip()
+        if not subject or not predicate or not object_value:
+            raise HTTPException(status_code=422, detail="subject, predicate, and object are required")
+        if graph_repository is None:
+            raise HTTPException(status_code=503, detail="graph persistence is unavailable")
+        return ok(
+            await graph_repository.create_fact(
+                ctx.tenant_id,
+                subject,
+                predicate,
+                object_value,
+                float(payload.get("confidence", 0.8)),
+                optional_payload_text(payload.get("source")),
+                parse_optional_date(payload.get("validFrom")),
+                parse_optional_date(payload.get("validTo")),
+                payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+            ),
+            trace_id=ctx.trace_id,
+        )
+
     @app.get("/ai/graph/facts")
-    def graph_facts(query: str = "", ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
+    async def graph_facts(query: str = "", limit: int = Query(default=100), ctx: RequestContext = Depends(require_permissions("PERM_RAG_READ"))):
+        if graph_repository is not None:
+            return ok(
+                await graph_repository.search_facts(ctx.tenant_id, query, bounded(limit, 1, 200)),
+                trace_id=ctx.trace_id,
+            )
         query_tokens = set(tokenize(query))
         facts = [fact for fact in store.graph_facts if fact["tenantId"] == ctx.tenant_id and (not query_tokens or query_tokens.intersection(tokenize(json.dumps(fact, ensure_ascii=False))))]
         return ok(facts, trace_id=ctx.trace_id)
@@ -1994,6 +2094,20 @@ def score_evaluation_case(
 
 def hit_rate(expected: list[str], actual: str) -> float:
     return sum(item in actual for item in expected) / len(expected) if expected else 1.0
+
+
+def optional_payload_text(value: Any) -> str | None:
+    text = str(value).strip() if value is not None else ""
+    return text or None
+
+
+def parse_optional_date(value: Any) -> date | None:
+    if value is None or not str(value).strip():
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="date must use ISO-8601 YYYY-MM-DD") from exc
 
 
 def cost_summary_data(store: PlatformStore, tenant_id: str) -> CostSummaryDto:

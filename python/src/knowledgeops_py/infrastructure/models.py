@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -120,7 +120,40 @@ class GraphEntityRecord(Base, TenantScopedRecord):
     entity_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(512), index=True)
     type: Mapped[str] = mapped_column(String(128))
+    aliases: Mapped[list[str] | None] = mapped_column(JSON, default=list)
+    description: Mapped[str | None] = mapped_column(Text)
+    source_id: Mapped[str | None] = mapped_column(String(128))
     attributes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+
+class GraphRelationRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_graph_relations"
+    relation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_entity_id: Mapped[str] = mapped_column(String(64), index=True)
+    target_entity_id: Mapped[str] = mapped_column(String(64), index=True)
+    relation_type: Mapped[str] = mapped_column(String(64), default="RELATED_TO")
+    evidence_id: Mapped[str | None] = mapped_column(String(128))
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class GraphFactRecord(Base, TenantScopedRecord):
+    __tablename__ = "py_graph_facts"
+    fact_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    subject: Mapped[str] = mapped_column(String(255), index=True)
+    predicate: Mapped[str] = mapped_column(String(255), index=True)
+    object_value: Mapped[str] = mapped_column("object", String(512))
+    valid_from: Mapped[date | None] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    confidence: Mapped[float] = mapped_column(Float, default=0.8)
+    source: Mapped[str | None] = mapped_column(String(255))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
 
 class WorkflowTaskRecord(Base, TenantScopedRecord):

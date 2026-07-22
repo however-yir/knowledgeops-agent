@@ -20,6 +20,7 @@ from knowledgeops_py.domain.ports import (
 from knowledgeops_py.infrastructure.database import create_engine, create_session_factory, session_scope
 from knowledgeops_py.infrastructure.evaluation_repository import SqlAlchemyEvaluationRepository
 from knowledgeops_py.infrastructure.file_store import LocalFileStore
+from knowledgeops_py.infrastructure.graph_repository import SqlAlchemyGraphRepository
 from knowledgeops_py.infrastructure.ingestion_repository import SqlAlchemyIngestionRepository
 from knowledgeops_py.infrastructure.memory_repository import SqlAlchemyMemoryRepository
 from knowledgeops_py.infrastructure.models import (
@@ -31,6 +32,8 @@ from knowledgeops_py.infrastructure.models import (
     EvaluationResultRecord,
     EvaluationRunRecord,
     GraphEntityRecord,
+    GraphFactRecord,
+    GraphRelationRecord,
     IngestionJobRecord,
     MemoryRecord,
     RefreshTokenRecord,
@@ -88,6 +91,8 @@ def test_async_database_metadata_and_transaction_scope() -> None:
         TenantBudgetRecord,
         MemoryRecord,
         GraphEntityRecord,
+        GraphRelationRecord,
+        GraphFactRecord,
         WorkflowTaskRecord,
         WorkflowStepRecord,
         WorkflowEventRecord,
@@ -398,6 +403,40 @@ def test_sql_evaluation_repository_persists_cases_results_baselines_and_tenant_b
         assert current_dataset is not None and current_dataset["baselineRunId"] == run["runId"]
         assert len(await repository.list_runs("tenant-a", "dataset-1")) == 1
         assert await repository.get_dataset("tenant-b", "dataset-1") is None
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_sql_graph_repository_persists_entities_relations_facts_and_tenant_boundaries() -> None:
+    async def exercise() -> None:
+        engine = create_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        repository = SqlAlchemyGraphRepository(create_session_factory(engine))
+        course = await repository.create_entity(
+            "tenant-a", "Heat safety course", "COURSE", ["heat", "safety"], "Prevention guidance"
+        )
+        topic = await repository.create_entity("tenant-a", "Heat safety", "TOPIC")
+        relation = await repository.create_relation(
+            "tenant-a", course["entityId"], topic["entityId"], "BELONGS_TO", weight=0.9
+        )
+        assert relation is not None and relation["relationType"] == "BELONGS_TO"
+        fact = await repository.create_fact(
+            "tenant-a", "Heat safety", "REQUIRES", "Water and shade", confidence=0.95, source="policy"
+        )
+        assert fact["object"] == "Water and shade"
+        assert {item["entityId"] for item in await repository.list_entities("tenant-a", "safety")} == {
+            course["entityId"],
+            topic["entityId"],
+        }
+        neighbors = await repository.neighbors("tenant-a", course["entityId"])
+        assert neighbors is not None and neighbors[0]["entity"]["entityId"] == topic["entityId"]
+        assert (await repository.search_facts("tenant-a", "shade"))[0]["factId"] == fact["factId"]
+        assert await repository.get_entity("tenant-b", course["entityId"]) is None
+        assert await repository.neighbors("tenant-b", course["entityId"]) is None
+        assert await repository.create_relation("tenant-b", course["entityId"], topic["entityId"], "RELATED_TO") is None
+        assert await repository.search_facts("tenant-b", "shade") == []
         await engine.dispose()
 
     asyncio.run(exercise())

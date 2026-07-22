@@ -77,6 +77,9 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
     research_task_id = ""
     evaluation_dataset_id = ""
     evaluation_run_id = ""
+    graph_source_id = ""
+    graph_target_id = ""
+    graph_fact_id = ""
     with TestClient(create_app(settings)) as first_app:
         token = assert_envelope(first_app.post("/auth/token", headers={"X-API-Key": "persistent-admin"}).json())
         issued = assert_envelope(first_app.post("/auth/api-keys?keyName=persisted&role=USER", headers=AUTH_HEADERS | {"X-API-Key": "persistent-admin"}).json())
@@ -106,6 +109,39 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
                 json={"modelProfile": "balanced"},
             ).json()
         )["runId"]
+        graph_source_id = assert_envelope(
+            first_app.post(
+                "/ai/graph/entities",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"name": "Heat safety course", "type": "COURSE", "aliases": ["heat"], "description": "Prevention guidance"},
+            ).json()
+        )["entityId"]
+        graph_target_id = assert_envelope(
+            first_app.post(
+                "/ai/graph/entities",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"name": "Heat safety", "type": "TOPIC"},
+            ).json()
+        )["entityId"]
+        assert assert_envelope(
+            first_app.post(
+                "/ai/graph/relations",
+                headers={"X-API-Key": "persistent-admin"},
+                json={
+                    "sourceEntityId": graph_source_id,
+                    "targetEntityId": graph_target_id,
+                    "relationType": "BELONGS_TO",
+                    "weight": 0.9,
+                },
+            ).json()
+        )["relationType"] == "BELONGS_TO"
+        graph_fact_id = assert_envelope(
+            first_app.post(
+                "/ai/graph/facts",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"subject": "Heat safety", "predicate": "REQUIRES", "object": "Water and shade", "confidence": 0.95},
+            ).json()
+        )["factId"]
         workflow_task_id = assert_envelope(
             first_app.post(
                 "/ai/workflow/react/chat",
@@ -165,6 +201,34 @@ def test_database_backed_auth_survives_application_restart(tmp_path) -> None:
             ).json()
         )
         assert comparison["runs"][0]["runId"] == evaluation_run_id
+        graph_entities = assert_envelope(
+            second_app.get("/ai/graph/entities?query=course", headers={"X-API-Key": "persistent-admin"}).json()
+        )
+        assert graph_entities[0]["entityId"] == graph_source_id
+        graph_neighbors = assert_envelope(
+            second_app.get(
+                f"/ai/graph/entities/{graph_source_id}/neighbors", headers={"X-API-Key": "persistent-admin"}
+            ).json()
+        )
+        assert graph_neighbors[0]["entity"]["entityId"] == graph_target_id
+        graph_facts = assert_envelope(
+            second_app.get("/ai/graph/facts?query=shade", headers={"X-API-Key": "persistent-admin"}).json()
+        )
+        assert graph_facts[0]["factId"] == graph_fact_id
+        graph_preview = assert_envelope(
+            second_app.post(
+                "/ai/harness/actions/preview",
+                headers={"X-API-Key": "persistent-admin"},
+                json={"action": "graph_search", "actionInput": {"query": "course"}},
+            ).json()
+        )
+        graph_action = assert_envelope(
+            second_app.post(
+                f"/ai/harness/actions/execute/{graph_preview['confirmationToken']}",
+                headers={"X-API-Key": "persistent-admin"},
+            ).json()
+        )
+        assert graph_action["result"][0]["entityId"] == graph_source_id
         refreshed = assert_envelope(second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json())
         assert refreshed["principal"] == "local-demo"
         assert second_app.post("/auth/refresh", headers={"X-Refresh-Token": token["refreshToken"]}).json()["ok"] == 0
