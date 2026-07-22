@@ -10,6 +10,8 @@ import {
   PlatformStore,
   sessionKey,
   sha256Hex,
+  type TenantBudgetRecord,
+  type TenantUsageDailyRecord,
   tenantUsageKey
 } from "./platform.store.js";
 
@@ -43,6 +45,8 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
   private lastFeedbackIndex = 0;
   private lastExposureIndex = 0;
   private lastConversationIndex = 0;
+  private committedBudgets = new Map<string, TenantBudgetRecord>();
+  private committedUsage = new Map<string, TenantUsageDailyRecord>();
 
   constructor(private readonly store: PlatformStore) {}
 
@@ -310,6 +314,7 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
         updatedAt: iso(budget.updatedAt)
       });
     }
+    this.committedBudgets = cloneBudgetMap(this.store.tenantBudgets);
     for (const usage of usageRows) {
       const usageDate = iso(usage.usageDate).slice(0, 10);
       this.store.tenantUsageDaily.set(tenantUsageKey(usage.tenantId, usageDate), {
@@ -323,6 +328,7 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
         updatedAt: iso(usage.updatedAt)
       });
     }
+    this.committedUsage = cloneUsageMap(this.store.tenantUsageDaily);
     for (const dataset of datasets) {
       const datasetCases = cases
         .filter((item: any) => item.tenantId === dataset.tenantId && item.datasetId === dataset.datasetId)
@@ -573,6 +579,8 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
     try {
       const prisma = await this.getClient();
       const appendOnlySnapshot = this.appendOnlySnapshot();
+      const budgetSnapshot = cloneBudgetMap(this.store.tenantBudgets);
+      const usageSnapshot = cloneUsageMap(this.store.tenantUsageDaily);
       const actions = [
         ...this.apiKeyActions(prisma),
         ...this.refreshTokenActions(prisma),
@@ -581,7 +589,7 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
         ...this.taskActions(prisma),
         ...this.graphActions(prisma),
         ...this.memoryActions(prisma, appendOnlySnapshot.deletedMemoryIds),
-        ...this.costActions(prisma),
+        ...this.costActions(prisma, budgetSnapshot, usageSnapshot),
         ...this.evaluationActions(prisma),
         ...this.knowledgeChunkActions(prisma),
         ...this.harnessEventActions(prisma),
@@ -595,6 +603,8 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
       this.lastFeedbackIndex = appendOnlySnapshot.feedbackEnd;
       this.lastExposureIndex = appendOnlySnapshot.exposureEnd;
       this.lastConversationIndex = appendOnlySnapshot.conversationEnd;
+      this.committedBudgets = budgetSnapshot;
+      this.committedUsage = usageSnapshot;
       for (const memoryId of appendOnlySnapshot.deletedMemoryIds) {
         this.store.deletedMemoryIds.delete(memoryId);
       }
@@ -814,9 +824,14 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
     ];
   }
 
-  private costActions(prisma: PrismaClientLike): Array<Promise<unknown>> {
-    return [
-      ...[...this.store.tenantBudgets.values()].map((budget) => prisma.tenantBudget.upsert({
+  private costActions(
+    prisma: PrismaClientLike,
+    budgetSnapshot: Map<string, TenantBudgetRecord>,
+    usageSnapshot: Map<string, TenantUsageDailyRecord>
+  ): Array<Promise<unknown>> {
+    const budgetActions = [...budgetSnapshot.values()]
+      .filter((budget) => !sameBudget(budget, this.committedBudgets.get(budget.tenantId)))
+      .map((budget) => prisma.tenantBudget.upsert({
         where: { tenantId: budget.tenantId },
         update: {
           monthlyBudgetUsd: budget.monthlyBudgetUsd,
@@ -830,13 +845,43 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
           createdAt: dateOrNow(budget.createdAt),
           updatedAt: dateOrNow(budget.updatedAt)
         }
-      })),
-      ...[...this.store.tenantUsageDaily.values()].map((usage) => prisma.tenantUsageDaily.upsert({
-        where: { tenantId_usageDate: { tenantId: usage.tenantId, usageDate: dateOrNow(usage.usageDate) } },
-        update: usagePayload(usage),
-        create: usagePayload(usage)
-      }))
-    ];
+      }));
+    const usageActions = [...usageSnapshot.entries()].flatMap(([key, usage]) => {
+      const previous = this.committedUsage.get(key);
+      const requestCount = Math.max(0, usage.requestCount - (previous?.requestCount ?? 0));
+      const inputTokens = Math.max(0, usage.inputTokens - (previous?.inputTokens ?? 0));
+      const outputTokens = Math.max(0, usage.outputTokens - (previous?.outputTokens ?? 0));
+      const totalCostUsd = roundCostDelta(Math.max(0, usage.totalCostUsd - (previous?.totalCostUsd ?? 0)));
+      if (requestCount === 0 && inputTokens === 0 && outputTokens === 0 && totalCostUsd === 0) {
+        return [];
+      }
+      return [prisma.tenantUsageDaily.upsert({
+        where: {
+          tenantId_usageDate: {
+            tenantId: usage.tenantId,
+            usageDate: new Date(`${usage.usageDate}T00:00:00.000Z`)
+          }
+        },
+        update: {
+          requestCount: { increment: BigInt(requestCount) },
+          inputTokens: { increment: BigInt(inputTokens) },
+          outputTokens: { increment: BigInt(outputTokens) },
+          totalCostUsd: { increment: totalCostUsd },
+          updatedAt: dateOrNow(usage.updatedAt)
+        },
+        create: {
+          tenantId: usage.tenantId,
+          usageDate: new Date(`${usage.usageDate}T00:00:00.000Z`),
+          requestCount: BigInt(requestCount),
+          inputTokens: BigInt(inputTokens),
+          outputTokens: BigInt(outputTokens),
+          totalCostUsd,
+          createdAt: dateOrNow(usage.createdAt),
+          updatedAt: dateOrNow(usage.updatedAt)
+        }
+      })];
+    });
+    return [...budgetActions, ...usageActions];
   }
 
   private evaluationActions(prisma: PrismaClientLike): Array<Promise<unknown>> {
@@ -1130,17 +1175,23 @@ function memoryItemPayload(item: any) {
   };
 }
 
-function usagePayload(usage: any) {
-  return {
-    tenantId: usage.tenantId,
-    usageDate: dateOrNow(usage.usageDate),
-    requestCount: BigInt(usage.requestCount),
-    inputTokens: BigInt(usage.inputTokens),
-    outputTokens: BigInt(usage.outputTokens),
-    totalCostUsd: usage.totalCostUsd,
-    createdAt: dateOrNow(usage.createdAt),
-    updatedAt: dateOrNow(usage.updatedAt)
-  };
+function roundCostDelta(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function cloneBudgetMap(source: Map<string, TenantBudgetRecord>): Map<string, TenantBudgetRecord> {
+  return new Map([...source].map(([key, value]) => [key, { ...value }]));
+}
+
+function cloneUsageMap(source: Map<string, TenantUsageDailyRecord>): Map<string, TenantUsageDailyRecord> {
+  return new Map([...source].map(([key, value]) => [key, { ...value }]));
+}
+
+function sameBudget(left: TenantBudgetRecord, right: TenantBudgetRecord | undefined): boolean {
+  return right !== undefined
+    && left.monthlyBudgetUsd === right.monthlyBudgetUsd
+    && left.hardLimitEnabled === right.hardLimitEnabled
+    && left.updatedAt === right.updatedAt;
 }
 
 function evalCasePayload(dataset: any, testCase: Record<string, unknown>, caseId: string, index: number) {

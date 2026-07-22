@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { env } from "../config/env.js";
-import { PlatformStore, sessionKey } from "./platform.store.js";
+import { PlatformStore, sessionKey, type TenantUsageDailyRecord } from "./platform.store.js";
 import { PrismaPersistenceService } from "./prisma.persistence.service.js";
 
 describe("PrismaPersistenceService", () => {
@@ -57,7 +57,92 @@ describe("PrismaPersistenceService", () => {
       env.APP_PRISMA_ENABLED = previousPrisma;
     }
   });
+
+  it("persists only usage deltas and advances the baseline after commit", async () => {
+    const previousPrisma = env.APP_PRISMA_ENABLED;
+    const previousUrl = env.DATABASE_URL;
+    env.APP_PRISMA_ENABLED = true;
+    env.DATABASE_URL = "mysql://test";
+    try {
+      const store = new PlatformStore();
+      store.tenantUsageDaily.set("public:2026-07-22", usage(2, 20, 10, 0.004));
+      const service = new PrismaPersistenceService(store);
+      const { client, usageUpserts, failNextTransaction } = recordingClient();
+      (service as unknown as { client: unknown }).client = client;
+
+      failNextTransaction();
+      await expect(service.flush()).rejects.toThrow("transaction failed");
+      await service.flush();
+
+      expect(usageUpserts.at(-1)?.update).toMatchObject({
+        requestCount: { increment: 2n },
+        inputTokens: { increment: 20n },
+        outputTokens: { increment: 10n },
+        totalCostUsd: { increment: 0.004 }
+      });
+
+      store.tenantUsageDaily.set("public:2026-07-22", usage(3, 27, 15, 0.0055));
+      await service.flush();
+
+      expect(usageUpserts.at(-1)?.update).toMatchObject({
+        requestCount: { increment: 1n },
+        inputTokens: { increment: 7n },
+        outputTokens: { increment: 5n },
+        totalCostUsd: { increment: 0.0015 }
+      });
+    } finally {
+      env.APP_PRISMA_ENABLED = previousPrisma;
+      env.DATABASE_URL = previousUrl;
+    }
+  });
 });
+
+function usage(requestCount: number, inputTokens: number, outputTokens: number, totalCostUsd: number): TenantUsageDailyRecord {
+  return {
+    tenantId: "public",
+    usageDate: "2026-07-22",
+    requestCount,
+    inputTokens,
+    outputTokens,
+    totalCostUsd,
+    createdAt: "2026-07-22T00:00:00.000Z",
+    updatedAt: "2026-07-22T00:00:00.000Z"
+  };
+}
+
+function recordingClient() {
+  const usageUpserts: Array<Record<string, any>> = [];
+  let shouldFail = false;
+  const noopModel = new Proxy({}, {
+    get: () => async () => undefined
+  });
+  const client = new Proxy({
+    tenantUsageDaily: {
+      upsert: async (input: Record<string, any>) => {
+        usageUpserts.push(input);
+      }
+    },
+    $transaction: async (actions: Promise<unknown>[]) => {
+      if (shouldFail) {
+        shouldFail = false;
+        await Promise.allSettled(actions);
+        throw new Error("transaction failed");
+      }
+      return Promise.all(actions);
+    }
+  } as Record<string, unknown>, {
+    get(target, property: string) {
+      return property in target ? target[property] : noopModel;
+    }
+  });
+  return {
+    client,
+    usageUpserts,
+    failNextTransaction: () => {
+      shouldFail = true;
+    }
+  };
+}
 
 function fakeClient(overrides: Record<string, unknown[]> = {}) {
   const emptyModel = { findMany: async () => [] };
