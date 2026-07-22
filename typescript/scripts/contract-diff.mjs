@@ -54,8 +54,8 @@ async function call(baseUrl, testCase) {
       headers: {
         "content-type": "application/json",
         "x-tenant-id": testCase.tenantId ?? "public",
-        ...(testCase.headers ?? {}),
-        ...(process.env.APP_CONTRACT_API_KEY ? { "x-api-key": process.env.APP_CONTRACT_API_KEY } : {})
+        ...(process.env.APP_CONTRACT_API_KEY ? { "x-api-key": process.env.APP_CONTRACT_API_KEY } : {}),
+        ...(testCase.headers ?? {})
       },
       body: testCase.body === undefined ? undefined : JSON.stringify(testCase.body),
       signal: controller.signal
@@ -65,7 +65,7 @@ async function call(baseUrl, testCase) {
     return {
       status: response.status,
       contentType,
-      headers: significantHeaders(response.headers),
+      headers: selectedHeaders(response.headers, testCase.responseHeaders),
       body: parseBody(bytes, contentType, testCase),
       hash: sha256(bytes)
     };
@@ -101,6 +101,10 @@ function compare(testCase, javaResult, tsResult) {
     if (javaResult.hash !== tsResult.hash) {
       issues.push(`binary sha256 Java=${javaResult.hash} TS=${tsResult.hash}`);
     }
+    return issues;
+  }
+  if (testCase.prometheus) {
+    issues.push(...comparePrometheus(testCase.prometheus, javaResult.body, tsResult.body));
     return issues;
   }
   const ignored = new Set(testCase.ignorePaths ?? []);
@@ -206,24 +210,59 @@ function firstDifference(left, right, path, depth) {
   return `${path} Java=${JSON.stringify(left)} TS=${JSON.stringify(right)}`;
 }
 
-function significantHeaders(headers) {
-  const values = {};
-  for (const name of ["content-disposition", "x-tenant-id"]) {
-    const value = headers.get(name);
-    if (value !== null) {
-      values[name] = value;
+function selectedHeaders(headers, names = []) {
+  return Object.fromEntries(names.map((name) => [name.toLowerCase(), headers.get(name)]));
+}
+
+function comparePrometheus(config, javaBody, tsBody) {
+  const issues = [];
+  const javaMetrics = parsePrometheus(javaBody, "Java", issues);
+  const tsMetrics = parsePrometheus(tsBody, "TS", issues);
+  requireMetricPrefixes(javaMetrics, config.javaRequiredMetricPrefixes ?? [], "Java", issues);
+  requireMetricPrefixes(tsMetrics, config.typescriptRequiredMetricPrefixes ?? [], "TS", issues);
+  return issues;
+}
+
+function parsePrometheus(body, runtime, issues) {
+  if (typeof body !== "string") {
+    issues.push(`${runtime} Prometheus response is not text`);
+    return new Set();
+  }
+  const metrics = new Set();
+  for (const rawLine of body.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{[^\r\n]*\})?\s+([-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?|NaN|[+-]Inf)(?:\s+\d+)?$/);
+    if (!match) {
+      issues.push(`${runtime} invalid Prometheus exposition line: ${line.slice(0, 160)}`);
+      continue;
+    }
+    metrics.add(match[1]);
+  }
+  if (metrics.size === 0) {
+    issues.push(`${runtime} Prometheus response has no metric samples`);
+  }
+  return metrics;
+}
+
+function requireMetricPrefixes(metrics, prefixes, runtime, issues) {
+  for (const prefix of prefixes) {
+    if (![...metrics].some((name) => name === prefix || name.startsWith(`${prefix}_`))) {
+      issues.push(`${runtime} Prometheus response is missing metric family ${prefix}`);
     }
   }
-  return values;
 }
 
 function normalizeContentType(value) {
-  if (value.includes("text/event-stream")) return "text/event-stream";
-  if (value.includes("application/json")) return "application/json";
-  if (value.includes("text/html")) return "text/html";
-  if (value.includes("text/plain")) return "text/plain";
-  if (value.includes("application/octet-stream")) return "application/octet-stream";
-  return value.split(";")[0] || "unknown";
+  const mediaType = value.split(";", 1)[0].trim().toLowerCase();
+  if (mediaType === "text/event-stream") return "text/event-stream";
+  if (mediaType === "application/json" || /^application\/[a-z0-9!#$&^_.+-]+\+json$/.test(mediaType)) return "application/json";
+  if (mediaType === "text/html") return "text/html";
+  if (mediaType === "text/plain" || mediaType === "application/openmetrics-text") return "text/plain";
+  if (mediaType === "application/octet-stream") return "application/octet-stream";
+  return mediaType || "unknown";
 }
 
 function sha256(value) {

@@ -41,12 +41,12 @@ const missingDocs = requiredDocPhrases.filter((phrase) => !migration.includes(ph
 
 if (missingTables.length || missingDocs.length) {
   for (const table of missingTables) {
-    console.error(`migration readiness missing table: ${table}`);
+      console.error(`cutover inventory missing mapped table: ${table}`);
   }
   for (const phrase of missingDocs) {
-    console.error(`migration readiness missing doc phrase: ${phrase}`);
+      console.error(`cutover inventory missing documentation topic: ${phrase}`);
   }
   process.exit(1);
 }
 
-console.log(`migration readiness ok: ${requiredRuntimeTables.length} runtime tables and rollback plan covered`);
+console.log(`cutover plan inventory ok: ${requiredRuntimeTables.length} mapped table names and required rollback topics are documented; runtime migration is verified separately`);

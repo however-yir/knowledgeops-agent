@@ -1,4 +1,4 @@
-FROM node:24-alpine AS deps
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS deps
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
@@ -13,17 +13,17 @@ COPY prisma prisma
 COPY scripts scripts
 RUN pnpm db:generate && pnpm build
 
-FROM node:24-alpine AS runtime
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY --from=build /app/prisma prisma
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/packages/shared/dist packages/shared/dist
-COPY --from=build /app/prisma prisma
 COPY --from=build /app/scripts scripts
 RUN addgroup -S app && adduser -S app -G app \
   && mkdir -p /app/data/uploads \

@@ -25,4 +25,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`security defaults ok: ${requiredChecks.length} checks`);
+console.log(`deployment security inventory ok: ${requiredChecks.length} declared settings found; final-image enforcement is verified separately`);

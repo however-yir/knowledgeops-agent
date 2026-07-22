@@ -15,21 +15,28 @@ prisma/             TypeScript-side database model mapping
 
 ```bash
 cd typescript
-pnpm install
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm db:schema:validate
 pnpm typecheck
-pnpm test
-pnpm parity
-pnpm db:validate
-pnpm contract:diff
-pnpm frontend:contract
-pnpm migration:readiness
-pnpm maturity:gate
+pnpm test:coverage
+pnpm build
+pnpm inventory:all
+pnpm security:audit
 pnpm e2e:smoke
 pnpm perf:smoke
 LOAD_VUS=50 LOAD_DURATION_SECONDS=180 pnpm load:gate
-pnpm sbom
-pnpm build
 pnpm --filter @knowledgeops/api dev
+```
+
+The `inventory:*` commands check that expected files, route fragments, table mappings, frontend path strings, rollout topics, and declared deployment settings remain represented. They are deliberately non-parity checks: they do not start Java, exercise a browser, apply a migration, execute CI, or prove runtime behavior.
+
+Database integration requires a fresh migrated MySQL database and explicitly enabled Prisma:
+
+```bash
+DATABASE_URL=mysql://root:root@127.0.0.1:3307/knowledgeops_agent APP_PRISMA_ENABLED=true pnpm db:migrate
+APP_BOOTSTRAP_DEMO_KEY=true APP_DEMO_API_KEY=ci-database-integration-key DATABASE_URL=mysql://root:root@127.0.0.1:3307/knowledgeops_agent pnpm db:seed-demo
+DATABASE_URL=mysql://root:root@127.0.0.1:3307/knowledgeops_agent APP_PRISMA_ENABLED=true APP_DEMO_API_KEY=ci-database-integration-key pnpm db:integration
 ```
 
 The initial API exposes a Java-compatible health endpoint:
@@ -200,9 +207,19 @@ The compose profile starts the API, MySQL, Redis, and RabbitMQ. Redis Stream is 
 To run a live Java-vs-TS contract comparison, start both services and set:
 
 ```bash
-APP_JAVA_BASE_URL=http://localhost:8080 APP_TS_BASE_URL=http://localhost:3000 pnpm contract:diff
+APP_JAVA_BASE_URL=http://localhost:8080 APP_TS_BASE_URL=http://localhost:3000 pnpm contract:diff:live
 ```
+
+`contract:diff:live` fails when either URL is absent, unreachable, or produces a contract mismatch. The regular workflow does not start Java and does not run this comparator, so it makes no automatic live-parity claim. Run it only against externally started, equivalently seeded services; set `APP_CONTRACT_API_KEY` when protected routes use a shared key.
+
+The Java oracle currently returns 500 for `/v3/api-docs` because springdoc calls an incompatible Spring method and raises `NoSuchMethodError`. That endpoint is excluded from the shared live diff as an oracle defect, not counted as a TypeScript parity pass. TypeScript `/v3/api-docs`, `/health`, and `/metrics` remain executable TypeScript extension checks in `e2e:smoke`.
+
+## CI Evidence
+
+The TypeScript workflow separates quality, MySQL integration, runtime smoke/load, dependency/SBOM, Docker/Compose/image, and Helm verification. Coverage includes all `src/**/*.ts` files, not only modules imported by tests. The shared package enforces 90% lines/statements/functions and 85% branches. The API currently ratchets at 40% lines, 39% statements, 32% functions, and 24% branches from the measured 2026-07-22 baseline of 40.00%, 39.02%, 32.50%, and 24.06%. Raise those thresholds as tests are added; the target remains 90% lines/statements/functions and 85% branches.
+
+CI generates the CycloneDX JSON SBOM with pinned Syft, validates it with a checksum-verified CycloneDX CLI, and uploads it. The checked-in hand-written `CycloneDX-lite` generator has been removed.
 
 ## Migration Rule
 
-The Java implementation remains in the repository as the baseline. TypeScript modules are considered parity-ready when their route contract, local behavior tests, database mapping, and CI checks pass.
+The read-only Java oracle baseline used for this evidence is commit `ac62bb3a83239b1b3a8701fcdcad7d337c2c400a` (2026-07-21). Static TypeScript inventories are not Java parity evidence. Runtime parity requires the explicit live diff plus environment-specific behavioral, migration, security, and operational acceptance evidence.

@@ -1,87 +1,46 @@
-# TypeScript Parity Report
+# TypeScript Verification and Parity Report
 
-Date: 2026-06-03
+Date: 2026-07-22
+Java oracle baseline: `ac62bb3a83239b1b3a8701fcdcad7d337c2c400a`
 
 ## Decision
 
-The TypeScript target is implemented as a Node enterprise service using NestJS on the Fastify adapter. It is not limited to frontend code or scripts.
+The TypeScript service is a NestJS/Fastify backend with Prisma persistence. This report does not declare Java parity. Static route, table, frontend, and evidence checks are named inventories and establish only that expected repository representations exist.
 
-## Contract Status
+## Contract Evidence
 
-- Response envelope: JSON responses return `ok`, `msg`, and `data`.
-- Error envelope: JSON errors return `ok: 0`, `msg`, `code`, and `traceId`.
-- Fixed request headers: `Authorization`, `X-API-Key`, `X-Tenant-ID`.
-- Chat request fields: `chatId`, `prompt`, `modelProfile`.
-- Chat response fields: `answer`, `model`, `usage`, `traceId`.
-- RAG response fields: `answer`, `citations`, `evidence`, `retrievalStats`.
-- Citation fields: `id`, `source`, `title`, `chunkId`, `snippet`.
-- Agent trace fields: `step`, `thoughtSummary`, `action`, `actionInput`, `observation`.
-- Cost summary fields: `tenantId`, `monthCostUsd`, `monthlyBudgetUsd`, `budgetRemainingUsd`.
-- Audit log fields: `tenantId`, `principal`, `method`, `path`, `status`, `createdAt`.
-
-Protocol exceptions are intentional: `/actuator/prometheus` and `/metrics` return Prometheus text, `/v3/api-docs` returns raw OpenAPI JSON, file download endpoints return binary streams, and SSE endpoints return event streams whose final `done` event contains the response envelope.
-
-## Required Enterprise Surface
-
-Implemented routes include:
+`pnpm inventory:implementation-surface` and `pnpm inventory:contracts` check files, source fragments, and contract-case representation. They do not call either runtime. The executable comparator is:
 
 ```text
-POST /auth/token
-POST /auth/refresh
-POST /auth/api-keys
-GET  /actuator/health
-GET  /health
-GET  /actuator/prometheus
-GET  /metrics
-POST /ai/chat
-POST /ai/chat/stream
-POST /ai/react/chat
-POST /ai/react/chat/stream
-POST /ai/pdf/upload/{chatId}
-POST /ingestion/upload/{chatId}
-GET  /ingestion/jobs
-GET  /ingestion/jobs/{jobId}
-POST /ai/pdf/chat
-GET  /ai/sessions
-GET  /ai/sessions/{sessionId}
-POST /ai/feedback
-GET  /ai/evaluation/datasets
-POST /ai/evaluation/runs
-GET  /audit/logs
-GET  /cost/summary
-POST /cost/budget
+APP_JAVA_BASE_URL=http://java-host APP_TS_BASE_URL=http://ts-host pnpm contract:diff:live
 ```
 
-Additional parity surfaces remain available for history, harness actions, workflow/research tasks, memory, and graph APIs.
+It fails when URLs are absent, unreachable, or behavior differs. The workflow does not start Java or run this comparator and therefore makes no automatic live-parity claim.
 
-## Capability Coverage
+Java `/v3/api-docs` currently returns 500 because springdoc invokes an incompatible Spring method and raises `NoSuchMethodError`. The endpoint is excluded from the shared comparator as a documented oracle defect, not counted as a TypeScript parity pass. TypeScript `/v3/api-docs`, `/health`, and `/metrics` are covered as TypeScript runtime extensions by `e2e:smoke`.
 
-- Auth and tenant isolation: API key, JWT, refresh token, RBAC guard, `X-Tenant-ID` context.
-- Chat and streaming: standard Chat, ReAct Chat, and SSE streaming endpoints.
-- Agent: ReAct response trace plus trusted tool action schemas and harness execution surfaces.
-- RAG: upload, ingestion job lifecycle, chunking, local vector fallback, pgvector-compatible endpoint abstraction, keyword/BM25 retrieval, hybrid retrieval, citation builder, evidence judge, and no-evidence refusal.
-- Operations: sessions, feedback, evaluation datasets/runs, cost summary/budget update, audit logs, rate limit, health, metrics.
-- Deployment: Dockerfile, compose `enterprise`/`typescript` profile, Redis Stream priority queue backend, MySQL/Redis/RabbitMQ local services.
-- Quality gates: API contract diff, vitest unit tests, e2e smoke, perf smoke, maturity gate, migration readiness, Prisma schema validation, frontend contract smoke, security defaults check.
+## Executable CI Evidence
 
-## Verification
+| Job | Evidence |
+|---|---|
+| Quality | frozen install, Prisma generation, typecheck, all-source Vitest coverage, build, static inventories |
+| Database integration | fresh MySQL migration, migration-history check, authenticated concurrent writes, row-count check, API restart, hydration/readback with Prisma enabled |
+| Runtime smoke | e2e, performance, and bounded load runs with `APP_PRISMA_ENABLED=true` against migrated MySQL |
+| Security and supply chain | canonical npm high/critical audit, Syft CycloneDX SBOM, CycloneDX CLI validation, artifact upload |
+| Docker and Compose | Compose model validation, Trivy high/critical configuration scan, final-image startup against MySQL, runtime hardening inspection, auth checks, Trivy high/critical image scan |
+| Helm | strict lint, deterministic render, Kubernetes schema validation with kubeconform |
 
-Last successful gate run:
+GitHub Actions are pinned to immutable commits. Helm, kubeconform, CycloneDX CLI, Syft, Node, and pnpm versions are pinned; downloaded kubeconform and CycloneDX binaries are checksum-verified.
 
-```text
-pnpm prod:gate
-```
+## Coverage
 
-Results:
+Coverage includes all production TypeScript source files. The measured 2026-07-22 API baseline is 40.00% lines, 39.02% statements, 32.50% functions, and 24.06% branches, so CI ratchets at 40/39/32/24. The shared package enforces 90% lines/statements/functions and 85% branches. The API target is also 90/85; thresholds must rise with new tests and must not be met through fabricated values or broad source exclusions.
 
-```text
-parity ok: 26 files, 71 routes
-prisma schema parity ok: 32 Java tables mapped
-contract diff static ok: 40 cases
-frontend contract smoke ok: 10 client calls mapped to TS backend
-migration readiness ok: 25 runtime tables and rollback plan covered
-maturity gate ok: 40 contract cases, 9 spec surfaces, 18 tags
-security defaults ok: 8 checks
-e2e smoke ok
-perf smoke: 40 iterations, concurrency 8, p95 205.5ms, failureRate 0
-```
+## Remaining Gaps
+
+- No automatic Java-vs-TypeScript environment; the live comparator depends on externally started, equivalently seeded services and is not a CI job.
+- No browser-level frontend cutover test; only a path inventory exists.
+- Helm is schema-validated but not installed into a live cluster in this workflow.
+- Runtime smoke uses deterministic disabled external LLM/vector/web providers; it does not certify third-party production integrations.
+
+Passing TypeScript CI therefore means the listed TypeScript checks executed successfully. It does not mean Java maturity equivalence or production cutover approval.

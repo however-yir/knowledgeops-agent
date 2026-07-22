@@ -18,11 +18,15 @@ spec:
       labels:
         {{- include "knowledgeops-agent-ts.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
-        {{- toYaml .Values.podLabels | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
-        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       serviceAccountName: {{ include "knowledgeops-agent-ts.serviceAccountName" . }}
       securityContext:
@@ -46,7 +50,9 @@ spec:
               value: "false"
             - name: APP_WORKFLOW_ASYNC_ENABLED
               value: "false"
-            {{- toYaml .Values.extraEnv | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -70,11 +76,15 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
-            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: data
           emptyDir: {}
-        {{- toYaml .Values.extraVolumes | nindent 8 }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

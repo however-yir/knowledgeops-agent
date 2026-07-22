@@ -1,8 +1,8 @@
-name: TypeScript Rewrite CI
+name: TypeScript Verification
 
 on:
   push:
-    branches: [main, ts-rewrite]
+    branches: [main, ts-rewrite, "impl/**"]
     paths:
       - "typescript/**"
       - ".github/workflows/typescript.yml"
@@ -13,12 +13,65 @@ on:
       - ".github/workflows/typescript.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24.13.1"
+  PNPM_VERSION: "10.33.2"
+
 jobs:
-  typescript:
-    runs-on: ubuntu-latest
+  quality:
+    name: Quality and measured coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Install frozen dependencies
+        working-directory: typescript
+        run: pnpm install --frozen-lockfile
+      - name: Generate and validate Prisma schema
+        working-directory: typescript
+        env:
+          DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/knowledgeops_agent
+        run: pnpm db:generate && pnpm db:schema:validate
+      - name: Typecheck
+        working-directory: typescript
+        run: pnpm typecheck
+      - name: Unit tests and coverage thresholds
+        working-directory: typescript
+        run: pnpm test:coverage
+      - name: Build
+        working-directory: typescript
+        run: pnpm build
+      - name: Static inventories
+        working-directory: typescript
+        run: pnpm inventory:all
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: typescript-coverage
+          path: |
+            typescript/apps/api/coverage/
+            typescript/packages/shared/coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+  database-integration:
+    name: Fresh MySQL migration, concurrency, and restart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:8.4@sha256:c592c15aaf4a1961e15d82eb31ea5987dda862d1c4b1e93424438c0e91dc1f8d
         env:
           MYSQL_DATABASE: knowledgeops_agent
           MYSQL_ROOT_PASSWORD: root
@@ -26,83 +79,208 @@ jobs:
           - 3307:3306
         options: >-
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
-          --health-interval=10s
+          --health-interval=5s
           --health-timeout=5s
-          --health-retries=10
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6380:6379
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3307/knowledgeops_agent
+      APP_PRISMA_ENABLED: "true"
+      APP_DEMO_API_KEY: ci-database-integration-key
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "24"
-
-      - name: Enable pnpm
-        run: corepack enable
-
-      - name: Install
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Install frozen dependencies
         working-directory: typescript
         run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
+      - name: Generate, build, and migrate fresh database
         working-directory: typescript
-        run: pnpm typecheck
-
-      - name: Test
+        run: pnpm db:generate && pnpm build && pnpm db:migrate
+      - name: Seed authenticated integration key
         working-directory: typescript
-        run: pnpm test
-
-      - name: Java parity contract
+        env:
+          APP_BOOTSTRAP_DEMO_KEY: "true"
+        run: pnpm db:seed-demo
+      - name: Verify concurrent persistence and process restart
         working-directory: typescript
-        run: pnpm parity
+        run: pnpm db:integration
 
-      - name: Database schema parity
+  runtime-smoke:
+    name: Database-backed runtime smoke and load
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4@sha256:c592c15aaf4a1961e15d82eb31ea5987dda862d1c4b1e93424438c0e91dc1f8d
+        env:
+          MYSQL_DATABASE: knowledgeops_agent
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3307/knowledgeops_agent
+      APP_PRISMA_ENABLED: "true"
+      APP_INGESTION_QUEUE_BACKEND: in-memory
+      APP_LLM_ENABLED: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Install, generate, build, and migrate
         working-directory: typescript
-        run: pnpm db:validate
-
-      - name: Contract inventory
+        run: pnpm install --frozen-lockfile && pnpm db:generate && pnpm build && pnpm db:migrate
+      - name: End-to-end API smoke with Prisma enabled
         working-directory: typescript
-        run: pnpm contract:inventory
-
-      - name: Frontend TS backend contract
-        working-directory: typescript
-        run: pnpm frontend:contract
-
-      - name: Migration readiness
-        working-directory: typescript
-        run: pnpm migration:readiness
-
-      - name: Maturity evidence gate
-        working-directory: typescript
-        run: pnpm maturity:gate
-
-      - name: Build
-        working-directory: typescript
-        run: pnpm build
-
-      - name: E2E smoke
-        working-directory: typescript
+        env:
+          BASE_URL: http://127.0.0.1:3010
         run: pnpm e2e:smoke
-
-      - name: Performance smoke
+      - name: Performance smoke with Prisma enabled
         working-directory: typescript
+        env:
+          BASE_URL: http://127.0.0.1:3012
+          ITERATIONS: "40"
+          CONCURRENCY: "8"
+          P95_MS: "2000"
         run: pnpm perf:smoke
-
-      - name: Load gate
+      - name: Bounded load gate with Prisma enabled
         working-directory: typescript
-        run: BASE_URL=http://localhost:3010 LOAD_DURATION_SECONDS=10 LOAD_VUS=50 LOAD_P99_MS=30000 pnpm load:gate
+        env:
+          BASE_URL: http://127.0.0.1:3014
+          LOAD_DURATION_SECONDS: "10"
+          LOAD_VUS: "20"
+          LOAD_P99_MS: "2500"
+        run: pnpm load:gate
 
-      - name: SBOM
+  security-supply-chain:
+    name: Dependency audit and validated SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+      - name: Install frozen dependencies
         working-directory: typescript
-        run: pnpm sbom
+        run: pnpm install --frozen-lockfile
+      - name: Fail on high or critical npm advisories
+        working-directory: typescript
+        run: pnpm security:audit
+      - name: Generate CycloneDX SBOM with Syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: typescript
+          format: cyclonedx-json
+          output-file: typescript/sbom.cdx.json
+          syft-version: v1.49.0
+          upload-artifact: false
+          dependency-snapshot: false
+      - name: Install checksum-verified CycloneDX validator
+        run: |
+          curl --fail --silent --show-error --location --output /tmp/cyclonedx \
+            https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.32.0/cyclonedx-linux-x64
+          printf '%s  %s\n' '454879e6a4a405c8a13bff49b8982adcb0596f3019b26b0811c66e4d7f0783e1' '/tmp/cyclonedx' | sha256sum --check
+          chmod +x /tmp/cyclonedx
+      - name: Validate CycloneDX SBOM
+        run: /tmp/cyclonedx validate --input-file typescript/sbom.cdx.json
+      - name: Upload validated SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: typescript-sbom-cyclonedx
+          path: typescript/sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Docker Compose config
+  docker-compose:
+    name: Docker, Compose, final-image security, and Trivy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Validate Compose model
         working-directory: typescript
-        run: docker compose -f docker-compose.yml config
+        run: docker compose --profile enterprise config --quiet
+      - name: Scan Docker, Compose, and Helm configuration
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: typescript
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Build final image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: typescript
+          load: true
+          push: false
+          tags: knowledgeops-agent-ts:ci
+      - name: Exercise final image security and database readiness
+        working-directory: typescript
+        run: node scripts/container-security-smoke.mjs
+      - name: Scan final image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: knowledgeops-agent-ts:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
 
-      - name: Docker build
-        working-directory: typescript
-        run: docker build -t knowledgeops-agent-ts:ci .
+  helm:
+    name: Helm lint, render, and Kubernetes schema validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.17.3
+      - name: Install checksum-verified kubeconform
+        run: |
+          curl --fail --silent --show-error --location --output /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          printf '%s  %s\n' 'c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3' '/tmp/kubeconform.tar.gz' | sha256sum --check
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          chmod +x /tmp/kubeconform
+      - name: Lint chart strictly
+        run: helm lint --strict typescript/helm/knowledgeops-agent-ts
+      - name: Render deterministic manifests
+        run: |
+          helm template knowledgeops-agent-ts typescript/helm/knowledgeops-agent-ts \
+            --namespace knowledgeops \
+            --set image.tag=ci \
+            --set-string secretEnv.DATABASE_URL=mysql://ci.invalid/knowledgeops \
+            --set-string secretEnv.APP_JWT_SECRET=ci-render-secret-at-least-32-bytes \
+            > /tmp/knowledgeops-agent-ts.yaml
+      - name: Validate rendered Kubernetes resources
+        run: /tmp/kubeconform -strict -summary -kubernetes-version 1.31.0 /tmp/knowledgeops-agent-ts.yaml

@@ -32,9 +32,9 @@ const missingBackendCoverage = ["/ai/react/chat", "/ai/react/chat/stream", "/cos
   .filter((path) => ![...sourceRoutes].some((label) => label.includes(path)));
 if (missingBackendCoverage.length > 0) {
   for (const path of missingBackendCoverage) {
-    console.error(`parity manifest missing frontend route: ${path}`);
+      console.error(`implementation manifest missing frontend route: ${path}`);
   }
   process.exit(1);
 }
 
-console.log(`frontend contract smoke ok: ${requiredClientCalls.length} client calls mapped to TS backend`);
+console.log(`frontend route inventory ok: ${requiredClientCalls.length} client path strings are represented; this is not a browser or live contract test`);

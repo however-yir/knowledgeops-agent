@@ -21,7 +21,7 @@ if (missingFiles.length > 0 || missingRoutes.length > 0) {
   process.exit(1);
 }
 
-console.log(`parity ok: ${manifest.requiredFiles.length} files, ${manifest.requiredRoutes.length} routes`);
+console.log(`implementation surface inventory ok: ${manifest.requiredFiles.length} files and ${manifest.requiredRoutes.length} route fragments found; this does not establish Java runtime parity`);
 
 function readSources(dir) {
   const entries = readdirSync(dir).sort();

@@ -7,32 +7,15 @@
     "tags": ["health"]
   },
   {
-    "label": "health alias",
-    "method": "GET",
-    "path": "/health",
-    "expectStatus": 200,
-    "tags": ["health"]
-  },
-  {
     "label": "prometheus metrics",
     "method": "GET",
     "path": "/actuator/prometheus",
     "expectStatus": 200,
+    "prometheus": {
+      "javaRequiredMetricPrefixes": ["http_requests_latency_seconds"],
+      "typescriptRequiredMetricPrefixes": ["http_requests_total", "http_request_duration_ms"]
+    },
     "tags": ["metrics", "observability"]
-  },
-  {
-    "label": "prometheus metrics alias",
-    "method": "GET",
-    "path": "/metrics",
-    "expectStatus": 200,
-    "tags": ["metrics", "observability"]
-  },
-  {
-    "label": "openapi docs",
-    "method": "GET",
-    "path": "/v3/api-docs",
-    "expectStatus": 200,
-    "tags": ["openapi"]
   },
   {
     "label": "auth token rejects invalid key",

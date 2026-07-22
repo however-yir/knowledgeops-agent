@@ -28,8 +28,8 @@
     "docker-compose.yml"
   ],
   "requiredRoutes": [
-    { "label": "GET /actuator/health", "tsFragments": ["Get([\"actuator/health\", \"health\"])"] },
-    { "label": "GET /health", "tsFragments": ["Get([\"actuator/health\", \"health\"])"] },
+    { "label": "GET /actuator/health", "tsFragments": ["Get(\"actuator/health\")"] },
+    { "label": "GET /health", "tsFragments": ["Get([\"health\", \"actuator/health/liveness\"])"] },
     { "label": "GET /v3/api-docs", "tsFragments": ["Get(\"v3/api-docs\")", "bearerAuth", "apiKeyAuth"] },
     { "label": "POST /auth/token", "tsFragments": ["Controller(\"auth\")", "Post(\"token\")"] },
     { "label": "POST /auth/refresh", "tsFragments": ["Controller(\"auth\")", "Post(\"refresh\")"] },

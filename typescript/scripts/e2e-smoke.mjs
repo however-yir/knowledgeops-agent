@@ -12,6 +12,8 @@ const server = await ensureServer();
 
 try {
   await expectJson("health", "/actuator/health", { status: "UP" }, "GET");
+  await expectJson("TypeScript health alias", "/health", { status: "UP" }, "GET");
+  await expectOpenApi();
   await upload();
   assertFields("chat", await expectOk("chat", "/ai/react/chat", { prompt: "heat safety", chatId }), ["answer", "model", "usage", "traceId"]);
   await expectSse("stream", "/ai/react/chat/stream", { prompt: "heat safety stream", chatId });
@@ -27,9 +29,26 @@ try {
   });
   await expectJson("eval run", "/ai/evaluation/runs", { datasetId: dataset.datasetId, modelProfile: "balanced" });
   await expectJson("cost", "/cost/summary", { tenantId: "public" }, "GET");
+  await expectPrometheusAlias();
   console.log("e2e smoke ok");
 } finally {
   await stopServer(server);
+}
+
+async function expectOpenApi() {
+  const response = await fetch(`${baseUrl}/v3/api-docs`);
+  const json = await response.json();
+  if (!response.ok || json?.openapi !== "3.0.3" || !json?.paths?.["/actuator/health"]) {
+    throw new Error(`TypeScript OpenAPI extension failed: ${response.status} ${JSON.stringify(json)}`);
+  }
+}
+
+async function expectPrometheusAlias() {
+  const response = await fetch(`${baseUrl}/metrics`);
+  const body = await response.text();
+  if (!response.ok || !/^http_requests_total(?:\{|\s)/m.test(body) || !/^http_request_duration_ms_(?:bucket|count|sum)(?:\{|\s)/m.test(body)) {
+    throw new Error(`TypeScript metrics alias failed: ${response.status} ${body.slice(0, 500)}`);
+  }
 }
 
 async function upload() {

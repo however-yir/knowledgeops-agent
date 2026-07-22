@@ -1,52 +1,40 @@
-# TypeScript Migration Plan
+# TypeScript Migration Evidence
 
-Java remains in place while the TypeScript implementation grows under `typescript/`.
+Java remains the production oracle while the TypeScript implementation grows under `typescript/`. The read-only baseline used for this checkpoint is Java commit `ac62bb3a83239b1b3a8701fcdcad7d337c2c400a` from 2026-07-21.
 
-| Java area | TypeScript target | Status | Verification |
-|---|---|---|---|
-| `src/main/java/com/enterprise/iqk/config` | `apps/api/src/config` | Parity-ready | `pnpm typecheck` |
-| `src/main/java/com/enterprise/iqk/controller` | `apps/api/src/*` controllers | Parity-ready | `pnpm parity` + smoke |
-| `src/main/java/com/enterprise/iqk/security` | `apps/api/src/auth` | Parity-ready | API key/JWT test + route permission guard + audit/rate-limit/headers |
-| `src/main/resources/db/migration` | `prisma/schema.prisma` + `PrismaPersistenceService` + `PlatformStore` fallback | Parity-ready | `pnpm db:validate` + persisted state + MySQL bridge |
-| `src/main/java/com/enterprise/iqk/ingestion` | `apps/api/src/ingestion` | Parity-ready | Idempotent upload/job/chunk/retry/DLQ worker tests + Redis Stream mode |
-| `src/main/java/com/enterprise/iqk/retrieval` | `apps/api/src/ai/retrieval.service.ts` | Parity-ready | Hybrid local/pgvector/BM25/graph/web/rerank/evidence tests |
-| `src/main/java/com/enterprise/iqk/rag` | `apps/api/src/ai` | Parity-ready | Upload then PDF chat smoke + contract diff |
-| `src/main/java/com/enterprise/iqk/memory` | `apps/api/src/operations` + `prisma/schema.prisma` | Parity-ready | Memory item/event routes + table mapping |
-| `src/main/java/com/enterprise/iqk/graph` | `apps/api/src/operations` + `prisma/schema.prisma` | Parity-ready | Graph entity/relation/fact routes + table mapping |
-| `src/main/java/com/enterprise/iqk/agent/harness` | `apps/api/src/agent` | Parity-ready | Preview/execute + policy + workspace/rag/memory/graph runtimes |
-| `src/main/java/com/enterprise/iqk/agent/workflow` | `apps/api/src/workflow` | Parity-ready | Task/step/event/research routes + async worker + LLM planner/writer |
-| `src/main/java/com/enterprise/iqk/evaluation` | `apps/api/src/evaluation` | Parity-ready | Dataset/run weighted scoring + reports |
-| `src/main/java/com/enterprise/iqk/repository/ChatHistoryRepository` | `apps/api/src/history` | Parity-ready | History service test + route parity |
-| `performance/k6` | `scripts/perf-smoke.mjs` + `scripts/load-gate.mjs` | Parity-ready | auto-start compiled API + p95/p99/failure gate |
-| `frontend/src/api/client.ts` | Existing frontend env switch + TS backend helpers | Parity-ready | `pnpm frontend:contract` + frontend build |
-| `.github/workflows` | `.github/workflows/typescript.yml` | Parity-ready | CI runs TS checks, MySQL/Redis services, contract, perf, Docker |
+## Evidence Status
 
-## First Milestone
+| Area | TypeScript evidence | Current claim |
+|---|---|---|
+| Configuration and API implementation | typecheck, build, Vitest, implementation and contract inventories | Implemented and locally tested; inventory is non-parity |
+| Security and tenant boundary | auth/tenant unit tests plus final-image auth and container-hardening smoke | Executed TypeScript evidence, not Java equivalence |
+| Database mapping | Prisma table inventory | Static mapping inventory only |
+| Database behavior | fresh `prisma migrate deploy`, concurrent session writes, MySQL row check, process restart and hydration with `APP_PRISMA_ENABLED=true` | Executed integration evidence |
+| Runtime API behavior | e2e, performance, and bounded load scripts with Prisma explicitly enabled in CI | Executed TypeScript smoke evidence |
+| Frontend cutover | frontend path-string inventory | Static inventory only; no browser or live frontend test |
+| Packaging | Compose model validation, final-image startup, non-root/read-only/capability checks, Trivy scan | Executed deployment evidence |
+| Kubernetes | Helm strict lint, deterministic template, kubeconform validation | Render-time evidence; no live cluster rollout |
+| Supply chain | canonical npm audit, Syft CycloneDX generation, CycloneDX CLI validation, artifact upload | Executed CI evidence |
+| Java-vs-TypeScript contract | `contract:diff:live` against two externally started services | Executable only when both running service URLs are supplied; not part of CI evidence |
 
-1. Keep the Java version tagged as `java-baseline-2026-05-31`.
-2. Build a TypeScript API skeleton that can run independently.
-3. Port one endpoint family at a time, preserving route shape and response semantics.
+The `inventory:*` commands intentionally report representation, not equivalence. Their success must never be summarized as Java runtime parity, migration readiness, frontend compatibility, production maturity, or security enforcement.
+
+## Coverage Ratchet
+
+Coverage includes every production `src/**/*.ts` file. The shared package enforces the 90% lines/statements/functions and 85% branches target. The API measured baseline on 2026-07-22 is 40.00% lines, 39.02% statements, 32.50% functions, and 24.06% branches; CI floors are 40/39/32/24. Increase the floors whenever tests raise the measured baseline. Reaching 90/85 requires tests for currently uncovered controllers, workers, middleware, bootstrap paths, external clients, and persistence branches; no synthetic exclusions or fabricated values are used.
 
 ## Cutover And Rollback
 
-1. Run Java and TypeScript together against a staging copy of MySQL.
-2. Keep `APP_PRISMA_ENABLED=false` for the first TS smoke, then enable it and run `pnpm db:validate`.
-3. Run live diff with `APP_JAVA_BASE_URL=http://java-host APP_TS_BASE_URL=http://ts-host pnpm contract:diff`.
-4. Send shadow read traffic to TS and compare status, content type, JSON schema, SSE events, auth decisions, and pagination.
-5. For rollback, keep Java schema-compatible Flyway migrations as the source of truth. TS writes only mapped tables and can be disabled by setting `APP_PRISMA_ENABLED=false`; traffic can be moved back to Java without data shape conversion.
-6. For high-risk rollout, run dual-write only for append-safe audit/evaluation/harness tables first, then enable authoritative TS writes for ingestion, memory, graph, sessions, and cost after the contract diff stays clean.
+1. Start Java and TypeScript against isolated staging databases migrated from the same production snapshot.
+2. Run the TypeScript fresh-migration and persistence gate with `APP_PRISMA_ENABLED=true`; a static table inventory is not a substitute.
+3. Start both services and run `APP_JAVA_BASE_URL=http://java-host APP_TS_BASE_URL=http://ts-host pnpm contract:diff:live`. Missing or unreachable URLs fail the command.
+4. Send shadow read traffic to TypeScript and compare status, content type, JSON schema, SSE events, authorization decisions, pagination, and latency.
+5. Verify backup/restore and rollback to Java before moving authoritative traffic. Keep Java schema-compatible until the observation window closes.
+6. Use dual-write only for explicitly reviewed append-safe tables, with reconciliation and failure handling, before considering authoritative TypeScript writes.
+7. Promote only after live contract, data, security, frontend, performance, and operational acceptance evidence is recorded for the release candidate.
 
-## Maturity Equivalence Gate
+## Live Contract Boundaries
 
-The TypeScript rewrite is considered Java-maturity-equivalent only when these evidence gates pass together:
+The workflow does not start Java or run the live comparator, so it does not claim automatic live parity. Run `contract:diff:live` only against externally started, equivalently seeded Java and TypeScript services. Both URLs are mandatory; absent URLs, unreachable services, and mismatches fail. Set `APP_CONTRACT_API_KEY` when both services require a shared key.
 
-| Gate | Evidence |
-|---|---|
-| API contract | `pnpm parity` and `pnpm contract:diff` cover health, OpenAPI, auth, chat, SSE, RAG, ingestion, history, sessions, harness, workflow, evaluation, cost, audit, metrics, memory, graph, and negative cases. |
-| security and tenant boundary | Auth service, auth guard, retrieval, workflow, and cost tests verify invalid credentials, tenant mismatch, role authorization, and tenant-scoped state. |
-| data persistence | `pnpm db:validate` and `pnpm migration:readiness` verify Prisma mappings for the Java Flyway runtime tables and the rollout/rollback plan. |
-| frontend cutover | `pnpm frontend:contract` verifies that the existing Vue client calls are present in the TypeScript backend contract. |
-| observability and performance | `pnpm e2e:smoke`, `pnpm perf:smoke`, `pnpm load:gate`, Prometheus contract cases, and SBOM generation run in CI. |
-| rollback | Keep Java as the schema-compatible fallback until shadow traffic, contract diff, and operational SLOs stay clean on TypeScript. |
-
-`pnpm maturity:gate` enforces that these evidence categories remain present in the repository and CI before the branch can be treated as cutover-ready.
+The Java oracle currently returns 500 for `/v3/api-docs` because springdoc invokes an incompatible Spring method and raises `NoSuchMethodError`. This known oracle defect is excluded from the shared live cases and is not represented as a TypeScript parity success. The TypeScript OpenAPI route and TypeScript-only `/health` and `/metrics` aliases are exercised separately by `e2e:smoke`.

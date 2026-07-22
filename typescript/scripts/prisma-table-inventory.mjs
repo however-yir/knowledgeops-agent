@@ -48,4 +48,4 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log(`prisma schema parity ok: ${requiredTables.length} Java tables mapped`);
+console.log(`prisma table inventory ok: ${requiredTables.length} baseline table names are mapped; this does not validate migration execution or data compatibility`);
