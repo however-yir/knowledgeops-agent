@@ -28,6 +28,7 @@ from .api.canonical import (
     react_response_payload,
     react_trace_payload,
 )
+from .api.evaluation_routes import register_evaluation_routes
 from .api.operations_routes import register_operations_routes
 from .api.session_routes import register_session_routes
 from .api.system_routes import register_system_routes
@@ -49,7 +50,6 @@ from .dto import (
     ChatResponseDto,
     CitationDto,
     CostSummaryDto,
-    EvaluationDatasetCreateDto,
     EvaluationRunRequestDto,
     FeedbackRequestDto,
     IngestionJobDto,
@@ -340,6 +340,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         now_iso=now_iso,
         page_data=page_data,
     )
+    register_evaluation_routes(
+        app,
+        store=store,
+        evaluation_repository=evaluation_repository,
+        settings=active_settings,
+        ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
+        graph_repository=graph_repository,
+        vector_store=vector_store,
+        require_permissions=require_permissions,
+        ok=ok,
+        new_id=new_id,
+        now_iso=now_iso,
+        is_legacy_request=is_legacy_request,
+        create_persisted_eval_run=create_persisted_eval_run,
+        create_eval_run=create_eval_run,
+        require_eval_run=require_eval_run,
+        evaluation_comparison_data=evaluation_comparison_data,
+        evaluation_report_response=evaluation_report_response,
+    )
 
     @app.post("/ai/chat", response_model=ChatEnvelope)
     async def ai_chat(
@@ -476,136 +495,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record = payload.model_dump() | {"tenantId": ctx.tenant_id, "principal": ctx.principal, "createdAt": now_iso()}
         store.feedback.append(record)
         return ok(record, msg="saved", trace_id=ctx.trace_id)
-
-    @app.get("/ai/evaluation/datasets")
-    async def evaluation_datasets(ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
-        if evaluation_repository is not None:
-            return ok(await evaluation_repository.list_datasets(ctx.tenant_id), trace_id=ctx.trace_id)
-        data = [dataset for dataset in store.eval_datasets.values() if dataset["tenantId"] == ctx.tenant_id]
-        return ok(data, trace_id=ctx.trace_id)
-
-    @app.post("/ai/evaluation/datasets")
-    async def evaluation_dataset_create(
-        payload: EvaluationDatasetCreateDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_WRITE"))
-    ):
-        if evaluation_repository is not None:
-            dataset = await evaluation_repository.create_dataset(
-                ctx.tenant_id,
-                new_id("ds"),
-                payload.name,
-                payload.description,
-                payload.cases,
-            )
-            return ok(dataset, trace_id=ctx.trace_id)
-        dataset = {
-            "datasetId": new_id("ds"),
-            "tenantId": ctx.tenant_id,
-            "name": payload.name,
-            "description": payload.description,
-            "cases": payload.cases,
-            "createdAt": now_iso(),
-            "updatedAt": now_iso(),
-        }
-        store.eval_datasets[dataset["datasetId"]] = dataset
-        return ok(dataset, trace_id=ctx.trace_id)
-
-    @app.post("/ai/evaluation/runs")
-    async def evaluation_run(payload: EvaluationRunRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
-        if evaluation_repository is not None:
-            return ok(
-                await create_persisted_eval_run(
-                    evaluation_repository,
-                    store,
-                    ctx,
-                    payload,
-                    active_settings,
-                    ingestion_service.repository if ingestion_service is not None else None,
-                    graph_repository,
-                    vector_store,
-                ),
-                trace_id=ctx.trace_id,
-            )
-        run = create_eval_run(store, ctx, payload)
-        return ok(run, trace_id=ctx.trace_id)
-
-    @app.post("/ai/evaluation/datasets/{datasetId}/runs")
-    async def evaluation_dataset_run(
-        datasetId: str, payload: EvaluationRunRequestDto, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))
-    ):
-        if evaluation_repository is not None:
-            return ok(
-                await create_persisted_eval_run(
-                    evaluation_repository,
-                    store,
-                    ctx,
-                    EvaluationRunRequestDto(datasetId=datasetId, modelProfile=payload.modelProfile),
-                    active_settings,
-                    ingestion_service.repository if ingestion_service is not None else None,
-                    graph_repository,
-                    vector_store,
-                ),
-                trace_id=ctx.trace_id,
-            )
-        dataset = store.eval_datasets.get(datasetId)
-        if not dataset or dataset["tenantId"] != ctx.tenant_id:
-            raise HTTPException(status_code=404, detail="dataset not found")
-        run = create_eval_run(store, ctx, EvaluationRunRequestDto(datasetId=datasetId, modelProfile=payload.modelProfile))
-        return ok(run, trace_id=ctx.trace_id)
-
-    @app.get("/ai/evaluation/runs/{runId}")
-    async def evaluation_run_get(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
-        if evaluation_repository is not None:
-            run = await evaluation_repository.get_run(ctx.tenant_id, runId)
-            if run is None:
-                raise HTTPException(status_code=404, detail="evaluation run not found")
-            return ok(run, trace_id=ctx.trace_id)
-        run = require_eval_run(store, ctx, runId)
-        return ok(run, trace_id=ctx.trace_id)
-
-    @app.post("/ai/evaluation/runs/{runId}/baseline")
-    async def evaluation_run_baseline(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_WRITE"))):
-        if evaluation_repository is not None:
-            run = await evaluation_repository.mark_baseline(ctx.tenant_id, runId)
-            if run is None:
-                raise HTTPException(status_code=404, detail="evaluation run not found")
-            return ok(run, trace_id=ctx.trace_id)
-        run = require_eval_run(store, ctx, runId)
-        run["isBaseline"] = True
-        dataset = store.eval_datasets.get(run["datasetId"])
-        if dataset is not None:
-            dataset["baselineRunId"] = runId
-            dataset["updatedAt"] = now_iso()
-        return ok(run, trace_id=ctx.trace_id)
-
-    @app.get("/ai/evaluation/datasets/{datasetId}/comparison")
-    async def evaluation_comparison(
-        datasetId: str,
-        request: Request,
-        ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ")),
-    ):
-        if evaluation_repository is not None:
-            dataset = await evaluation_repository.get_dataset(ctx.tenant_id, datasetId)
-            if dataset is None:
-                raise HTTPException(status_code=404, detail="dataset not found")
-            runs = await evaluation_repository.list_runs(ctx.tenant_id, datasetId)
-            data = {"datasetId": datasetId, "runs": runs} if is_legacy_request(request) else evaluation_comparison_data(dataset, runs)
-            return ok(data, trace_id=ctx.trace_id)
-        dataset = store.eval_datasets.get(datasetId)
-        if not dataset or dataset["tenantId"] != ctx.tenant_id:
-            raise HTTPException(status_code=404, detail="dataset not found")
-        runs = [run for run in store.eval_runs.values() if run["tenantId"] == ctx.tenant_id and run["datasetId"] == datasetId]
-        data = {"datasetId": datasetId, "runs": runs} if is_legacy_request(request) else evaluation_comparison_data(dataset, runs)
-        return ok(data, trace_id=ctx.trace_id)
-
-    @app.get("/ai/evaluation/runs/{runId}/report")
-    async def evaluation_report(runId: str, ctx: RequestContext = Depends(require_permissions("PERM_EVAL_READ"))):
-        if evaluation_repository is not None:
-            run = await evaluation_repository.get_run(ctx.tenant_id, runId)
-            if run is None:
-                raise HTTPException(status_code=404, detail="evaluation run not found")
-            return evaluation_report_response(run)
-        run = require_eval_run(store, ctx, runId)
-        return evaluation_report_response(run)
 
     @app.get("/ai/harness/actions")
     def action_schema(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
