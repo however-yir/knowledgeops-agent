@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from dataclasses import dataclass, field
@@ -37,8 +38,18 @@ class Settings:
     model_name: str = "qwen-plus"
     reranker_backend: str = "identity"
     reranker_url: str | None = None
+    trusted_runtime_enabled: bool = False
+    trusted_runtime_disabled_actions: tuple[str, ...] = ()
+    trusted_runtime_tenant_allowed_actions: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    workspace_root: str = "."
     allow_workspace_write: bool = False
     allow_workspace_shell: bool = False
+    workspace_command_timeout_seconds: int = 10
+    workspace_max_command_output_bytes: int = 12_000
+    workspace_max_file_bytes: int = 20_000
+    workspace_max_search_files: int = 1_000
+    workspace_allowed_commands: tuple[str, ...] = ("pwd", "ls", "rg", "git", "mvn")
+    workspace_allowed_git_subcommands: tuple[str, ...] = ("status", "diff", "show", "log", "rev-parse", "branch")
 
     @property
     def is_production(self) -> bool:
@@ -96,8 +107,23 @@ def load_settings() -> Settings:
         model_name=os.getenv("APP_MODEL_NAME", "qwen-plus"),
         reranker_backend=os.getenv("APP_RERANKER_BACKEND", "identity"),
         reranker_url=os.getenv("APP_RERANKER_URL"),
-        allow_workspace_write=os.getenv("APP_ALLOW_WORKSPACE_WRITE", "false").lower() == "true",
-        allow_workspace_shell=os.getenv("APP_ALLOW_WORKSPACE_SHELL", "false").lower() == "true",
+        trusted_runtime_enabled=os.getenv("APP_AGENT_HARNESS_TRUSTED_ENABLED", "false").lower() == "true",
+        trusted_runtime_disabled_actions=_csv(os.getenv("APP_AGENT_HARNESS_DISABLED_ACTIONS")),
+        trusted_runtime_tenant_allowed_actions=_tenant_allowed_actions(os.getenv("APP_AGENT_HARNESS_TENANT_ALLOWED_ACTIONS")),
+        workspace_root=os.getenv("APP_AGENT_HARNESS_WORKSPACE_ROOT", "."),
+        allow_workspace_write=os.getenv(
+            "APP_AGENT_HARNESS_WORKSPACE_WRITE_ENABLED", os.getenv("APP_ALLOW_WORKSPACE_WRITE", "false")
+        ).lower() == "true",
+        allow_workspace_shell=os.getenv(
+            "APP_AGENT_HARNESS_WORKSPACE_SHELL_ENABLED", os.getenv("APP_ALLOW_WORKSPACE_SHELL", "false")
+        ).lower() == "true",
+        workspace_command_timeout_seconds=int(os.getenv("APP_AGENT_HARNESS_COMMAND_TIMEOUT_SECONDS", "10")),
+        workspace_max_command_output_bytes=int(os.getenv("APP_AGENT_HARNESS_MAX_COMMAND_OUTPUT_BYTES", "12000")),
+        workspace_max_file_bytes=int(os.getenv("APP_AGENT_HARNESS_MAX_FILE_BYTES", "20000")),
+        workspace_max_search_files=int(os.getenv("APP_AGENT_HARNESS_MAX_SEARCH_FILES", "1000")),
+        workspace_allowed_commands=_csv(os.getenv("APP_AGENT_HARNESS_ALLOWED_COMMANDS")) or ("pwd", "ls", "rg", "git", "mvn"),
+        workspace_allowed_git_subcommands=_csv(os.getenv("APP_AGENT_HARNESS_ALLOWED_GIT_SUBCOMMANDS"))
+        or ("status", "diff", "show", "log", "rev-parse", "branch"),
     )
     settings.validate_startup()
     return settings
@@ -107,3 +133,19 @@ def _csv(value: str | None) -> tuple[str, ...]:
     if not value:
         return ()
     return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _tenant_allowed_actions(value: str | None) -> dict[str, tuple[str, ...]]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {
+        str(tenant): tuple(str(action) for action in actions if str(action).strip())
+        for tenant, actions in parsed.items()
+        if isinstance(actions, list)
+    }

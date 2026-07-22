@@ -264,6 +264,91 @@ def test_canonical_workflow_and_research_match_java_task_and_event_contracts() -
     assert report.json() == {"taskId": research_id, "report": research.json()["report"]}
 
 
+def test_canonical_harness_matches_java_schema_token_and_workspace_policy(tmp_path) -> None:
+    (tmp_path / "note.txt").write_text("tenant-scoped workspace note\n", encoding="utf-8")
+    client = TestClient(
+        create_app(
+            Settings(
+                demo_api_key="test-key",
+                demo_tenant_id="tenant-a",
+                trusted_runtime_enabled=True,
+                workspace_root=str(tmp_path),
+                trusted_runtime_tenant_allowed_actions={
+                    "tenant-a": ("workspace_read_file", "workspace_propose_patch", "workspace_apply_patch")
+                },
+            )
+        )
+    )
+
+    schemas = client.get("/ai/harness/actions", headers=AUTH_HEADERS)
+    assert schemas.status_code == 200
+    assert {schema["action"] for schema in schemas.json()} == {
+        "query_school",
+        "query_course",
+        "add_course_reservation",
+        "rag_search",
+        "mcp_call",
+        "workspace_list_files",
+        "workspace_read_file",
+        "workspace_search_text",
+        "workspace_propose_patch",
+        "workspace_apply_patch",
+        "workspace_run_shell",
+    }
+    assert set(schemas.json()[0]) == {
+        "action", "runtime", "requiredFields", "optionalFields", "sensitiveFields", "riskLevel", "trustedOnly"
+    }
+    assert client.post("/ai/harness/actions/preview", headers=AUTH_HEADERS, json={}).json()["msg"] == "action is required"
+
+    read_preview = client.post(
+        "/ai/harness/actions/preview",
+        headers=AUTH_HEADERS,
+        json={"action": "workspace_read_file", "actionInput": {"path": "note.txt"}},
+    )
+    assert set(read_preview.json()) == {"ok", "token", "action", "expiresAt", "preview"}
+    assert read_preview.json()["preview"] == {
+        "status": "pending_confirmation",
+        "source": "workspace",
+        "action": "workspace_read_file",
+        "actionInput": {"path": "note.txt"},
+    }
+    read = client.post(f"/ai/harness/actions/execute/{read_preview.json()['token']}", headers=AUTH_HEADERS)
+    assert read.json()["status"] == "success"
+    assert read.json()["content"] == "tenant-scoped workspace note\n"
+    assert client.post(f"/ai/harness/actions/execute/{read_preview.json()['token']}", headers=AUTH_HEADERS).json() == {
+        "status": "error",
+        "source": "trusted-action",
+        "latencyMs": 0,
+        "message": "trusted action token not found",
+    }
+
+    escaped = client.post(
+        "/ai/harness/actions/preview",
+        headers=AUTH_HEADERS,
+        json={"action": "workspace_read_file", "actionInput": {"path": "../secret.txt"}},
+    )
+    escaped_result = client.post(f"/ai/harness/actions/execute/{escaped.json()['token']}", headers=AUTH_HEADERS)
+    assert escaped_result.json()["source"] == "workspace"
+    assert "path escapes workspace root" in escaped_result.json()["message"]
+
+    patch_preview = client.post(
+        "/ai/harness/actions/preview",
+        headers=AUTH_HEADERS,
+        json={"action": "workspace_apply_patch", "actionInput": {"path": "new.txt", "content": "draft"}},
+    )
+    assert patch_preview.json()["preview"]["applyAction"] == "workspace_apply_patch"
+    denied_write = client.post(f"/ai/harness/actions/execute/{patch_preview.json()['token']}", headers=AUTH_HEADERS)
+    assert denied_write.json()["message"] == "workspace writes are disabled"
+
+    tenant_denied = client.post(
+        "/ai/harness/actions/preview",
+        headers=AUTH_HEADERS,
+        json={"action": "workspace_list_files", "actionInput": {}},
+    )
+    denied = client.post(f"/ai/harness/actions/execute/{tenant_denied.json()['token']}", headers=AUTH_HEADERS)
+    assert denied.json()["message"] == "action is not allowed for tenant: workspace_list_files"
+
+
 def test_canonical_evaluation_comparison_and_report_match_java_contract() -> None:
     client = TestClient(create_app(Settings(demo_api_key="test-key", demo_tenant_id="tenant-a")))
     dataset_id = client.get("/ai/evaluation/datasets", headers=AUTH_HEADERS).json()[0]["datasetId"]

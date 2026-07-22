@@ -262,8 +262,29 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     if audit:
         assert_keys(failures, "audit", audit[0], ["tenantId", "principal", "method", "path", "status", "createdAt"])
     harness = client.get("/ai/harness/actions", headers=AUTH_HEADERS).json()
-    if "data" in harness:
-        failures.append("canonical harness response retained the Python envelope")
+    expected_harness_fields = {"action", "runtime", "requiredFields", "optionalFields", "sensitiveFields", "riskLevel", "trustedOnly"}
+    if not isinstance(harness, list) or "data" in harness or len(harness) != 11:
+        failures.append("canonical harness response did not return the Java schema list")
+    elif any(set(schema) != expected_harness_fields for schema in harness):
+        failures.append("canonical harness schema fields do not match ActionSchema")
+    preview = client.post(
+        "/ai/harness/actions/preview",
+        headers=AUTH_HEADERS,
+        json={"action": "workspace_run_shell", "actionInput": {"command": "pwd"}},
+    ).json()
+    if set(preview) != {"ok", "token", "action", "expiresAt", "preview"} or preview.get("ok") != 1:
+        failures.append("canonical harness preview did not return TrustedActionPreviewResponse")
+    elif preview.get("preview", {}).get("actionInput", {}).get("command") != "[REDACTED]":
+        failures.append("canonical harness preview did not redact sensitive command input")
+    else:
+        observation = client.post(f"/ai/harness/actions/execute/{preview['token']}", headers=AUTH_HEADERS).json()
+        if observation != {
+            "status": "error",
+            "source": "policy",
+            "latencyMs": 0,
+            "message": "trusted runtime is disabled",
+        }:
+            failures.append("canonical harness execution did not return the Java policy observation")
     return failures
 
 

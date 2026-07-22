@@ -17,6 +17,8 @@ UPLOAD_PATHS = {"/ai/pdf/upload", "/ingestion/upload"}
 INGESTION_PROCESS_PATH = "/ingestion/jobs/process"
 WORKFLOW_TASKS_PATH = "/ai/workflow/tasks"
 RESEARCH_TASKS_PATH = "/ai/research/tasks"
+HARNESS_ACTIONS_PATH = "/ai/harness/actions"
+HARNESS_PREVIEW_PATH = f"{HARNESS_ACTIONS_PATH}/preview"
 
 
 def prepare_contract_path(request: Request) -> None:
@@ -112,6 +114,12 @@ def success_payload(path: str, data: Any, message: str, query: Mapping[str, str]
         return deep_research_payload(data)
     if is_research_report_path(path):
         return research_report_payload(data)
+    if path == HARNESS_ACTIONS_PATH:
+        return [harness_schema_payload(item) for item in data] if isinstance(data, list) else data
+    if path == HARNESS_PREVIEW_PATH:
+        return harness_preview_payload(data)
+    if path.startswith(f"{HARNESS_ACTIONS_PATH}/execute/"):
+        return data
     if path == "/ai/evaluation/datasets":
         if isinstance(data, list):
             return [evaluation_dataset_payload(item) for item in data]
@@ -141,6 +149,30 @@ def failure_payload(path: str, message: str) -> dict[str, Any]:
     if is_workflow_task_path(path) or is_research_task_path(path) or is_research_report_path(path):
         return {"ok": 0, "msg": message}
     return result_payload(0, message, code="REQUEST_FAILED")
+
+
+def harness_schema_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "action": source.get("action"),
+        "runtime": source.get("runtime"),
+        "requiredFields": source.get("requiredFields") or [],
+        "optionalFields": source.get("optionalFields") or [],
+        "sensitiveFields": source.get("sensitiveFields") or [],
+        "riskLevel": source.get("riskLevel"),
+        "trustedOnly": bool(source.get("trustedOnly")),
+    }
+
+
+def harness_preview_payload(data: Any) -> dict[str, Any]:
+    source = model_data(data)
+    return {
+        "ok": 1,
+        "token": source.get("token"),
+        "action": source.get("action"),
+        "expiresAt": source.get("expiresAt"),
+        "preview": source.get("preview") or {},
+    }
 
 
 def auth_token_payload(data: Any, ok: int, message: str) -> dict[str, Any]:

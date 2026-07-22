@@ -70,6 +70,7 @@ from .infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository, StoredIdentity
 from .infrastructure.session_repository import SqlAlchemySessionRepository
 from .infrastructure.workflow_repository import SqlAlchemyWorkflowRepository
+from .infrastructure.workspace_runtime import WorkspaceRuntime
 from .observability.setup import configure_observability
 
 TENANT_HEADER = "x-tenant-id"
@@ -176,6 +177,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     memory_repository = SqlAlchemyMemoryRepository(session_factory) if session_factory is not None else None
     evaluation_repository = SqlAlchemyEvaluationRepository(session_factory) if session_factory is not None else None
     graph_repository = SqlAlchemyGraphRepository(session_factory) if session_factory is not None else None
+    workspace_runtime = WorkspaceRuntime(
+        root=Path(active_settings.workspace_root),
+        write_enabled=active_settings.allow_workspace_write,
+        shell_enabled=active_settings.allow_workspace_shell,
+        command_timeout_seconds=active_settings.workspace_command_timeout_seconds,
+        max_command_output_bytes=active_settings.workspace_max_command_output_bytes,
+        max_file_bytes=active_settings.workspace_max_file_bytes,
+        max_search_files=active_settings.workspace_max_search_files,
+        allowed_commands=active_settings.workspace_allowed_commands,
+        allowed_git_subcommands=active_settings.workspace_allowed_git_subcommands,
+    )
     ingestion_queue = create_ingestion_queue(active_settings, "api") if session_factory is not None else None
     ingestion_service = (
         IngestionApplicationService(
@@ -699,37 +711,107 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return ok(cost_summary_data(store, ctx.tenant_id), msg="updated", trace_id=ctx.trace_id)
 
     @app.get("/ai/harness/actions")
-    def action_schema(ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
-        return ok(store.action_schemas, trace_id=ctx.trace_id)
+    def action_schema(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
+        schemas = [
+            schema
+            for schema in store.action_schemas
+            if schema.get("contract") == ("legacy" if is_legacy_request(request) else "canonical")
+        ]
+        if is_legacy_request(request):
+            schemas = [{key: value for key, value in schema.items() if key != "contract"} for schema in schemas]
+        return ok(schemas, trace_id=ctx.trace_id)
 
     @app.post("/ai/harness/actions/preview")
     async def action_preview(request: Request, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
         payload = await request.json()
         action = str(payload.get("action", ""))
-        schema = next((item for item in store.action_schemas if item["action"] == action), None)
+        legacy = is_legacy_request(request)
+        if not legacy and not action.strip():
+            raise HTTPException(status_code=400, detail="action is required")
+        schema = next(
+            (
+                item
+                for item in store.action_schemas
+                if item["action"] == action and item.get("contract") == ("legacy" if legacy else "canonical")
+            ),
+            None,
+        )
         if not schema:
-            raise HTTPException(status_code=404, detail="action not found")
+            if legacy:
+                raise HTTPException(status_code=404, detail="action not found")
+            raise HTTPException(status_code=400, detail=f"unsupported action: {action}")
         action_input = payload.get("actionInput") or {}
-        missing = [key for key in schema["requiredKeys"] if key not in action_input]
-        if missing:
-            raise HTTPException(status_code=422, detail=f"missing action input: {', '.join(missing)}")
-        token = secrets.token_urlsafe(32)
+        if not isinstance(action_input, dict):
+            raise HTTPException(status_code=400, detail="actionInput must be an object")
+        if legacy:
+            missing = [key for key in schema["requiredKeys"] if key not in action_input]
+            if missing:
+                raise HTTPException(status_code=422, detail=f"missing action input: {', '.join(missing)}")
+            token = secrets.token_urlsafe(32)
+            expires_at = epoch_seconds() + 300
+        else:
+            if not schema["trustedOnly"]:
+                raise HTTPException(status_code=400, detail=f"action does not require trusted runtime: {action}")
+            token = f"ta-{secrets.token_hex(16)}"
+            expires_at = epoch_seconds() + 600
         store.action_confirmations[sha256_hex(token)] = {
             "tenantId": ctx.tenant_id,
             "principal": ctx.principal,
             "action": action,
             "actionInput": action_input,
-            "expiresAt": epoch_seconds() + 300,
+            "expiresAt": expires_at,
             "used": False,
+            "legacy": legacy,
+            "schema": schema,
         }
-        return ok({"confirmationToken": token, "action": action, "riskLevel": schema["riskLevel"], "expiresInSeconds": 300}, trace_id=ctx.trace_id)
+        if legacy:
+            return ok(
+                {"confirmationToken": token, "action": action, "riskLevel": schema["riskLevel"], "expiresInSeconds": 300},
+                trace_id=ctx.trace_id,
+            )
+        preview = (
+            execute_canonical_harness_action(
+                workspace_runtime,
+                active_settings,
+                ctx.tenant_id,
+                "workspace_propose_patch",
+                action_input,
+                schema,
+            )
+            if action == "workspace_apply_patch"
+            else canonical_harness_preview(action, action_input, schema)
+        )
+        return ok(
+            {"token": token, "action": action, "expiresAt": iso_at_epoch(expires_at), "preview": preview},
+            trace_id=ctx.trace_id,
+        )
 
     @app.post("/ai/harness/actions/execute/{token}")
-    async def action_execute(token: str, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
+    async def action_execute(token: str, request: Request, ctx: RequestContext = Depends(require_permissions("PERM_AGENT_TRUSTED"))):
+        legacy = is_legacy_request(request)
         confirmation = store.action_confirmations.get(sha256_hex(token))
-        if not confirmation or confirmation["tenantId"] != ctx.tenant_id or confirmation["used"] or confirmation["expiresAt"] <= epoch_seconds():
-            raise HTTPException(status_code=404, detail="confirmation token not found")
+        if not confirmation or confirmation["tenantId"] != ctx.tenant_id or confirmation["used"] or confirmation.get("legacy") != legacy:
+            if legacy:
+                raise HTTPException(status_code=404, detail="confirmation token not found")
+            return ok(harness_error("trusted-action", "trusted action token not found"), trace_id=ctx.trace_id)
+        if confirmation["expiresAt"] <= epoch_seconds():
+            confirmation["used"] = True
+            if legacy:
+                raise HTTPException(status_code=404, detail="confirmation token not found")
+            return ok(harness_error("trusted-action", "trusted action token expired"), trace_id=ctx.trace_id)
         confirmation["used"] = True
+        if not legacy:
+            return ok(
+                execute_canonical_harness_action(
+                    workspace_runtime,
+                    active_settings,
+                    ctx.tenant_id,
+                    confirmation["action"],
+                    confirmation["actionInput"],
+                    confirmation["schema"],
+                ),
+                trace_id=ctx.trace_id,
+            )
         if memory_repository is not None and confirmation["action"] == "memory_save":
             action_input = confirmation["actionInput"]
             item = await memory_repository.create(
@@ -1455,6 +1537,83 @@ def execute_trusted_action(store: PlatformStore, ctx: RequestContext, action: st
         matches = [entity for entity in store.graph_entities.values() if entity["tenantId"] == ctx.tenant_id and query_tokens.intersection(tokenize(entity["name"]))]
         return {"action": action, "status": "COMPLETED", "result": matches[: int(action_input.get("limit", 20))]}
     raise HTTPException(status_code=403, detail="action is not executable")
+
+
+def execute_canonical_harness_action(
+    workspace_runtime: WorkspaceRuntime,
+    settings: Settings,
+    tenant_id: str,
+    action: str,
+    action_input: dict[str, Any],
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    if action in settings.trusted_runtime_disabled_actions:
+        return harness_error("policy", f"action is disabled: {action}")
+    allowed = settings.trusted_runtime_tenant_allowed_actions.get(tenant_id, ())
+    if allowed and action not in allowed:
+        return harness_error("policy", f"action is not allowed for tenant: {action}")
+    if not schema.get("trustedOnly"):
+        return harness_error("policy", f"action requires trusted runtime access: {action}")
+    if not settings.trusted_runtime_enabled:
+        return harness_error("policy", "trusted runtime is disabled")
+    missing = [field for field in schema["requiredFields"] if not harness_has_value(action_input.get(field))]
+    if missing:
+        return harness_error("policy", f"missing required field(s): {', '.join(missing)}")
+    if action in {"workspace_propose_patch", "workspace_apply_patch"} and not (
+        harness_has_value(action_input.get("content")) or harness_has_value(action_input.get("patch"))
+    ):
+        return harness_error("policy", "missing required field: content or patch")
+    known = {*schema["requiredFields"], *schema["optionalFields"]}
+    unknown = [field for field in action_input if field not in known]
+    if unknown:
+        return harness_error("policy", f"unknown field(s): {', '.join(unknown)}")
+    if schema["runtime"] == "workspace":
+        return workspace_runtime.execute(action, action_input)
+    return harness_error("runtime", f"no runtime for action: {action}")
+
+
+def canonical_harness_preview(action: str, action_input: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": "pending_confirmation",
+        "source": schema["runtime"],
+        "action": action,
+        "actionInput": sanitize_harness_action_input(action_input, schema),
+    }
+
+
+def sanitize_harness_action_input(action_input: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
+    sensitive = set(schema["sensitiveFields"])
+    keywords = ("password", "secret", "token", "apikey", "api_key", "contactinfo", "authorization")
+    return {
+        key: "[REDACTED]"
+        if key in sensitive or any(keyword in key.lower() for keyword in keywords)
+        else limit_harness_value(value)
+        for key, value in action_input.items()
+    }
+
+
+def limit_harness_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return value if len(value) <= 600 else f"{value[:600]}...[truncated]"
+    if isinstance(value, dict):
+        result = {str(key): limit_harness_value(item) for key, item in list(value.items())[:60]}
+        if len(value) > 60:
+            result["_truncated"] = True
+        return result
+    if isinstance(value, list):
+        result = [limit_harness_value(item) for item in value[:30]]
+        if len(value) > 30:
+            result.append({"_truncated": True})
+        return result
+    return value
+
+
+def harness_has_value(value: Any) -> bool:
+    return bool(value.strip()) if isinstance(value, str) else value is not None
+
+
+def harness_error(source: str, message: str) -> dict[str, Any]:
+    return {"status": "error", "source": source, "latencyMs": 0, "message": message}
 
 
 def create_workflow_task(store: PlatformStore, ctx: RequestContext, request: ChatRequestDto, response: ChatResponseDto) -> dict[str, Any]:
@@ -2752,10 +2911,75 @@ def seed_store(store: PlatformStore, settings: Settings) -> None:
         "hardLimitEnabled": False,
         "updatedAt": now_iso(),
     }
-    store.action_schemas = [
-        {"action": "rag_search", "requiredKeys": ["query"], "optionalKeys": ["chatId"], "riskLevel": "read"},
-        {"action": "memory_save", "requiredKeys": ["content"], "optionalKeys": ["userId", "type"], "riskLevel": "write"},
-        {"action": "graph_search", "requiredKeys": ["query"], "optionalKeys": ["limit"], "riskLevel": "read"},
+    store.action_schemas = [*java_harness_schemas(), *legacy_harness_schemas()]
+
+
+def java_harness_schemas() -> list[dict[str, Any]]:
+    return [
+        harness_schema("query_school", "builtin", (), (), (), "read", False),
+        harness_schema("query_course", "builtin", (), ("type", "edu", "sorts"), (), "read", False),
+        harness_schema(
+            "add_course_reservation",
+            "builtin",
+            ("course", "studentName", "contactInfo", "school"),
+            ("remark",),
+            ("contactInfo",),
+            "write",
+            False,
+        ),
+        harness_schema("rag_search", "builtin", (), ("query",), (), "read", False),
+        harness_schema("mcp_call", "mcp", ("server", "tool", "arguments"), (), ("arguments",), "external", True),
+        harness_schema("workspace_list_files", "workspace", (), ("path", "maxDepth"), (), "read", True),
+        harness_schema("workspace_read_file", "workspace", ("path",), ("maxBytes",), (), "read", True),
+        harness_schema("workspace_search_text", "workspace", ("query",), ("path", "maxMatches"), (), "read", True),
+        harness_schema(
+            "workspace_propose_patch",
+            "workspace",
+            ("path",),
+            ("content", "patch", "summary"),
+            ("content", "patch"),
+            "write_preview",
+            True,
+        ),
+        harness_schema(
+            "workspace_apply_patch",
+            "workspace",
+            ("path",),
+            ("content", "patch", "summary"),
+            ("content", "patch"),
+            "write",
+            True,
+        ),
+        harness_schema("workspace_run_shell", "workspace", ("command",), ("timeoutSeconds",), ("command",), "shell", True),
+    ]
+
+
+def harness_schema(
+    action: str,
+    runtime: str,
+    required_fields: tuple[str, ...],
+    optional_fields: tuple[str, ...],
+    sensitive_fields: tuple[str, ...],
+    risk_level: str,
+    trusted_only: bool,
+) -> dict[str, Any]:
+    return {
+        "contract": "canonical",
+        "action": action,
+        "runtime": runtime,
+        "requiredFields": list(required_fields),
+        "optionalFields": list(optional_fields),
+        "sensitiveFields": list(sensitive_fields),
+        "riskLevel": risk_level,
+        "trustedOnly": trusted_only,
+    }
+
+
+def legacy_harness_schemas() -> list[dict[str, Any]]:
+    return [
+        {"contract": "legacy", "action": "rag_search", "requiredKeys": ["query"], "optionalKeys": ["chatId"], "riskLevel": "read"},
+        {"contract": "legacy", "action": "memory_save", "requiredKeys": ["content"], "optionalKeys": ["userId", "type"], "riskLevel": "write"},
+        {"contract": "legacy", "action": "graph_search", "requiredKeys": ["query"], "optionalKeys": ["limit"], "riskLevel": "read"},
     ]
 
 
@@ -2818,6 +3042,10 @@ def new_id(prefix: str) -> str:
 
 def now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def iso_at_epoch(seconds: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(seconds))
 
 
 def current_epoch_millis() -> int:
