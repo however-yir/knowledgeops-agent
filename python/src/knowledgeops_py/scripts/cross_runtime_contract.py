@@ -35,6 +35,23 @@ def compare_case(case: dict[str, Any], java: httpx.Response, python: httpx.Respo
                 if f"event: {event}" not in response.text:
                     failures.append(f"{label}: {runtime} SSE missing {event}")
         return failures
+    if case.get("comparison") == "status":
+        return failures
+    fields_by_runtime = {
+        "Java": [str(field) for field in case.get("javaFields", case.get("fields", []))],
+        "Python": [str(field) for field in case.get("pythonFields", case.get("fields", []))],
+    }
+    if any(fields_by_runtime.values()):
+        for runtime, response in (("Java", java), ("Python", python)):
+            try:
+                payload = response.json()
+            except json.JSONDecodeError:
+                failures.append(f"{label}: {runtime} response is not JSON")
+                continue
+            for field in fields_by_runtime[runtime]:
+                if not has_json_field(payload, field):
+                    failures.append(f"{label}: {runtime} JSON missing {field}")
+        return failures
     try:
         if normalize(java.json()) != normalize(python.json()):
             failures.append(f"{label}: normalized JSON differs")
@@ -42,6 +59,15 @@ def compare_case(case: dict[str, Any], java: httpx.Response, python: httpx.Respo
         if java.text != python.text:
             failures.append(f"{label}: text response differs")
     return failures
+
+
+def has_json_field(payload: Any, field: str) -> bool:
+    value = payload
+    for part in field.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return False
+        value = value[part]
+    return True
 
 
 def main() -> None:

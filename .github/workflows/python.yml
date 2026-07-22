@@ -6,6 +6,7 @@ on:
     paths:
       - "python/**"
       - "docker-compose.python.yml"
+      - "docker-compose.contract.yml"
       - ".github/workflows/python.yml"
   workflow_dispatch:
 
@@ -109,3 +110,51 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+
+  cross-runtime-contract:
+    name: Java/Python cross-runtime contract
+    needs: python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Prepare fixed Java baseline
+        env:
+          BASELINE_SHA: ac62bb3a83239b1b3a8701fcdcad7d337c2c400a
+        run: |
+          baseline_dir="$RUNNER_TEMP/java-baseline"
+          git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
+          echo "JAVA_CONTEXT=$baseline_dir" >> "$GITHUB_ENV"
+
+      - name: Run isolated cross-runtime contract stack
+        env:
+          COMPOSE_PROJECT_NAME: knowledgeops-contract-${{ github.run_id }}
+        run: docker compose -f docker-compose.contract.yml up --build --abort-on-container-exit --exit-code-from contract
+
+      - name: Collect cross-runtime logs
+        if: always()
+        env:
+          COMPOSE_PROJECT_NAME: knowledgeops-contract-${{ github.run_id }}
+        run: |
+          mkdir -p reports/cross-runtime
+          docker compose -f docker-compose.contract.yml ps > reports/cross-runtime/docker-ps.txt || true
+          docker compose -f docker-compose.contract.yml logs --no-color > reports/cross-runtime/docker-logs.txt || true
+
+      - name: Upload cross-runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cross-runtime-contract-evidence
+          path: reports/cross-runtime/**
+
+      - name: Shutdown cross-runtime stack
+        if: always()
+        env:
+          COMPOSE_PROJECT_NAME: knowledgeops-contract-${{ github.run_id }}
+        run: docker compose -f docker-compose.contract.yml down -v --remove-orphans
+
+      - name: Remove fixed Java baseline worktree
+        if: always()
+        run: git worktree remove --force "$RUNNER_TEMP/java-baseline" || true

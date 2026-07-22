@@ -1,0 +1,98 @@
+[
+  {
+    "label": "health",
+    "method": "GET",
+    "path": "/actuator/health",
+    "expectStatus": 200,
+    "fields": ["status"]
+  },
+  {
+    "label": "invalid api key",
+    "method": "POST",
+    "path": "/auth/token",
+    "headers": {"X-API-Key": "contract-invalid-key"},
+    "expectStatus": 200,
+    "fields": ["ok", "msg"]
+  },
+  {
+    "label": "token issue",
+    "method": "POST",
+    "path": "/auth/token",
+    "expectStatus": 200,
+    "fields": ["ok", "msg", "token", "refreshToken", "tenantId", "expiresInSeconds"]
+  },
+  {
+    "label": "admin api key issue",
+    "method": "POST",
+    "path": "/auth/api-keys?keyName=contract-user&role=USER&tenantId=public",
+    "expectStatus": 200,
+    "fields": ["ok", "msg", "keyName", "tenantId", "rawApiKey", "expiresAt"]
+  },
+  {
+    "label": "react chat",
+    "method": "POST",
+    "path": "/ai/react/chat",
+    "body": {"prompt": "contract smoke", "chatId": "contract-react", "modelProfile": "balanced"},
+    "expectStatus": 200,
+    "fields": ["ok", "msg", "chatId", "answer", "model", "routeProfile", "trace"]
+  },
+  {
+    "label": "react stream",
+    "method": "POST",
+    "path": "/ai/react/chat/stream",
+    "body": {"prompt": "contract stream smoke", "chatId": "contract-stream", "modelProfile": "balanced"},
+    "expectStatus": 200,
+    "sse": true,
+    "sseEvents": ["trace", "token", "done"]
+  },
+  {
+    "label": "react stream provider error",
+    "method": "POST",
+    "path": "/ai/react/chat/stream",
+    "body": {"prompt": "contract provider failure", "chatId": "contract-stream-error", "modelProfile": "balanced"},
+    "expectStatus": 200,
+    "sse": true,
+    "sseEvents": ["error"]
+  },
+  {
+    "label": "missing file",
+    "method": "GET",
+    "path": "/ai/pdf/file/contract-missing-file",
+    "expectStatus": 404,
+    "comparison": "status"
+  },
+  {
+    "label": "ingestion jobs page",
+    "method": "GET",
+    "path": "/ingestion/jobs?chatId=contract-react&limit=20",
+    "expectStatus": 200,
+    "comparison": "status"
+  },
+  {
+    "label": "session pagination",
+    "method": "GET",
+    "path": "/ai/sessions?page=1&pageSize=20",
+    "expectStatus": 200,
+    "fields": ["items", "total", "page", "pageSize"]
+  },
+  {
+    "label": "harness permissions",
+    "method": "GET",
+    "path": "/ai/harness/actions",
+    "expectStatus": 200,
+    "comparison": "status"
+  },
+  {
+    "label": "workflow task list",
+    "method": "GET",
+    "path": "/ai/workflow/tasks?page=1&pageSize=20",
+    "expectStatus": 200
+  },
+  {
+    "label": "cost summary",
+    "method": "GET",
+    "path": "/cost/summary",
+    "expectStatus": 200,
+    "fields": ["tenantId", "monthlyBudgetUsd", "monthCostUsd", "monthRequestCount", "budgetRemainingUsd"]
+  }
+]

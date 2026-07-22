@@ -23,3 +23,17 @@ def test_cross_runtime_contract_checks_sse_events_for_both_runtimes() -> None:
     assert compare_case(case, response(200, body="event: error\ndata: bad\n\n"), response(200, body="event: done\n\n")) == [
         "stream error: Python SSE missing error"
     ]
+
+
+def test_cross_runtime_contract_checks_runtime_specific_fields_without_comparing_dynamic_values() -> None:
+    case = {
+        "label": "token",
+        "expectStatus": 200,
+        "javaFields": ["ok", "token"],
+        "pythonFields": ["ok", "token", "usage.totalTokens"],
+    }
+    assert compare_case(
+        case,
+        response(200, json_data={"ok": 1, "token": "java-token"}),
+        response(200, json_data={"ok": 1, "token": "python-token", "usage": {"totalTokens": 5}}),
+    ) == []
