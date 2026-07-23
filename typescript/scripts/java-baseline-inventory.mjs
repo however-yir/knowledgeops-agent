@@ -23,6 +23,10 @@ const expectedMigrations = manifest.migrationMappings.map((mapping) => mapping.s
 const actualMigrations = findSources(javaMigrationRoot, (path) => path.endsWith(".sql"))
   .map((path) => relative(repoRoot, path))
   .sort();
+const expectedConfigurationSources = manifest.configurationMappings.map((mapping) => mapping.source).sort();
+const actualConfigurationSources = findSources(javaRoot, (path) => readFileSync(path, "utf8").includes("@ConfigurationProperties("))
+  .map((path) => relative(repoRoot, path))
+  .sort();
 const javaSourcesByBasename = new Map();
 for (const path of findSources(javaRoot, () => true)) {
   const name = basename(path);
@@ -37,11 +41,13 @@ const fieldCount = manifest.fieldMappings.reduce((count, mapping) => {
 let persistenceEntityCount = 0;
 let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
+let configurationFragmentCount = 0;
 
 assertSameSet("Java controller baseline", expectedControllers, actualControllers);
 assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
 assertSameSet("Java mapper baseline", expectedMappers, actualMappers);
 assertSameSet("Java migration baseline", expectedMigrations, actualMigrations);
+assertSameSet("Java configuration-properties baseline", expectedConfigurationSources, actualConfigurationSources);
 assertSameSet("Java DTO field baseline", expectedFieldDtos, actualFieldDtos);
 
 let routeCount = 0;
@@ -90,6 +96,20 @@ for (const service of manifest.serviceMappings) {
   const typescriptPath = join(root, service.typescriptSource);
   assertIncludes(readFileSync(javaPath, "utf8"), `class ${javaType}`, `${service.source} Java service`);
   assertIncludes(readFileSync(typescriptPath, "utf8"), service.typescriptFragment, `${service.source} TypeScript service mapping`);
+}
+
+for (const configuration of manifest.configurationMappings) {
+  const javaSource = readFileSync(join(repoRoot, configuration.source), "utf8");
+  const typescriptSource = readFileSync(join(root, configuration.typescriptSource), "utf8");
+  assertIncludes(
+    javaSource,
+    `@ConfigurationProperties(prefix = "${configuration.javaPrefix}")`,
+    `${configuration.source} Java configuration prefix`
+  );
+  for (const fragment of configuration.typescriptFragments) {
+    assertIncludes(typescriptSource, fragment, `${configuration.source} TypeScript configuration mapping`);
+    configurationFragmentCount += 1;
+  }
 }
 
 for (const mapping of manifest.persistenceMappings) {
@@ -154,7 +174,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
