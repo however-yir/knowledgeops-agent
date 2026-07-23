@@ -24,6 +24,22 @@ type WorkflowState =
   | "NEED_MORE_EVIDENCE"
   | "FAILED";
 
+export interface WorkflowTaskView {
+  taskId: string;
+  tenantId: string;
+  type: string;
+  status: string;
+  userInput: string;
+  finalOutput?: string;
+  modelProfile?: string;
+  chatId?: string;
+  sessionId?: string;
+  createdAt: string;
+  updatedAt: string;
+  steps: WorkflowStep[];
+  events: import("../platform/platform.store.js").WorkflowEvent[];
+}
+
 export interface ResearchResult {
   taskId: string;
   topic: string;
@@ -251,7 +267,7 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  getTask(tenantId: string, taskId: string) {
+  getTask(tenantId: string, taskId: string): WorkflowTaskView | undefined {
     const task = this.taskForTenant(tenantId, taskId);
     if (!task) {
       return undefined;
@@ -263,7 +279,7 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  listTasks(tenantId: string, page: number, pageSize: number) {
+  listTasks(tenantId: string, page: number, pageSize: number): WorkflowTaskView[] {
     const safePage = Math.max(page, 1);
     const safePageSize = Math.max(pageSize, 1);
     const start = (safePage - 1) * safePageSize;

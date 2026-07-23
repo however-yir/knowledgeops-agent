@@ -109,7 +109,7 @@ export interface WorkflowEvent {
   taskId: string;
   stepId?: string;
   eventType: string;
-  payload: unknown;
+  payload: Record<string, unknown>;
   createdAt: string;
 }
 

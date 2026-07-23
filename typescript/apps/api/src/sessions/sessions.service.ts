@@ -6,6 +6,24 @@ import { PlatformStore, sessionKey } from "../platform/platform.store.js";
 
 export type SessionPayload = Partial<Omit<SessionState, "id">>;
 
+export interface BranchCompareResult {
+  sourceBranchId: string;
+  targetBranchId: string;
+  sourceMessageCount: number;
+  targetMessageCount: number;
+  commonMessageCount: number;
+  sourceOnlyCount: number;
+  targetOnlyCount: number;
+  sourceOnlyPreview: string[];
+  targetOnlyPreview: string[];
+}
+
+export interface BranchMergeResult {
+  session: SessionState;
+  mergedBranch: SessionBranch;
+  mergedMessageCount: number;
+}
+
 @Injectable()
 export class SessionsService {
   constructor(private readonly store: PlatformStore) {}
@@ -89,7 +107,7 @@ export class SessionsService {
     return this.upsert(tenantId, sessionId, { ...session, archived: value });
   }
 
-  compare(tenantId: string, sessionId: string, sourceBranchId: string, targetBranchId: string) {
+  compare(tenantId: string, sessionId: string, sourceBranchId: string, targetBranchId: string): BranchCompareResult {
     const session = this.get(tenantId, sessionId);
     const source = branchOrThrow(session, sourceBranchId);
     const target = branchOrThrow(session, targetBranchId);
@@ -112,7 +130,7 @@ export class SessionsService {
     };
   }
 
-  merge(tenantId: string, sessionId: string, sourceBranchId: string, targetBranchId: string, title?: string) {
+  merge(tenantId: string, sessionId: string, sourceBranchId: string, targetBranchId: string, title?: string): BranchMergeResult {
     const session = this.get(tenantId, sessionId);
     const source = branchOrThrow(session, sourceBranchId);
     const target = branchOrThrow(session, targetBranchId);

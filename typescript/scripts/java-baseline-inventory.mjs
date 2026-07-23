@@ -73,6 +73,8 @@ const knownDtoSources = new Set(manifest.dtoMappings.map((dto) => dto.source));
 const fieldCount = manifest.fieldMappings.reduce((count, mapping) => {
   return count + mapping.sameFields.length + (mapping.transforms?.length ?? 0);
 }, 0);
+const javaEnumTypes = new Set(findSources(javaRoot, (path) => path.endsWith(".java"))
+  .flatMap((path) => [...readFileSync(path, "utf8").matchAll(/\benum\s+([A-Za-z][A-Za-z0-9_]*)\b/g)].map((match) => match[1])));
 let persistenceEntityCount = 0;
 let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
@@ -85,6 +87,8 @@ let crossCuttingFragmentCount = 0;
 let responsibilityGroupSourceCount = 0;
 let responsibilityGroupAnchorCount = 0;
 let securityFragmentCount = 0;
+let fieldTypeFamilyCount = 0;
+let fieldIsoRepresentationCount = 0;
 const javaMigrationTableColumns = new Map();
 const javaMigrationSchema = findJavaMigrationSchema();
 
@@ -354,21 +358,23 @@ for (const mapping of manifest.fieldMappings) {
   }
   const javaSource = readFileSync(join(repoRoot, mapping.source), "utf8");
   const typescriptSource = readFileSync(join(root, mapping.typescriptSource), "utf8");
+  if (!mapping.typescriptType?.trim()) {
+    fail(`${mapping.source} field mapping is missing its TypeScript DTO type`);
+  }
+  const typescriptFields = findTypescriptInterfaceFields(typescriptSource, mapping.typescriptType);
   for (const field of mapping.sameFields) {
-    assertJavaField(javaSource, field, `${mapping.source} Java field`);
-    assertTypescriptField(typescriptSource, field, `${mapping.source} TypeScript field`);
+    assertFieldTypeFamily(javaSource, typescriptFields, field, field, mapping);
   }
   for (const transform of mapping.transforms ?? []) {
     if (!transform.note?.trim() || transform.java === transform.typescript) {
       fail(`${mapping.source} field transform requires a renamed field and an explanatory note`);
     }
-    assertJavaField(javaSource, transform.java, `${mapping.source} Java transformed field`);
-    assertTypescriptField(typescriptSource, transform.typescript, `${mapping.source} TypeScript transformed field`);
+    assertFieldTypeFamily(javaSource, typescriptFields, transform.java, transform.typescript, mapping);
   }
 }
 
 console.log(
-  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript with ${fieldTypeFamilyCount} verified type families (${fieldIsoRepresentationCount} documented ISO-8601 representations; ${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -412,12 +418,6 @@ function findEnvironmentEntry(source, key) {
   const remaining = source.slice(start + marker.length);
   const nextEntry = remaining.search(/\n  [A-Z][A-Z0-9_]*:/);
   return source.slice(start, nextEntry < 0 ? source.length : start + marker.length + nextEntry);
-}
-
-function assertJavaField(source, field, label) {
-  if (!new RegExp(`\\b${escapeRegex(field)}\\s*;`).test(source)) {
-    fail(`${label} is missing: ${field}`);
-  }
 }
 
 function findJavaInstanceFields(source) {
@@ -712,10 +712,118 @@ function findJavaMigrationTableColumns(source) {
   return tables;
 }
 
-function assertTypescriptField(source, field, label) {
-  if (!new RegExp(`\\b${escapeRegex(field)}\\??\\s*:`).test(source)) {
+function assertFieldTypeFamily(javaSource, typescriptFields, javaField, typescriptField, mapping) {
+  const javaType = findJavaFieldType(javaSource, javaField, `${mapping.source} Java field`);
+  const typescriptType = typescriptFields.get(typescriptField);
+  if (!typescriptType) {
+    fail(`${mapping.source} ${mapping.typescriptType} TypeScript field is missing: ${typescriptField}`);
+  }
+  const javaFamily = javaTypeFamily(javaType);
+  const typescriptFamily = typescriptTypeFamily(typescriptType);
+  if (javaFamily === "temporal" && typescriptFamily === "text") {
+    if (!/ISO-8601/i.test(mapping.representation ?? "")) {
+      fail(`${mapping.source} ${javaField} maps LocalDateTime to TypeScript text without an ISO-8601 representation note`);
+    }
+    fieldIsoRepresentationCount += 1;
+  } else if (javaFamily !== typescriptFamily) {
+    fail(`${mapping.source} ${javaField} type-family mismatch: Java ${javaType} (${javaFamily}) vs TypeScript ${typescriptType} (${typescriptFamily})`);
+  }
+  fieldTypeFamilyCount += 1;
+}
+
+function findJavaFieldType(source, field, label) {
+  const match = source.match(new RegExp(`^\\s*private\\s+(?!static\\b)([^;=]+?)\\s+${escapeRegex(field)}\\s*;\\s*$`, "m"));
+  if (!match) {
     fail(`${label} is missing: ${field}`);
   }
+  return match[1].trim();
+}
+
+function findTypescriptInterfaceFields(source, typeName, seen = new Set()) {
+  if (seen.has(typeName)) {
+    fail(`TypeScript interface inheritance cycle: ${[...seen, typeName].join(" -> ")}`);
+  }
+  const declaration = new RegExp(`export\\s+interface\\s+${escapeRegex(typeName)}(?:\\s*<[^>{}]+>)?\\s*(?:extends\\s+([^\\{]+))?\\s*\\{`, "m").exec(source);
+  if (!declaration) {
+    fail(`TypeScript interface is missing: ${typeName}`);
+  }
+  const openBrace = declaration.index + declaration[0].lastIndexOf("{");
+  const closeBrace = findMatchingBrace(source, openBrace);
+  const fields = new Map();
+  const parents = declaration[1]?.split(",").map((parent) => parent.trim().replace(/<.*>/, "")).filter(Boolean) ?? [];
+  for (const parent of parents) {
+    for (const [field, type] of findTypescriptInterfaceFields(source, parent, new Set([...seen, typeName]))) {
+      fields.set(field, type);
+    }
+  }
+  const body = source.slice(openBrace + 1, closeBrace);
+  for (const match of body.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\??\s*:\s*([^;\n]+);/gm)) {
+    fields.set(match[1], match[2].trim());
+  }
+  return fields;
+}
+
+function findMatchingBrace(source, openBrace) {
+  let depth = 0;
+  for (let index = openBrace; index < source.length; index += 1) {
+    if (source[index] === "{") {
+      depth += 1;
+    } else if (source[index] === "}" && --depth === 0) {
+      return index;
+    }
+  }
+  fail("TypeScript interface body is not closed");
+}
+
+function javaTypeFamily(type) {
+  const normalized = type.replace(/\s+/g, "");
+  if (/^(byte|short|int|long|float|double|Byte|Short|Integer|Long|Float|Double|BigDecimal|BigInteger)$/.test(normalized)) {
+    return "number";
+  }
+  if (/^(boolean|Boolean)$/.test(normalized)) {
+    return "boolean";
+  }
+  if (/^(LocalDate|LocalDateTime|OffsetDateTime|Instant|ZonedDateTime|Date|Timestamp)$/.test(normalized)) {
+    return "temporal";
+  }
+  if (/^(List|Set|Collection|Iterable|Stream)<|\[\]$/.test(normalized)) {
+    return "collection";
+  }
+  if (/^Map</.test(normalized)) {
+    return "record";
+  }
+  if (normalized === "Object") {
+    return "unknown";
+  }
+  if (normalized === "String" || normalized === "UUID" || javaEnumTypes.has(normalized)) {
+    return "text";
+  }
+  return "structured";
+}
+
+function typescriptTypeFamily(type) {
+  const normalized = type.replace(/\s+/g, " ").trim();
+  const nonNullable = normalized.split("|").map((part) => part.trim()).filter((part) => part !== "null" && part !== "undefined");
+  const primary = nonNullable.join(" | ");
+  if (/^(Array|ReadonlyArray)</.test(primary) || /\[\]$/.test(primary)) {
+    return "collection";
+  }
+  if (/^Record</.test(primary)) {
+    return "record";
+  }
+  if (primary === "unknown" || primary === "any") {
+    return "unknown";
+  }
+  if (primary === "number" || nonNullable.every((part) => /^-?\d+(\.\d+)?$/.test(part))) {
+    return "number";
+  }
+  if (primary === "boolean" || nonNullable.every((part) => part === "true" || part === "false")) {
+    return "boolean";
+  }
+  if (primary === "string" || nonNullable.every((part) => /^(["']).*\1$/.test(part))) {
+    return "text";
+  }
+  return "structured";
 }
 
 function escapeRegex(value) {

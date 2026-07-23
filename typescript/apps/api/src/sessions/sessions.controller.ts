@@ -2,6 +2,15 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query } f
 import { TenantId } from "../common/tenant-id.decorator.js";
 import { type SessionPayload, SessionsService } from "./sessions.service.js";
 
+export interface BranchCompareRequest {
+  sourceBranchId: string;
+  targetBranchId: string;
+}
+
+export interface BranchMergeRequest extends BranchCompareRequest {
+  title?: string;
+}
+
 @Controller("ai/sessions")
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
@@ -42,7 +51,7 @@ export class SessionsController {
   compare(
     @TenantId() tenantId: string,
     @Param("sessionId") sessionId: string,
-    @Body() body: { sourceBranchId: string; targetBranchId: string } | null | undefined
+    @Body() body: BranchCompareRequest | null | undefined
   ) {
     if (!body) {
       throw new BadRequestException("compare request is required");
@@ -54,7 +63,7 @@ export class SessionsController {
   merge(
     @TenantId() tenantId: string,
     @Param("sessionId") sessionId: string,
-    @Body() body: { sourceBranchId: string; targetBranchId: string; title?: string } | null | undefined
+    @Body() body: BranchMergeRequest | null | undefined
   ) {
     if (!body) {
       throw new BadRequestException("merge request is required");

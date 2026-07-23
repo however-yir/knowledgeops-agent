@@ -20,6 +20,12 @@ export interface TenantCostSummary {
   budgetExceeded: boolean;
 }
 
+export interface TenantBudgetUpdate {
+  tenantId?: string;
+  monthlyBudgetUsd?: number;
+  hardLimitEnabled?: boolean;
+}
+
 @Injectable()
 export class TenantCostService {
   constructor(private readonly store: PlatformStore) {}
@@ -92,7 +98,7 @@ export class TenantCostService {
     };
   }
 
-  updateBudget(request: { tenantId?: string; monthlyBudgetUsd?: number; hardLimitEnabled?: boolean }): TenantCostSummary {
+  updateBudget(request: TenantBudgetUpdate): TenantCostSummary {
     const tenant = normalizeTenant(request.tenantId);
     const existing = this.ensureBudget(tenant);
     if (request.monthlyBudgetUsd !== undefined && request.monthlyBudgetUsd < 0) {
