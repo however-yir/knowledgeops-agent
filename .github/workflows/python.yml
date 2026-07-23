@@ -179,7 +179,7 @@ jobs:
           node-version: '20'
 
       - name: Start isolated Python platform and Vue frontend
-        run: docker compose -f docker-compose.python.yml up --build -d --wait --wait-timeout 240
+        run: docker compose -f docker-compose.python.yml up --build -d --wait --wait-timeout 240 web
 
       - name: Install browser test dependencies
         working-directory: frontend
