@@ -82,7 +82,8 @@ class LegacyTestClient(TestClient):
     def request(self, method: str, url: str | URL, *args: Any, **kwargs: Any) -> Response:
         if isinstance(url, str) and url.startswith("/") and not url.startswith("/python/v1/"):
             url = f"/python/v1{url}"
-        return super().request(method, url, *args, **kwargs)
+        response: Response = super().request(method, url, *args, **kwargs)
+        return response
 
 
 def main() -> None:
