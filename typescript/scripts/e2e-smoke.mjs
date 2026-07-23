@@ -30,6 +30,7 @@ try {
   await expectJson("eval run", "/ai/evaluation/runs", { datasetId: dataset.datasetId, modelProfile: "balanced" });
   await expectJson("cost", "/cost/summary", { tenantId: "public" }, "GET");
   await expectPrometheusAlias();
+  await expectDeclaredContractCases();
   console.log("e2e smoke ok");
 } finally {
   await stopServer(server);
@@ -49,6 +50,26 @@ async function expectPrometheusAlias() {
   if (!response.ok || !/^http_requests_total(?:\{|\s)/m.test(body) || !/^http_request_duration_ms_(?:bucket|count|sum)(?:\{|\s)/m.test(body)) {
     throw new Error(`TypeScript metrics alias failed: ${response.status} ${body.slice(0, 500)}`);
   }
+}
+
+async function expectDeclaredContractCases() {
+  const cases = JSON.parse(await readFile(join(root, "parity", "contract-cases.json"), "utf8"));
+  for (const testCase of cases) {
+    const hasBody = testCase.body !== undefined;
+    const response = await fetch(`${baseUrl}${testCase.path}`, {
+      method: testCase.method,
+      headers: hasBody ? { "content-type": "application/json", ...(testCase.headers ?? {}) } : testCase.headers,
+      body: hasBody ? JSON.stringify(testCase.body) : undefined
+    });
+    const text = await response.text();
+    if (response.status !== testCase.expectStatus) {
+      throw new Error(`local contract case ${testCase.label} expected ${testCase.expectStatus}, got ${response.status}: ${text.slice(0, 500)}`);
+    }
+    if (testCase.sse && !text.includes("event: done")) {
+      throw new Error(`local contract case ${testCase.label} did not emit a done SSE event`);
+    }
+  }
+  console.log(`local contract surface ok: ${cases.length} declared cases`);
 }
 
 async function expectRawJson(label, path, shape) {
@@ -157,7 +178,14 @@ async function ensureServer() {
   }
   const child = spawn("pnpm", ["--filter", "@knowledgeops/api", "start"], {
     cwd: root,
-    env: { ...process.env, NODE_ENV: "development", APP_SECURITY_ENABLED: "false", APP_LLM_ENABLED: "false", PORT: new URL(baseUrl).port || "3000" },
+    env: {
+      ...process.env,
+      NODE_ENV: "development",
+      APP_SECURITY_ENABLED: "false",
+      APP_LLM_ENABLED: "false",
+      APP_FEEDBACK_ENABLED: "false",
+      PORT: new URL(baseUrl).port || "3000"
+    },
     stdio: ["ignore", "ignore", "inherit"]
   });
   for (let attempt = 0; attempt < 80; attempt += 1) {

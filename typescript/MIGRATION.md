@@ -6,11 +6,11 @@ Java remains the production oracle while the TypeScript implementation grows und
 
 | Area | TypeScript evidence | Current claim |
 |---|---|---|
-| Configuration and API implementation | typecheck, build, Vitest, implementation and contract inventories | Implemented and locally tested; inventory is non-parity |
+| Configuration and API implementation | typecheck, build, Vitest, Java-baseline inventory (15 controller sources, 48 route declarations), implementation and contract inventories | Implemented and locally tested; static mapping is non-parity |
 | Security and tenant boundary | auth/tenant unit tests plus final-image auth and container-hardening smoke | Executed TypeScript evidence, not Java equivalence |
 | Database mapping | Prisma table inventory | Static mapping inventory only |
 | Database behavior | fresh `prisma migrate deploy`, concurrent session writes, MySQL row check, process restart and hydration with `APP_PRISMA_ENABLED=true` | Executed integration evidence |
-| Runtime API behavior | e2e, performance, and bounded load scripts with Prisma explicitly enabled in CI | Executed TypeScript smoke evidence |
+| Runtime API behavior | e2e executes all 37 declared contract cases in local fallback mode; CI also runs e2e, performance, and bounded load with Prisma explicitly enabled | Executed TypeScript smoke evidence, not Java equivalence |
 | Frontend cutover | frontend path-string inventory | Static inventory only; no browser or live frontend test |
 | Packaging | Compose model validation, final-image startup, non-root/read-only/capability checks, Trivy scan | Executed deployment evidence |
 | Kubernetes | Helm strict lint, deterministic template, kubeconform validation | Render-time evidence; no live cluster rollout |

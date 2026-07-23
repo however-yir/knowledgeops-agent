@@ -1,0 +1,151 @@
+{
+  "javaOracle": {
+    "commit": "ac62bb3a83239b1b3a8701fcdcad7d337c2c400a",
+    "date": "2026-07-21"
+  },
+  "controllers": [
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/AgentHarnessController.java",
+      "javaBase": "@RequestMapping(\"/ai/harness\")",
+      "typescriptBase": "Controller(\"ai/harness\")",
+      "routes": [
+        { "java": "@GetMapping(\"/actions\")", "typescript": ["Get(\"actions\")"] },
+        { "java": "@PostMapping(\"/actions/preview\")", "typescript": ["Post(\"actions/preview\")"] },
+        { "java": "@PostMapping(\"/actions/execute/{token}\")", "typescript": ["Post(\"actions/execute/:token\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/AgentSessionController.java",
+      "javaBase": "@RequestMapping(\"/ai/sessions\")",
+      "typescriptBase": "Controller(\"ai/sessions\")",
+      "routes": [
+        { "java": "@GetMapping", "typescript": ["Get()"] },
+        { "java": "@GetMapping(\"/{sessionId}\")", "typescript": ["Get(\":sessionId\")"] },
+        { "java": "@PutMapping(\"/{sessionId}\")", "typescript": ["Put(\":sessionId\")"] },
+        { "java": "@PostMapping(\"/{sessionId}/pin\")", "typescript": ["Post(\":sessionId/pin\")"] },
+        { "java": "@PostMapping(\"/{sessionId}/archive\")", "typescript": ["Post(\":sessionId/archive\")"] },
+        { "java": "@PostMapping(\"/{sessionId}/branches/compare\")", "typescript": ["Post(\":sessionId/branches/compare\")"] },
+        { "java": "@PostMapping(\"/{sessionId}/branches/merge\")", "typescript": ["Post(\":sessionId/branches/merge\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/AuditController.java",
+      "javaBase": "@RequestMapping(\"/audit\")",
+      "routes": [
+        { "java": "@GetMapping(\"/logs\")", "typescript": ["Get(\"audit/logs\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/AuthController.java",
+      "javaBase": "@RequestMapping(\"/auth\")",
+      "typescriptBase": "Controller(\"auth\")",
+      "routes": [
+        { "java": "@PostMapping(\"/token\")", "typescript": ["Post(\"token\")"] },
+        { "java": "@PostMapping(\"/refresh\")", "typescript": ["Post(\"refresh\")"] },
+        { "java": "@PostMapping(\"/api-keys\")", "typescript": ["Post(\"api-keys\")"] },
+        { "java": "@PostMapping(\"/api-keys/rotate\")", "typescript": ["Post(\"api-keys/rotate\")"] },
+        { "java": "@PostMapping(\"/api-keys/revoke\")", "typescript": ["Post(\"api-keys/revoke\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/ChatController.java",
+      "javaBase": "@RequestMapping(\"/ai\")",
+      "routes": [
+        { "java": "@RequestMapping(value = \"/chat\"", "typescript": ["Post(\"ai/chat\")", "Get(\"ai/chat\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/ChatHistoryController.java",
+      "javaBase": "@RequestMapping(\"/ai/history\")",
+      "typescriptBase": "Controller(\"ai/history\")",
+      "routes": [
+        { "java": "@GetMapping(\"/{type}\")", "typescript": ["Get(\":type\")"] },
+        { "java": "@GetMapping(\"/{type}/{chatId}\")", "typescript": ["Get(\":type/:chatId\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/CostGovernanceController.java",
+      "javaBase": "@RequestMapping(\"/cost\")",
+      "routes": [
+        { "java": "@GetMapping(\"/summary\")", "typescript": ["Get(\"cost/summary\")"] },
+        { "java": "@PostMapping(\"/budget\")", "typescript": ["Post(\"cost/budget\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/CustomerServiceController.java",
+      "javaBase": "@RequestMapping(\"/ai\")",
+      "routes": [
+        { "java": "@RequestMapping(value = \"/service\"", "typescript": ["All(\"ai/service\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/DeepResearchController.java",
+      "javaBase": "@RequestMapping(\"/ai/research\")",
+      "routes": [
+        { "java": "@PostMapping(\"/tasks\")", "typescript": ["Post(\"ai/research/tasks\")"] },
+        { "java": "@GetMapping(\"/tasks/{taskId}\")", "typescript": ["Get(\"ai/research/tasks/:taskId\")"] },
+        { "java": "@GetMapping(\"/tasks/{taskId}/events\")", "typescript": ["Get(\"ai/research/tasks/:taskId/events\")"] },
+        { "java": "@GetMapping(\"/tasks/{taskId}/report\")", "typescript": ["Get(\"ai/research/tasks/:taskId/report\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/FeedbackController.java",
+      "javaBase": "@RequestMapping(\"/ai/feedback\")",
+      "routes": [
+        { "java": "@PostMapping", "typescript": ["Post(\"ai/feedback\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/IngestionController.java",
+      "javaBase": "@RequestMapping(\"/ingestion\")",
+      "routes": [
+        { "java": "@PostMapping(\"/upload/{chatId}\")", "typescript": ["ingestion/upload/:chatId"] },
+        { "java": "@GetMapping(\"/jobs/{jobId}\")", "typescript": ["Get(\"ingestion/jobs/:jobId\")"] },
+        { "java": "@GetMapping(\"/jobs\")", "typescript": ["Get(\"ingestion/jobs\")"] },
+        { "java": "@PostMapping(\"/jobs/process\")", "typescript": ["Post(\"ingestion/jobs/process\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/PdfController.java",
+      "javaBase": "@RequestMapping(\"/ai/pdf\")",
+      "routes": [
+        { "java": "@RequestMapping(\"/upload/{chatId}\")", "typescript": ["ai/pdf/upload/:chatId"] },
+        { "java": "@GetMapping(\"/file/{chatId}\")", "typescript": ["Get(\"ai/pdf/file/:chatId\")"] },
+        { "java": "@RequestMapping(value = \"/chat\"", "typescript": ["Post(\"ai/pdf/chat\")", "Get(\"ai/pdf/chat\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/ReactController.java",
+      "javaBase": "@RequestMapping(\"/ai/react\")",
+      "routes": [
+        { "java": "@PostMapping(value = \"/chat\"", "typescript": ["Post(\"ai/react/chat\")"] },
+        { "java": "@PostMapping(value = \"/chat/stream\"", "typescript": ["Post(\"ai/react/chat/stream\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/controller/WorkflowController.java",
+      "javaBase": "@RequestMapping(\"/ai/workflow\")",
+      "routes": [
+        { "java": "@PostMapping(\"/react/chat\")", "typescript": ["Post(\"ai/workflow/react/chat\")"] },
+        { "java": "@PostMapping(value = \"/react/chat/stream\"", "typescript": ["Post(\"ai/workflow/react/chat/stream\")"] },
+        { "java": "@GetMapping(\"/tasks/{taskId}\")", "typescript": ["Get(\"ai/workflow/tasks/:taskId\")"] },
+        { "java": "@GetMapping(\"/tasks/{taskId}/events\")", "typescript": ["Get(\"ai/workflow/tasks/:taskId/events\")"] },
+        { "java": "@GetMapping(\"/tasks\")", "typescript": ["Get(\"ai/workflow/tasks\")"] }
+      ]
+    },
+    {
+      "source": "src/main/java/com/enterprise/iqk/evaluation/EvaluationController.java",
+      "javaBase": "@RequestMapping(\"/ai/evaluation\")",
+      "typescriptBase": "Controller(\"ai/evaluation\")",
+      "routes": [
+        { "java": "@PostMapping(\"/datasets\")", "typescript": ["Post(\"datasets\")"] },
+        { "java": "@GetMapping(\"/datasets\")", "typescript": ["Get(\"datasets\")"] },
+        { "java": "@PostMapping(\"/datasets/{datasetId}/runs\")", "typescript": ["Post(\"datasets/:datasetId/runs\")"] },
+        { "java": "@GetMapping(\"/datasets/{datasetId}/comparison\")", "typescript": ["Get(\"datasets/:datasetId/comparison\")"] },
+        { "java": "@GetMapping(\"/runs/{runId}\")", "typescript": ["Get(\"runs/:runId\")"] },
+        { "java": "@PostMapping(\"/runs/{runId}/baseline\")", "typescript": ["Post(\"runs/:runId/baseline\")"] },
+        { "java": "@GetMapping(value = \"/runs/{runId}/report\"", "typescript": ["Get(\"runs/:runId/report\")"] }
+      ]
+    }
+  ]
+}

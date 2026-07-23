@@ -9,7 +9,7 @@ The TypeScript service is a NestJS/Fastify backend with Prisma persistence. This
 
 ## Contract Evidence
 
-`pnpm inventory:implementation-surface` and `pnpm inventory:contracts` check files, source fragments, and contract-case representation. They do not call either runtime. The executable comparator is:
+`pnpm inventory:java-baseline` locks the 2026-07-21 Java source baseline's 15 controllers and 48 route declarations to explicit TypeScript source fragments. `pnpm inventory:implementation-surface` and `pnpm inventory:contracts` additionally check files, TypeScript route fragments, and contract-case representation. These are static checks: they do not call either runtime. The executable comparator is:
 
 ```text
 APP_JAVA_BASE_URL=http://java-host APP_TS_BASE_URL=http://ts-host pnpm contract:diff:live
@@ -23,9 +23,9 @@ Java `/v3/api-docs` currently returns 500 because springdoc invokes an incompati
 
 | Job | Evidence |
 |---|---|
-| Quality | frozen install, Prisma generation, typecheck, all-source Vitest coverage, build, static inventories |
+| Quality | frozen install, Prisma generation, typecheck, all-source Vitest coverage, build, Java-baseline and static inventories |
 | Database integration | fresh MySQL migration, migration-history check, authenticated concurrent writes, row-count check, API restart, hydration/readback with Prisma enabled |
-| Runtime smoke | e2e, performance, and bounded load runs with `APP_PRISMA_ENABLED=true` against migrated MySQL |
+| Runtime smoke | e2e executes all 37 declared contract cases locally; CI also runs e2e, performance, and bounded load with `APP_PRISMA_ENABLED=true` against migrated MySQL |
 | Security and supply chain | canonical npm high/critical audit, Syft CycloneDX SBOM, CycloneDX CLI validation, artifact upload |
 | Docker and Compose | Compose model validation, Trivy high/critical configuration scan, final-image startup against MySQL, runtime hardening inspection, auth checks, Trivy high/critical image scan |
 | Helm | strict lint, deterministic render, Kubernetes schema validation with kubeconform |

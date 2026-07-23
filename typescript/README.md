@@ -29,7 +29,9 @@ LOAD_VUS=50 LOAD_DURATION_SECONDS=180 pnpm load:gate
 pnpm --filter @knowledgeops/api dev
 ```
 
-The `inventory:*` commands check that expected files, route fragments, table mappings, frontend path strings, rollout topics, and declared deployment settings remain represented. They are deliberately non-parity checks: they do not start Java, exercise a browser, apply a migration, execute CI, or prove runtime behavior.
+The `inventory:*` commands check that expected files, route fragments, table mappings, frontend path strings, rollout topics, and declared deployment settings remain represented. `inventory:java-baseline` additionally pins the 2026-07-21 Java baseline's 15 controller sources and 48 route declarations to explicit TypeScript source fragments, so a Java route change requires an intentional TypeScript mapping update. These are deliberately static checks: they do not start Java, exercise a browser, apply a migration, execute CI, or prove runtime equivalence.
+
+`e2e:smoke` runs the local fallback path without an external model, vector database, or search backend. In addition to the core upload/chat/session/evaluation journey, it executes all 37 declared contract cases against the TypeScript runtime. This proves the declared TypeScript demo surface is locally executable; it is not a Java-vs-TypeScript comparison.
 
 Database integration requires a fresh migrated MySQL database and explicitly enabled Prisma:
 
@@ -216,7 +218,7 @@ The Java oracle currently returns 500 for `/v3/api-docs` because springdoc calls
 
 ## CI Evidence
 
-The TypeScript workflow separates quality, MySQL integration, runtime smoke/load, dependency/SBOM, Docker/Compose/image, and Helm verification. Coverage includes all `src/**/*.ts` files, not only modules imported by tests. The shared package enforces 90% lines/statements/functions and 85% branches. The API currently ratchets at 40% lines, 39% statements, 32% functions, and 24% branches from the measured 2026-07-22 baseline of 40.00%, 39.02%, 32.50%, and 24.06%. Raise those thresholds as tests are added; the target remains 90% lines/statements/functions and 85% branches.
+The TypeScript workflow separates quality, MySQL integration, runtime smoke/load, dependency/SBOM, Docker/Compose/image, and Helm verification. Its static inventory gate includes the Java-baseline map (15 controller sources, 48 route declarations), implementation surface, contract cases, Prisma tables, frontend paths, cutover topics, and deployment settings. Runtime smoke executes all 37 declared local contract cases. Coverage includes all `src/**/*.ts` files, not only modules imported by tests. The shared package enforces 90% lines/statements/functions and 85% branches. The API currently ratchets at 40% lines, 39% statements, 32% functions, and 24% branches from the measured 2026-07-22 baseline of 40.00%, 39.02%, 32.50%, and 24.06%. Raise those thresholds as tests are added; the target remains 90% lines/statements/functions and 85% branches.
 
 CI generates the CycloneDX JSON SBOM with pinned Syft, validates it with a checksum-verified CycloneDX CLI, and uploads it. The checked-in hand-written `CycloneDX-lite` generator has been removed.
 

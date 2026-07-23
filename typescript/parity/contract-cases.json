@@ -85,7 +85,7 @@
     "label": "feedback submit",
     "method": "POST",
     "path": "/ai/feedback",
-    "body": { "chatId": "contract-react", "rating": 1 },
+    "body": { "chatId": "contract-react", "rating": 1, "answer": "contract feedback answer" },
     "expectStatus": 200,
     "tags": ["chat"]
   },
@@ -150,7 +150,7 @@
     "label": "session missing",
     "method": "GET",
     "path": "/ai/sessions/contract-missing-session",
-    "expectStatus": 200,
+    "expectStatus": 400,
     "tags": ["sessions", "negative"]
   },
   {
@@ -203,7 +203,7 @@
     "method": "POST",
     "path": "/ai/evaluation/datasets",
     "body": { "name": "" },
-    "expectStatus": 200,
+    "expectStatus": 400,
     "tags": ["evaluation", "negative"]
   },
   {
@@ -211,7 +211,7 @@
     "method": "POST",
     "path": "/ai/evaluation/runs",
     "body": { "modelProfile": "balanced" },
-    "expectStatus": 200,
+    "expectStatus": 400,
     "tags": ["evaluation", "negative"]
   },
   {

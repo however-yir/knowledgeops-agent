@@ -51,7 +51,7 @@ jobs:
       - name: Build
         working-directory: typescript
         run: pnpm build
-      - name: Static inventories
+      - name: Java-baseline and static inventories
         working-directory: typescript
         run: pnpm inventory:all
       - name: Upload coverage reports
