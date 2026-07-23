@@ -12,6 +12,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: java}
     spec:
+{{ include "knowledgeops-python.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: java
           image: "{{ .Values.java.image.repository }}:{{ .Values.java.image.tag }}"
@@ -52,6 +53,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: frontend}
     spec:
+{{ include "knowledgeops-python.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
@@ -69,10 +71,14 @@ spec:
               mountPath: /var/cache/nginx
             - name: run
               mountPath: /var/run
+            - name: config
+              mountPath: /etc/nginx/conf.d
       volumes:
         - name: cache
           emptyDir: {}
         - name: run
+          emptyDir: {}
+        - name: config
           emptyDir: {}
 ---
 apiVersion: v1

@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/however-yir/knowledgeops-agent-python
-  tag: latest
+  tag: python-rewrite
   pullPolicy: IfNotPresent
 
 api:
@@ -19,7 +19,7 @@ frontend:
   enabled: true
   image:
     repository: ghcr.io/however-yir/knowledgeops-agent-web
-    tag: latest
+    tag: python-rewrite
     pullPolicy: IfNotPresent
   replicas: 2
   servicePort: 80
@@ -87,3 +87,5 @@ config:
   APP_STORAGE_PATH: /var/lib/knowledgeops/files
 
 secretName: knowledgeops-python
+# Set this when the GHCR packages are private in the target cluster.
+imagePullSecrets: []

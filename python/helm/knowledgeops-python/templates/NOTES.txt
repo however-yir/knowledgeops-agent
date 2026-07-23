@@ -10,3 +10,7 @@ for Python while keeping model, identity and application credentials external.
 The Vue service proxies /api to Python by default. Set frontend.apiUpstream to
 {{ include "knowledgeops-python.fullname" . }}-java:{{ .Values.java.servicePort }} after enabling java.enabled
 to switch the same canonical UI to the independently deployed Java baseline.
+
+Python Rewrite CI publishes the Python and Vue images with both the commit SHA and
+the python-rewrite tag. If those GHCR packages are private, set imagePullSecrets to
+a Kubernetes registry credential, for example: [{name: ghcr-pull}].

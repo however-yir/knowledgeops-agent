@@ -12,6 +12,7 @@ spec:
       labels: {app.kubernetes.io/name: {{ include "knowledgeops-python.fullname" . }}, app.kubernetes.io/component: migrate}
     spec:
       restartPolicy: OnFailure
+{{ include "knowledgeops-python.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

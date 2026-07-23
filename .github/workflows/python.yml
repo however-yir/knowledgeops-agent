@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   python:
@@ -100,7 +101,19 @@ jobs:
             python/reports/**
 
       - name: Docker build
-        run: docker build -t knowledgeops-agent-python:ci python
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -t knowledgeops-agent-python:ci \
+            python
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -f frontend/Dockerfile \
+            -t knowledgeops-agent-web:ci \
+            .
 
       - name: Helm render gate
         run: |
@@ -121,6 +134,32 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+
+      - name: Login to GitHub Container Registry
+        if: github.ref == 'refs/heads/python-rewrite'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish deployment images
+        if: github.ref == 'refs/heads/python-rewrite'
+        env:
+          PYTHON_IMAGE: ghcr.io/${{ github.repository }}-python
+          WEB_IMAGE: ghcr.io/${{ github.repository }}-web
+        run: |
+          for image in "$PYTHON_IMAGE" "$WEB_IMAGE"; do
+            if [ "$image" = "$PYTHON_IMAGE" ]; then
+              local_image=knowledgeops-agent-python:ci
+            else
+              local_image=knowledgeops-agent-web:ci
+            fi
+            docker tag "$local_image" "$image:${GITHUB_SHA}"
+            docker tag "$local_image" "$image:python-rewrite"
+            docker push "$image:${GITHUB_SHA}"
+            docker push "$image:python-rewrite"
+          done
 
   cross-runtime-contract:
     name: Java/Python cross-runtime contract

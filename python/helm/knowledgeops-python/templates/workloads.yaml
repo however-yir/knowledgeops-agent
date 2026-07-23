@@ -11,6 +11,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: api}
     spec:
+{{ include "knowledgeops-python.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -69,6 +70,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: worker}
     spec:
+{{ include "knowledgeops-python.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: worker
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
