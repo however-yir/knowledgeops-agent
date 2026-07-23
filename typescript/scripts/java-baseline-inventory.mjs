@@ -92,6 +92,7 @@ let fieldIsoRepresentationCount = 0;
 let nestedTypeFieldCount = 0;
 let nestedTypeSameCount = 0;
 let nestedTypeDifferenceCount = 0;
+let primitiveRequiredFieldCount = 0;
 const javaMigrationTableColumns = new Map();
 const javaMigrationSchema = findJavaMigrationSchema();
 
@@ -364,7 +365,8 @@ for (const mapping of manifest.fieldMappings) {
   if (!mapping.typescriptType?.trim()) {
     fail(`${mapping.source} field mapping is missing its TypeScript DTO type`);
   }
-  const typescriptFields = findTypescriptInterfaceFields(typescriptSource, mapping.typescriptType);
+  const typescriptProperties = findTypescriptInterfaceProperties(typescriptSource, mapping.typescriptType);
+  const typescriptFields = new Map([...typescriptProperties].map(([field, property]) => [field, property.type]));
   const nestedTypeMappings = new Map();
   for (const nestedMapping of mapping.nestedTypeMappings ?? []) {
     if (!nestedMapping.note?.trim() || nestedMapping.relationship !== "intentional_difference") {
@@ -379,6 +381,7 @@ for (const mapping of manifest.fieldMappings) {
   const usedNestedTypeMappings = new Set();
   for (const field of mapping.sameFields) {
     assertFieldTypeFamily(javaSource, typescriptFields, field, field, mapping);
+    assertPrimitiveFieldRequired(javaSource, typescriptProperties, field, field, mapping);
     assertNestedTypeFamily(javaSource, typescriptFields, field, field, mapping, nestedTypeMappings, usedNestedTypeMappings);
   }
   for (const transform of mapping.transforms ?? []) {
@@ -386,6 +389,7 @@ for (const mapping of manifest.fieldMappings) {
       fail(`${mapping.source} field transform requires a renamed field and an explanatory note`);
     }
     assertFieldTypeFamily(javaSource, typescriptFields, transform.java, transform.typescript, mapping);
+    assertPrimitiveFieldRequired(javaSource, typescriptProperties, transform.java, transform.typescript, mapping);
     assertNestedTypeFamily(javaSource, typescriptFields, transform.java, transform.typescript, mapping, nestedTypeMappings, usedNestedTypeMappings);
   }
   for (const key of nestedTypeMappings.keys()) {
@@ -396,7 +400,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript with ${fieldTypeFamilyCount} verified type families and ${nestedTypeFieldCount} verified collection/key-value shapes (${nestedTypeSameCount} same, ${nestedTypeDifferenceCount} documented differences, ${fieldIsoRepresentationCount} documented ISO-8601 representations; ${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript with ${fieldTypeFamilyCount} verified type families, ${nestedTypeFieldCount} verified collection/key-value shapes (${nestedTypeSameCount} same, ${nestedTypeDifferenceCount} documented differences), and ${primitiveRequiredFieldCount} required non-null primitive fields (${fieldIsoRepresentationCount} documented ISO-8601 representations; ${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -775,6 +779,18 @@ function assertNestedTypeFamily(javaSource, typescriptFields, javaField, typescr
   nestedTypeDifferenceCount += 1;
 }
 
+function assertPrimitiveFieldRequired(javaSource, typescriptProperties, javaField, typescriptField, mapping) {
+  const javaType = findJavaFieldType(javaSource, javaField, `${mapping.source} Java field`);
+  if (!/^(byte|short|int|long|float|double|boolean)$/.test(javaType)) {
+    return;
+  }
+  const property = typescriptProperties.get(typescriptField);
+  if (!property || property.optional || typeAllowsNull(property.type)) {
+    fail(`${mapping.source} ${javaField} is a non-null Java primitive but TypeScript ${typescriptField} is optional or nullable`);
+  }
+  primitiveRequiredFieldCount += 1;
+}
+
 function findJavaFieldType(source, field, label) {
   const match = source.match(new RegExp(`^\\s*private\\s+(?!static\\b)([^;=]+?)\\s+${escapeRegex(field)}\\s*;\\s*$`, "m"));
   if (!match) {
@@ -783,7 +799,7 @@ function findJavaFieldType(source, field, label) {
   return match[1].trim();
 }
 
-function findTypescriptInterfaceFields(source, typeName, seen = new Set()) {
+function findTypescriptInterfaceProperties(source, typeName, seen = new Set()) {
   if (seen.has(typeName)) {
     fail(`TypeScript interface inheritance cycle: ${[...seen, typeName].join(" -> ")}`);
   }
@@ -793,18 +809,18 @@ function findTypescriptInterfaceFields(source, typeName, seen = new Set()) {
   }
   const openBrace = declaration.index + declaration[0].lastIndexOf("{");
   const closeBrace = findMatchingBrace(source, openBrace);
-  const fields = new Map();
+  const properties = new Map();
   const parents = declaration[1]?.split(",").map((parent) => parent.trim().replace(/<.*>/, "")).filter(Boolean) ?? [];
   for (const parent of parents) {
-    for (const [field, type] of findTypescriptInterfaceFields(source, parent, new Set([...seen, typeName]))) {
-      fields.set(field, type);
+    for (const [field, property] of findTypescriptInterfaceProperties(source, parent, new Set([...seen, typeName]))) {
+      properties.set(field, property);
     }
   }
   const body = source.slice(openBrace + 1, closeBrace);
-  for (const match of body.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\??\s*:\s*([^;\n]+);/gm)) {
-    fields.set(match[1], match[2].trim());
+  for (const match of body.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)(\?)?\s*:\s*([^;\n]+);/gm)) {
+    properties.set(match[1], { optional: Boolean(match[2]), type: match[3].trim() });
   }
-  return fields;
+  return properties;
 }
 
 function findMatchingBrace(source, openBrace) {
@@ -868,6 +884,10 @@ function typescriptTypeFamily(type) {
     return "text";
   }
   return "structured";
+}
+
+function typeAllowsNull(type) {
+  return splitTopLevel(type, "|").some((part) => part.trim() === "null" || part.trim() === "undefined");
 }
 
 function javaTypeShape(type) {
