@@ -8,6 +8,7 @@ on:
       - "docker-compose.python.yml"
       - "docker-compose.contract.yml"
       - "python/helm/**"
+      - "frontend/**"
       - ".github/workflows/python.yml"
   workflow_dispatch:
 
@@ -161,9 +162,59 @@ jobs:
             docker push "$image:python-rewrite"
           done
 
+  frontend-e2e:
+    name: Vue / Python canonical E2E
+    needs: python
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: knowledgeops-frontend-${{ github.run_id }}
+      FRONTEND_BASE_URL: http://localhost:8088
+      E2E_API_KEY: local-demo-api-key
+      E2E_TENANT_ID: public
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Start isolated Python platform and Vue frontend
+        run: docker compose -f docker-compose.python.yml up --build -d --wait --wait-timeout 240
+
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Vue against the Python canonical upstream
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Collect frontend E2E evidence
+        if: always()
+        run: |
+          mkdir -p reports/frontend-e2e
+          docker compose -f docker-compose.python.yml ps > reports/frontend-e2e/docker-ps.txt || true
+          docker compose -f docker-compose.python.yml logs --no-color > reports/frontend-e2e/docker-logs.txt || true
+
+      - name: Upload frontend E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-frontend-e2e-evidence
+          path: |
+            frontend/playwright-report/**
+            frontend/test-results/**
+            reports/frontend-e2e/**
+
+      - name: Shutdown isolated Python platform
+        if: always()
+        run: docker compose -f docker-compose.python.yml down -v --remove-orphans
+
   cross-runtime-contract:
     name: Java/Python cross-runtime contract
-    needs: python
+    needs: [python, frontend-e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

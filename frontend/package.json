@@ -13,7 +13,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,vue,css}\"",
     "type-check": "vue-tsc --noEmit",
     "typecheck": "vue-tsc --noEmit",
-    "ci": "npm run lint && npm run format:check && npm run typecheck"
+    "ci": "npm run lint && npm run format:check && npm run typecheck",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -27,6 +28,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
     "@vitejs/plugin-vue": "^5.2.4",
+    "@playwright/test": "1.61.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^9.28.0",
