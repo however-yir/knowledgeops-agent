@@ -213,6 +213,29 @@
     { "source": "src/main/java/com/enterprise/iqk/security/ApiKeyLifecycleService.java", "typescriptSource": "apps/api/src/auth/auth.service.ts", "typescriptFragment": "issueApiKey(" },
     { "source": "src/main/java/com/enterprise/iqk/llm/ModelRouter.java", "typescriptSource": "apps/api/src/platform/model-router.service.ts", "typescriptFragment": "export class ModelRouterService" }
   ],
+  "securityMappings": [
+    { "source": "src/main/java/com/enterprise/iqk/security/ApiKeyAuthService.java", "typescriptSource": "apps/api/src/auth/auth.service.ts", "typescriptFragments": ["authenticateApiKey("] },
+    { "source": "src/main/java/com/enterprise/iqk/security/ApiKeyLifecycleService.java", "typescriptSource": "apps/api/src/auth/auth.service.ts", "typescriptFragments": ["issueApiKey(", "rotateApiKey(", "revokeApiKey("] },
+    { "source": "src/main/java/com/enterprise/iqk/security/ApiKeyOrJwtAuthFilter.java", "typescriptSource": "apps/api/src/auth/auth.guard.ts", "typescriptFragments": ["export class AuthGuard", "parseJwt(", "authenticateApiKey("] },
+    { "source": "src/main/java/com/enterprise/iqk/security/AuditLogFilter.java", "typescriptSource": "apps/api/src/auth/audit.middleware.ts", "typescriptFragments": ["export class AuditLogMiddleware"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/AuditRetentionScheduler.java", "typescriptSource": "apps/api/src/auth/audit-retention.worker.ts", "typescriptFragments": ["export class AuditRetentionWorker"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/AuthIdentity.java", "typescriptSource": "apps/api/src/platform/platform.store.ts", "typescriptFragments": ["export interface AuthIdentity"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/DefaultFileSafetyScanner.java", "typescriptSource": "apps/api/src/ingestion/ingestion.service.ts", "typescriptFragments": ["APP_ALLOWED_UPLOAD_MIME_TYPES", "EICAR-STANDARD-ANTIVIRUS-TEST-FILE"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/FileSafetyScanner.java", "typescriptSource": "apps/api/src/ingestion/ingestion.service.ts", "typescriptFragments": ["function scanFile"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/HttpMetricsFilter.java", "typescriptSource": "apps/api/src/auth/http-metrics.middleware.ts", "typescriptFragments": ["export class HttpMetricsMiddleware"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/JwtService.java", "typescriptSource": "apps/api/src/auth/auth.service.ts", "typescriptFragments": ["parseJwt(", "jwt.sign"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/MaskingUtils.java", "typescriptSource": "apps/api/src/auth/audit.middleware.ts", "typescriptFragments": ["function safeQuery"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/PermissionService.java", "typescriptSource": "apps/api/src/auth/auth.guard.ts", "typescriptFragments": ["function requiredAuthorities"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/RateLimitFilter.java", "typescriptSource": "apps/api/src/auth/rate-limit.middleware.ts", "typescriptFragments": ["export class RateLimitMiddleware"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/RefreshTokenService.java", "typescriptSource": "apps/api/src/auth/auth.service.ts", "typescriptFragments": ["async refresh("] },
+    { "source": "src/main/java/com/enterprise/iqk/security/RequestContextFilter.java", "typescriptSource": "apps/api/src/common/request-context.ts", "typescriptFragments": ["export interface RequestContext"] },
+    { "source": "src/main/java/com/enterprise/iqk/security/TenantContext.java", "typescriptSource": "apps/api/src/common/tenant.ts", "typescriptFragments": ["export function normalizeTenant"] }
+  ],
+  "securityWiring": {
+    "source": "src/main/java/com/enterprise/iqk/config/SecurityConfiguration.java",
+    "typescriptSource": "apps/api/src/auth/auth.module.ts",
+    "typescriptFragments": ["consumer.apply(SecurityHeadersMiddleware, AuthContextMiddleware, HttpMetricsMiddleware, RateLimitMiddleware, AuditLogMiddleware)", "provide: APP_GUARD", "useClass: AuthGuard"]
+  },
   "configurationMappings": [
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaPrefix": "app.agent-harness", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_AGENT_HARNESS_TRUSTED_ENABLED", "APP_WORKSPACE_WRITE_ENABLED", "APP_WORKSPACE_SHELL_ENABLED", "APP_WORKSPACE_COMMAND_TIMEOUT_SECONDS", "APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES", "APP_WORKSPACE_ALLOWED_COMMANDS", "APP_WORKSPACE_ALLOWED_GIT_SUBCOMMANDS", "APP_MCP_SERVERS_JSON"] },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AuditProperties.java", "javaPrefix": "app.audit", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_AUDIT_RETENTION_DAYS"] },

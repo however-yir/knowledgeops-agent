@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const repoRoot = join(root, "..");
 const javaRoot = join(repoRoot, "src", "main", "java");
+const javaSecurityRoot = join(javaRoot, "com", "enterprise", "iqk", "security");
 const javaMigrationRoot = join(repoRoot, "src", "main", "resources", "db", "migration");
 const manifest = JSON.parse(readFileSync(join(root, "parity", "java-baseline.json"), "utf8"));
 const prismaSchema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
@@ -28,6 +29,10 @@ const expectedConfigurationSources = manifest.configurationMappings.map((mapping
 const actualConfigurationSources = findSources(javaRoot, (path) => readFileSync(path, "utf8").includes("@ConfigurationProperties("))
   .map((path) => relative(repoRoot, path))
   .sort();
+const expectedSecuritySources = manifest.securityMappings.map((mapping) => mapping.source).sort();
+const actualSecuritySources = findSources(javaSecurityRoot, () => true)
+  .map((path) => relative(repoRoot, path))
+  .sort();
 const javaSourcesByBasename = new Map();
 for (const path of findSources(javaRoot, () => true)) {
   const name = basename(path);
@@ -43,6 +48,7 @@ let persistenceEntityCount = 0;
 let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
 let configurationFragmentCount = 0;
+let securityFragmentCount = 0;
 const javaMigrationTableColumns = new Map();
 
 assertSameSet("Java controller baseline", expectedControllers, actualControllers);
@@ -50,6 +56,7 @@ assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
 assertSameSet("Java mapper baseline", expectedMappers, actualMappers);
 assertSameSet("Java migration baseline", expectedMigrations, actualMigrations);
 assertSameSet("Java configuration-properties baseline", expectedConfigurationSources, actualConfigurationSources);
+assertSameSet("Java security-source baseline", expectedSecuritySources, actualSecuritySources);
 assertSameSet("Java DTO field baseline", expectedFieldDtos, actualFieldDtos);
 
 let routeCount = 0;
@@ -112,6 +119,24 @@ for (const configuration of manifest.configurationMappings) {
     assertIncludes(typescriptSource, fragment, `${configuration.source} TypeScript configuration mapping`);
     configurationFragmentCount += 1;
   }
+}
+
+for (const security of manifest.securityMappings) {
+  const javaSource = readFileSync(join(repoRoot, security.source), "utf8");
+  const typescriptSource = readFileSync(join(root, security.typescriptSource), "utf8");
+  assertIncludes(javaSource, basename(security.source, ".java"), `${security.source} Java security source`);
+  for (const fragment of security.typescriptFragments) {
+    assertIncludes(typescriptSource, fragment, `${security.source} TypeScript security mapping`);
+    securityFragmentCount += 1;
+  }
+}
+
+const securityWiringJavaSource = readFileSync(join(repoRoot, manifest.securityWiring.source), "utf8");
+const securityWiringTypescriptSource = readFileSync(join(root, manifest.securityWiring.typescriptSource), "utf8");
+assertIncludes(securityWiringJavaSource, "class SecurityConfiguration", `${manifest.securityWiring.source} Java security wiring`);
+for (const fragment of manifest.securityWiring.typescriptFragments) {
+  assertIncludes(securityWiringTypescriptSource, fragment, `${manifest.securityWiring.source} TypeScript security wiring`);
+  securityFragmentCount += 1;
 }
 
 for (const mapping of manifest.persistenceMappings) {
@@ -199,7 +224,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
