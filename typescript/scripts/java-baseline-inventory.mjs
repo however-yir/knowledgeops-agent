@@ -361,6 +361,14 @@ for (const mapping of manifest.fieldMappings) {
     fail(`${mapping.source} field mapping is not a declared Java DTO mapping`);
   }
   const javaSource = readFileSync(join(repoRoot, mapping.source), "utf8");
+  const mappedJavaFields = [
+    ...mapping.sameFields,
+    ...(mapping.transforms ?? []).map((transform) => transform.java)
+  ];
+  if (new Set(mappedJavaFields).size !== mappedJavaFields.length) {
+    fail(`${mapping.source} field mapping contains duplicate Java fields`);
+  }
+  assertSameSet(`${mapping.source} Java DTO field mapping`, findJavaInstanceFields(javaSource).sort(), [...mappedJavaFields].sort());
   const typescriptSource = readFileSync(join(root, mapping.typescriptSource), "utf8");
   if (!mapping.typescriptType?.trim()) {
     fail(`${mapping.source} field mapping is missing its TypeScript DTO type`);
