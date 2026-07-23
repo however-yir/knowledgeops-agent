@@ -25,6 +25,8 @@ test('Vue uses the Python canonical API through the switchable /api upstream', a
   );
   await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect((await streamResponse).ok()).toBeTruthy();
-  await expect(page.getByText(question, { exact: true })).toBeVisible();
+  await expect(
+    page.locator('article.message-row.user p.plain', { hasText: question }),
+  ).toBeVisible();
   await expect(page.getByText('KnowledgeOps Python', { exact: false })).toBeVisible();
 });
