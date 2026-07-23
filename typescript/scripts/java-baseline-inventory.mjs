@@ -8,6 +8,7 @@ const javaRoot = join(repoRoot, "src", "main", "java");
 const javaMigrationRoot = join(repoRoot, "src", "main", "resources", "db", "migration");
 const manifest = JSON.parse(readFileSync(join(root, "parity", "java-baseline.json"), "utf8"));
 const prismaSchema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
+const prismaPhysicalTables = findPrismaPhysicalTables();
 const expectedControllers = manifest.controllers.map((controller) => controller.source).sort();
 const actualControllers = findJavaControllers(javaRoot).map((path) => relative(repoRoot, path)).sort();
 const expectedDtos = manifest.dtoMappings.map((dto) => dto.source).sort();
@@ -42,6 +43,7 @@ let persistenceEntityCount = 0;
 let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
 let configurationFragmentCount = 0;
+const javaMigrationTableColumns = new Map();
 
 assertSameSet("Java controller baseline", expectedControllers, actualControllers);
 assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
@@ -152,6 +154,29 @@ for (const migration of manifest.migrationMappings) {
   if (!existsSync(join(root, migration.typescriptSource))) {
     fail(`${migration.source} is missing TypeScript migration: ${migration.typescriptSource}`);
   }
+  for (const [table, fields] of findJavaMigrationTableColumns(readFileSync(join(repoRoot, migration.source), "utf8"))) {
+    const knownFields = javaMigrationTableColumns.get(table) ?? new Set();
+    for (const field of fields) {
+      knownFields.add(field);
+    }
+    javaMigrationTableColumns.set(table, knownFields);
+  }
+}
+
+let migrationTableCount = 0;
+let migrationColumnCount = 0;
+for (const [table, fields] of javaMigrationTableColumns) {
+  const prismaFields = prismaPhysicalTables.get(table);
+  if (!prismaFields) {
+    fail(`Java migration table ${table} is missing from Prisma physical mappings`);
+  }
+  for (const field of fields) {
+    if (!prismaFields.has(field)) {
+      fail(`Java migration column ${table}.${field} is missing from Prisma physical mappings`);
+    }
+  }
+  migrationTableCount += 1;
+  migrationColumnCount += fields.size;
 }
 
 for (const mapping of manifest.fieldMappings) {
@@ -174,7 +199,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -225,6 +250,45 @@ function findPrismaModelFields(model) {
     fail(`missing Prisma model body: ${model}`);
   }
   return new Set([...match[1].matchAll(/^\s{2}([A-Za-z][A-Za-z0-9_]*)\s/gm)].map((field) => field[1]));
+}
+
+function findPrismaPhysicalTables() {
+  const tables = new Map();
+  for (const match of prismaSchema.matchAll(/model\s+[A-Za-z][A-Za-z0-9_]*\s*\{([\s\S]*?)\n\s*@@map\("([^"]+)"\)\n\}/g)) {
+    const [, body, table] = match;
+    const fields = new Set();
+    for (const line of body.split("\n")) {
+      const field = line.match(/^\s{2}([A-Za-z][A-Za-z0-9_]*)\s+\S+(.*)$/);
+      if (field) {
+        fields.add(field[2].match(/@map\("([^"]+)"\)/)?.[1] ?? field[1]);
+      }
+    }
+    tables.set(table, fields);
+  }
+  return tables;
+}
+
+function findJavaMigrationTableColumns(source) {
+  const tables = new Map();
+  const ignoredDefinitions = new Set(["PRIMARY", "UNIQUE", "KEY", "INDEX", "CONSTRAINT", "FOREIGN", "CHECK"]);
+  for (const match of source.matchAll(/CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+`?([a-z][a-z0-9_]*)`?\s*\(([\s\S]*?)\n\);/gi)) {
+    const [, table, body] = match;
+    const fields = new Set();
+    for (const line of body.split("\n")) {
+      const field = line.trim().match(/^`?([a-z][a-z0-9_]*)`?\s+[A-Z]/i)?.[1];
+      if (field && !ignoredDefinitions.has(field.toUpperCase())) {
+        fields.add(field);
+      }
+    }
+    tables.set(table, fields);
+  }
+  for (const match of source.matchAll(/ALTER\s+TABLE\s+`?([a-z][a-z0-9_]*)`?\s+ADD\s+COLUMN\s+`?([a-z][a-z0-9_]*)`?/gi)) {
+    const [, table, field] = match;
+    const fields = tables.get(table) ?? new Set();
+    fields.add(field);
+    tables.set(table, fields);
+  }
+  return tables;
 }
 
 function assertTypescriptField(source, field, label) {
