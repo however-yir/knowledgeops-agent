@@ -45,6 +45,19 @@ const expectedSecuritySources = manifest.securityMappings.map((mapping) => mappi
 const actualSecuritySources = findSources(javaSecurityRoot, () => true)
   .map((path) => relative(repoRoot, path))
   .sort();
+const allJavaSources = findSources(javaRoot, (path) => path.endsWith(".java"))
+  .map((path) => relative(repoRoot, path))
+  .sort();
+const explicitlyMappedJavaSources = new Set([
+  ...manifest.controllers.map((mapping) => mapping.source),
+  ...manifest.dtoMappings.map((mapping) => mapping.source),
+  ...manifest.serviceMappings.map((mapping) => mapping.source),
+  ...manifest.configurationMappings.map((mapping) => mapping.source),
+  ...manifest.crossCuttingMappings.map((mapping) => mapping.source),
+  ...manifest.securityMappings.map((mapping) => mapping.source),
+  ...manifest.persistenceMappings.map((mapping) => mapping.source),
+  manifest.securityWiring.source
+]);
 const javaSourcesByBasename = new Map();
 for (const path of findSources(javaRoot, () => true)) {
   const name = basename(path);
@@ -61,6 +74,8 @@ let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
 let configurationFragmentCount = 0;
 let crossCuttingFragmentCount = 0;
+let responsibilityGroupSourceCount = 0;
+let responsibilityGroupAnchorCount = 0;
 let securityFragmentCount = 0;
 const javaMigrationTableColumns = new Map();
 
@@ -144,6 +159,30 @@ for (const crossCutting of manifest.crossCuttingMappings) {
     crossCuttingFragmentCount += 1;
   }
 }
+
+for (const group of manifest.responsibilityGroupMappings) {
+  const javaDirectory = join(repoRoot, group.javaDirectory);
+  if (!existsSync(javaDirectory)) {
+    fail(`${group.javaDirectory} Java responsibility directory is missing`);
+  }
+  const groupSources = findSources(javaDirectory, (path) => path.endsWith(".java"));
+  if (groupSources.length === 0) {
+    fail(`${group.javaDirectory} Java responsibility directory has no sources`);
+  }
+  responsibilityGroupSourceCount += groupSources.length;
+  for (const source of groupSources) {
+    explicitlyMappedJavaSources.add(relative(repoRoot, source));
+  }
+  for (const anchor of group.typescriptAnchors) {
+    const typescriptSource = readFileSync(join(root, anchor.source), "utf8");
+    for (const fragment of anchor.fragments) {
+      assertIncludes(typescriptSource, fragment, `${group.javaDirectory} TypeScript responsibility-group mapping`);
+      responsibilityGroupAnchorCount += 1;
+    }
+  }
+}
+
+assertSameSet("Java production-source responsibility baseline", allJavaSources, [...explicitlyMappedJavaSources].sort());
 
 for (const security of manifest.securityMappings) {
   const javaSource = readFileSync(join(repoRoot, security.source), "utf8");
@@ -248,7 +287,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {

@@ -267,6 +267,20 @@
     { "source": "src/main/java/com/enterprise/iqk/util/HashUtils.java", "typescriptSource": "apps/api/src/platform/platform.store.ts", "typescriptFragments": ["export function sha256Hex"] },
     { "source": "src/main/java/com/enterprise/iqk/utils/VectorDistanceUtils.java", "typescriptSource": "apps/api/src/common/text.ts", "typescriptFragments": ["export function cosineSimilarity"] }
   ],
+  "responsibilityGroupMappings": [
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/agent/harness", "typescriptAnchors": [{ "source": "apps/api/src/agent/harness.controller.ts", "fragments": ["export class HarnessController", "action: \"query_course\""] }, { "source": "apps/api/src/agent/mcp.client.ts", "fragments": ["export class McpClient"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/agent/research", "typescriptAnchors": [{ "source": "apps/api/src/workflow/workflow.service.ts", "fragments": ["executeResearch("] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/agent/workflow", "typescriptAnchors": [{ "source": "apps/api/src/workflow/workflow.service.ts", "fragments": ["export class WorkflowService"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/domain", "typescriptAnchors": [{ "source": "apps/api/src/platform/platform.store.ts", "fragments": ["export class PlatformStore"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/evaluation", "typescriptAnchors": [{ "source": "apps/api/src/evaluation/evaluation.service.ts", "fragments": ["export class EvaluationService"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/graph", "typescriptAnchors": [{ "source": "apps/api/src/operations/operations.controller.ts", "fragments": ["graphEntities("] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/ingestion", "typescriptAnchors": [{ "source": "apps/api/src/ingestion/ingestion.service.ts", "fragments": ["export class IngestionService"] }, { "source": "apps/api/src/ingestion/ingestion.queue.ts", "fragments": ["export class IngestionQueueService"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/memory", "typescriptAnchors": [{ "source": "apps/api/src/operations/operations.controller.ts", "fragments": ["memoryContext("] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/rag", "typescriptAnchors": [{ "source": "apps/api/src/ai/rag.service.ts", "fragments": ["export class RagService"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/repository", "typescriptAnchors": [{ "source": "apps/api/src/history/history.service.ts", "fragments": ["export class HistoryService"] }, { "source": "apps/api/src/ingestion/ingestion.service.ts", "fragments": ["latestFileForChat("] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/retrieval", "typescriptAnchors": [{ "source": "apps/api/src/ai/retrieval.service.ts", "fragments": ["export class RetrievalService"] }] },
+    { "javaDirectory": "src/main/java/com/enterprise/iqk/service", "typescriptAnchors": [{ "source": "apps/api/src/platform/business-tools.service.ts", "fragments": ["query_course"] }, { "source": "apps/api/src/ai/react.service.ts", "fragments": ["export class ReactService"] }] }
+  ],
   "persistenceMappings": [
     { "source": "src/main/java/com/enterprise/iqk/agent/workflow/AgentEventMapper.java", "typescriptModel": "AgentEvent" },
     { "source": "src/main/java/com/enterprise/iqk/agent/workflow/AgentStepMapper.java", "typescriptModel": "AgentStep" },
