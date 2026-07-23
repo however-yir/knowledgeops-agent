@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const repoRoot = join(root, "..");
 const javaRoot = join(repoRoot, "src", "main", "java");
+const javaPackageRoot = join(javaRoot, "com", "enterprise", "iqk");
+const javaConfigRoot = join(javaPackageRoot, "config");
 const javaSecurityRoot = join(javaRoot, "com", "enterprise", "iqk", "security");
 const javaMigrationRoot = join(repoRoot, "src", "main", "resources", "db", "migration");
 const manifest = JSON.parse(readFileSync(join(root, "parity", "java-baseline.json"), "utf8"));
@@ -29,6 +31,16 @@ const expectedConfigurationSources = manifest.configurationMappings.map((mapping
 const actualConfigurationSources = findSources(javaRoot, (path) => readFileSync(path, "utf8").includes("@ConfigurationProperties("))
   .map((path) => relative(repoRoot, path))
   .sort();
+const expectedCrossCuttingSources = manifest.crossCuttingMappings.map((mapping) => mapping.source).sort();
+const actualCrossCuttingSources = [
+  join(javaPackageRoot, "App.java"),
+  ...findSources(javaConfigRoot, (path) => !relative(javaConfigRoot, path).startsWith("properties/") && basename(path) !== "SecurityConfiguration.java"),
+  join(javaPackageRoot, "constants", "SystemConstants.java"),
+  join(javaPackageRoot, "controller", "GlobalExceptionHandler.java"),
+  ...findSources(join(javaPackageRoot, "tools"), () => true),
+  ...findSources(join(javaPackageRoot, "util"), () => true),
+  ...findSources(join(javaPackageRoot, "utils"), () => true)
+].map((path) => relative(repoRoot, path)).sort();
 const expectedSecuritySources = manifest.securityMappings.map((mapping) => mapping.source).sort();
 const actualSecuritySources = findSources(javaSecurityRoot, () => true)
   .map((path) => relative(repoRoot, path))
@@ -48,6 +60,7 @@ let persistenceEntityCount = 0;
 let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
 let configurationFragmentCount = 0;
+let crossCuttingFragmentCount = 0;
 let securityFragmentCount = 0;
 const javaMigrationTableColumns = new Map();
 
@@ -56,6 +69,7 @@ assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
 assertSameSet("Java mapper baseline", expectedMappers, actualMappers);
 assertSameSet("Java migration baseline", expectedMigrations, actualMigrations);
 assertSameSet("Java configuration-properties baseline", expectedConfigurationSources, actualConfigurationSources);
+assertSameSet("Java cross-cutting-source baseline", expectedCrossCuttingSources, actualCrossCuttingSources);
 assertSameSet("Java security-source baseline", expectedSecuritySources, actualSecuritySources);
 assertSameSet("Java DTO field baseline", expectedFieldDtos, actualFieldDtos);
 
@@ -118,6 +132,16 @@ for (const configuration of manifest.configurationMappings) {
   for (const fragment of configuration.typescriptFragments) {
     assertIncludes(typescriptSource, fragment, `${configuration.source} TypeScript configuration mapping`);
     configurationFragmentCount += 1;
+  }
+}
+
+for (const crossCutting of manifest.crossCuttingMappings) {
+  const javaSource = readFileSync(join(repoRoot, crossCutting.source), "utf8");
+  const typescriptSource = readFileSync(join(root, crossCutting.typescriptSource), "utf8");
+  assertIncludes(javaSource, basename(crossCutting.source, ".java"), `${crossCutting.source} Java cross-cutting source`);
+  for (const fragment of crossCutting.typescriptFragments) {
+    assertIncludes(typescriptSource, fragment, `${crossCutting.source} TypeScript cross-cutting mapping`);
+    crossCuttingFragmentCount += 1;
   }
 }
 
@@ -224,7 +248,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {

@@ -249,6 +249,24 @@
     { "source": "src/main/java/com/enterprise/iqk/config/properties/VectorStoreProperties.java", "javaPrefix": "app.vector-store", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_VECTOR_BACKEND", "APP_PGVECTOR_URL", "APP_PGVECTOR_SCHEMA", "APP_PGVECTOR_TABLE", "APP_PGVECTOR_DIMENSIONS"] },
     { "source": "src/main/java/com/enterprise/iqk/retrieval/web/WebSearchProperties.java", "javaPrefix": "app.web-search", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_WEB_SEARCH_ENABLED", "APP_WEB_SEARCH_BACKEND", "APP_WEB_SEARCH_SEARXNG_URL", "APP_WEB_SEARCH_BING_API_KEY", "APP_WEB_SEARCH_BING_ENDPOINT", "APP_WEB_SEARCH_MAX_RESULTS", "APP_WEB_SEARCH_TIMEOUT_MS"] }
   ],
+  "crossCuttingMappings": [
+    { "source": "src/main/java/com/enterprise/iqk/App.java", "typescriptSource": "apps/api/src/main.ts", "typescriptFragments": ["async function bootstrap"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/AppStartupValidator.java", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["export function validateRuntimeConfig"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/CommonConfiguration.java", "typescriptSource": "apps/api/src/app.module.ts", "typescriptFragments": ["export class AppModule"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/CorsConfiguration.java", "typescriptSource": "apps/api/src/main.ts", "typescriptFragments": ["await app.register(cors"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/IngestionQueueConfiguration.java", "typescriptSource": "apps/api/src/ingestion/ingestion.module.ts", "typescriptFragments": ["IngestionQueueService"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/MysqlChatMemory.java", "typescriptSource": "apps/api/src/history/history.service.ts", "typescriptFragments": ["export class HistoryService", "buildConversationId"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/OpenApiConfiguration.java", "typescriptSource": "apps/api/src/health/openapi.controller.ts", "typescriptFragments": ["apiDocs()", "Intelligent Q&A Knowledge Platform API"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/ResilienceConfiguration.java", "typescriptSource": "apps/api/src/ai/llm.client.ts", "typescriptFragments": ["async function retryingFetch", "AbortSignal.timeout"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/SecurityHeadersFilter.java", "typescriptSource": "apps/api/src/auth/security-headers.middleware.ts", "typescriptFragments": ["export class SecurityHeadersMiddleware"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/VectorStoreConfiguration.java", "typescriptSource": "apps/api/src/ai/vector.client.ts", "typescriptFragments": ["export class VectorClient", "APP_VECTOR_BACKEND"] },
+    { "source": "src/main/java/com/enterprise/iqk/constants/SystemConstants.java", "typescriptSource": "apps/api/src/ai/ai.controller.ts", "typescriptFragments": ["All(\"ai/service\")"] },
+    { "source": "src/main/java/com/enterprise/iqk/controller/GlobalExceptionHandler.java", "typescriptSource": "apps/api/src/common/api-exception.filter.ts", "typescriptFragments": ["export class ApiExceptionFilter"] },
+    { "source": "src/main/java/com/enterprise/iqk/tools/CourseTools.java", "typescriptSource": "apps/api/src/agent/harness.controller.ts", "typescriptFragments": ["action: \"query_course\""] },
+    { "source": "src/main/java/com/enterprise/iqk/util/ConversationIdHelper.java", "typescriptSource": "apps/api/src/history/history.service.ts", "typescriptFragments": ["export function buildConversationId"] },
+    { "source": "src/main/java/com/enterprise/iqk/util/HashUtils.java", "typescriptSource": "apps/api/src/platform/platform.store.ts", "typescriptFragments": ["export function sha256Hex"] },
+    { "source": "src/main/java/com/enterprise/iqk/utils/VectorDistanceUtils.java", "typescriptSource": "apps/api/src/common/text.ts", "typescriptFragments": ["export function cosineSimilarity"] }
+  ],
   "persistenceMappings": [
     { "source": "src/main/java/com/enterprise/iqk/agent/workflow/AgentEventMapper.java", "typescriptModel": "AgentEvent" },
     { "source": "src/main/java/com/enterprise/iqk/agent/workflow/AgentStepMapper.java", "typescriptModel": "AgentStep" },
