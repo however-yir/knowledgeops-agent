@@ -91,7 +91,13 @@
     "label": "feedback submit",
     "method": "POST",
     "path": "/ai/feedback",
-    "body": {"chatId": "contract-react", "rating": 5, "comment": "contract smoke"},
+    "body": {
+      "chatId": "contract-react",
+      "rating": 5,
+      "comment": "contract smoke",
+      "question": "What does the contract test verify?",
+      "answer": "The contract test verifies the canonical API behavior."
+    },
     "expectStatus": 200,
     "fields": ["ok", "msg"]
   },
@@ -363,7 +369,12 @@
     "method": "POST",
     "path": "/ingestion/upload/contract-ingestion",
     "headers": {"X-Idempotency-Key": "contract-ingestion-key"},
-    "multipart": {"field": "file", "filename": "contract.txt", "content": "contract ingestion fixture", "contentType": "text/plain"},
+    "multipart": {
+      "field": "file",
+      "filename": "contract.pdf",
+      "content": "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n",
+      "contentType": "application/pdf"
+    },
     "expectStatus": 200,
     "fields": ["ok", "msg", "job.jobId", "job.chatId", "job.status"],
     "captures": {"ingestionJobId": "job.jobId"}
