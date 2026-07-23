@@ -7,7 +7,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from knowledgeops_py.scripts.cross_runtime_contract import compare_case, request_contract_case
+from knowledgeops_py.scripts.cross_runtime_contract import (
+    capture_response,
+    compare_case,
+    missing_manifest_routes,
+    render_value,
+    request_contract_case,
+)
 
 
 def response(status: int, *, body: str = "", json_data: object | None = None) -> httpx.Response:
@@ -87,3 +93,23 @@ def test_cross_runtime_provider_failure_matches_java_planner_fallback() -> None:
     provider_failure = next(case for case in cases if case["label"] == "react stream planner fallback")
 
     assert provider_failure["sseEvents"] == ["trace", "token", "done"]
+
+
+def test_cross_runtime_captures_keep_runtime_generated_identifiers_separate() -> None:
+    case = {"label": "upload", "captures": {"jobId": "job.jobId"}}
+    java_values: dict[str, object] = {}
+    python_values: dict[str, object] = {}
+
+    assert capture_response(case, "Java", response(200, json_data={"job": {"jobId": "java-job"}}), java_values) == []
+    assert capture_response(case, "Python", response(200, json_data={"job": {"jobId": "python-job"}}), python_values) == []
+
+    assert render_value("/ingestion/jobs/{{jobId}}", java_values) == "/ingestion/jobs/java-job"
+    assert render_value("/ingestion/jobs/{{jobId}}", python_values) == "/ingestion/jobs/python-job"
+
+
+def test_cross_runtime_cases_cover_every_fixed_java_baseline_route() -> None:
+    root = Path(__file__).parents[1]
+    cases = json.loads((root / "parity" / "cross-runtime-ci-cases.json").read_text(encoding="utf-8"))
+    manifest = json.loads((root / "parity" / "java-baseline-manifest.json").read_text(encoding="utf-8"))
+
+    assert missing_manifest_routes(cases, manifest) == []
