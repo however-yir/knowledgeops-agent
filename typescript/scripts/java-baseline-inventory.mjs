@@ -24,6 +24,10 @@ const expectedMigrations = manifest.migrationMappings.map((mapping) => mapping.s
 const actualMigrations = findSources(javaMigrationRoot, (path) => path.endsWith(".sql"))
   .map((path) => relative(repoRoot, path))
   .sort();
+const knownDtoSources = new Set(manifest.dtoMappings.map((dto) => dto.source));
+const fieldCount = manifest.fieldMappings.reduce((count, mapping) => {
+  return count + mapping.sameFields.length + (mapping.transforms?.length ?? 0);
+}, 0);
 
 assertSameSet("Java controller baseline", expectedControllers, actualControllers);
 assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
@@ -79,8 +83,27 @@ for (const migration of manifest.migrationMappings) {
   }
 }
 
+for (const mapping of manifest.fieldMappings) {
+  if (!knownDtoSources.has(mapping.source)) {
+    fail(`${mapping.source} field mapping is not a declared Java DTO mapping`);
+  }
+  const javaSource = readFileSync(join(repoRoot, mapping.source), "utf8");
+  const typescriptSource = readFileSync(join(root, mapping.typescriptSource), "utf8");
+  for (const field of mapping.sameFields) {
+    assertJavaField(javaSource, field, `${mapping.source} Java field`);
+    assertTypescriptField(typescriptSource, field, `${mapping.source} TypeScript field`);
+  }
+  for (const transform of mapping.transforms ?? []) {
+    if (!transform.note?.trim() || transform.java === transform.typescript) {
+      fail(`${mapping.source} field transform requires a renamed field and an explanatory note`);
+    }
+    assertJavaField(javaSource, transform.java, `${mapping.source} Java transformed field`);
+    assertTypescriptField(typescriptSource, transform.typescript, `${mapping.source} TypeScript transformed field`);
+  }
+}
+
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.persistenceMappings.length} mapper/model pairs, and ${manifest.migrationMappings.length} migrations map to TypeScript; static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.persistenceMappings.length} mapper/model pairs, ${manifest.migrationMappings.length} migrations, and ${fieldCount} key DTO fields map to TypeScript; static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -127,6 +150,22 @@ function assertIncludes(source, fragment, label) {
   if (!source.includes(fragment)) {
     fail(`${label} is missing fragment: ${fragment}`);
   }
+}
+
+function assertJavaField(source, field, label) {
+  if (!new RegExp(`\\b${escapeRegex(field)}\\s*;`).test(source)) {
+    fail(`${label} is missing: ${field}`);
+  }
+}
+
+function assertTypescriptField(source, field, label) {
+  if (!new RegExp(`\\b${escapeRegex(field)}\\??\\s*:`).test(source)) {
+    fail(`${label} is missing: ${field}`);
+  }
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function fail(message) {

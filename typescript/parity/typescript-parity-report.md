@@ -9,7 +9,7 @@ The TypeScript service is a NestJS/Fastify backend with Prisma persistence. This
 
 ## Contract Evidence
 
-`pnpm inventory:java-baseline` locks the 2026-07-21 Java source baseline's 15 controllers, 48 route declarations, 31 public DTOs, 15 core service responsibilities, 26 Mapper-to-Prisma-model pairs, and 13 Flyway-to-Prisma migrations to explicit TypeScript sources. `pnpm inventory:implementation-surface` and `pnpm inventory:contracts` additionally check files, TypeScript route fragments, and contract-case representation. These are static checks: they do not call either runtime or compare DTO fields, query results, or service behavior. The executable comparator is:
+`pnpm inventory:java-baseline` locks the 2026-07-21 Java source baseline's 15 controllers, 48 route declarations, 31 public DTOs, 15 core service responsibilities, 26 Mapper-to-Prisma-model pairs, and 13 Flyway-to-Prisma migrations to explicit TypeScript sources. It also checks 125 key fields across 17 primary API DTOs, including the documented `thought` to `thoughtSummary` rename and time-value representations. `pnpm inventory:implementation-surface` and `pnpm inventory:contracts` additionally check files, TypeScript route fragments, and contract-case representation. These are static checks: they do not call either runtime or compare DTO optionality, nested shape, query results, or service behavior. The executable comparator is:
 
 ```text
 APP_JAVA_BASE_URL=http://java-host APP_TS_BASE_URL=http://ts-host pnpm contract:diff:live
