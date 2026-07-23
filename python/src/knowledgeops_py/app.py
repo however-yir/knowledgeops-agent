@@ -4,7 +4,7 @@ import hashlib
 import io
 import math
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -14,7 +14,8 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from starlette.datastructures import UploadFile
 
 from .api.auth_routes import register_auth_routes
 from .api.canonical import (
@@ -152,7 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     auth_service = AuthApplicationService(store, active_settings, security_repository, oidc_state_store)
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if isinstance(security_repository, SqlAlchemySecurityRepository):
             await security_repository.bootstrap_api_key(
                 active_settings.demo_api_key,
@@ -220,7 +221,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=500, content=error_payload(message, "INTERNAL_ERROR", trace_id))
 
     @app.middleware("http")
-    async def context_audit_rate_limit(request: Request, call_next):
+    async def context_audit_rate_limit(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         prepare_contract_path(request)
         trace_id = request.headers.get("x-request-id") or new_id("trace")
         request.state.trace_id = trace_id
@@ -265,7 +268,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def optional_ctx(request: Request) -> RequestContext:
         return await resolve_context(request, auth_service, allow_anonymous=True)
 
-    def require_permissions(*required: str) -> Callable[[Request], RequestContext]:
+    def require_permissions(*required: str) -> Callable[[Request], Awaitable[RequestContext]]:
         async def dependency(request: Request) -> RequestContext:
             ctx = await resolve_context(request, auth_service, allow_anonymous=False)
             missing = [permission for permission in required if permission not in ctx.permissions]
@@ -446,7 +449,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         now_iso=now_iso,
     )
 
-    def research_callbacks(ctx: RequestContext, model_profile: str):
+    def research_callbacks(
+        ctx: RequestContext, model_profile: str
+    ) -> tuple[Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]]]:
         async def plan(research_topic: str) -> list[str]:
             return await research_plan_with_provider(store, tenant_context(ctx), active_settings, research_topic, model_profile)
 
@@ -534,7 +539,15 @@ def execute_trusted_action(store: PlatformStore, ctx: RequestContext, action: st
         result = retrieve(store, ctx.tenant_id, str(action_input.get("chatId") or ""), str(action_input["query"]))
         return {"action": action, "status": "COMPLETED", "result": {"citations": result["citations"], "evidence": result["evidence"]}}
     if action == "memory_save":
-        item = {"memoryId": new_id("mem"), "tenantId": ctx.tenant_id, "principal": ctx.principal, "sessionId": action_input.get("sessionId"), "type": str(action_input.get("type") or "fact"), "content": str(action_input["content"]), "createdAt": now_iso()}
+        item: dict[str, Any] = {
+            "memoryId": new_id("mem"),
+            "tenantId": ctx.tenant_id,
+            "principal": ctx.principal,
+            "sessionId": action_input.get("sessionId"),
+            "type": str(action_input.get("type") or "fact"),
+            "content": str(action_input["content"]),
+            "createdAt": now_iso(),
+        }
         store.memories[item["memoryId"]] = item
         return {"action": action, "status": "COMPLETED", "result": item}
     if action == "graph_search":
@@ -545,7 +558,7 @@ def execute_trusted_action(store: PlatformStore, ctx: RequestContext, action: st
 
 
 def create_workflow_task(store: PlatformStore, ctx: RequestContext, request: ChatRequestDto, response: ChatResponseDto) -> dict[str, Any]:
-    task = {
+    task: dict[str, Any] = {
         "taskId": new_id("task"),
         "tenantId": ctx.tenant_id,
         "type": "REACT",
@@ -569,7 +582,7 @@ def create_workflow_task(store: PlatformStore, ctx: RequestContext, request: Cha
 
 def create_research_task(store: PlatformStore, ctx: RequestContext, topic: str) -> dict[str, Any]:
     report = f"# {topic}\n\nNo tenant-scoped evidence has been ingested yet. Add sources before relying on this report.\n"
-    task = {
+    task: dict[str, Any] = {
         "taskId": new_id("research"),
         "tenantId": ctx.tenant_id,
         "topic": topic,
@@ -1060,11 +1073,11 @@ def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]
             keyword_hits.append((overlap, chunk))
             vector_hits.append((cosine_like(tokens, chunk_tokens), chunk))
     candidates: dict[str, tuple[float, dict[str, Any]]] = {}
-    for score, chunk in keyword_hits:
-        candidates[chunk["chunkId"]] = (float(score), chunk)
-    for score, chunk in vector_hits:
+    for keyword_score, chunk in keyword_hits:
+        candidates[chunk["chunkId"]] = (float(keyword_score), chunk)
+    for vector_score, chunk in vector_hits:
         current = candidates.get(chunk["chunkId"], (0.0, chunk))[0]
-        candidates[chunk["chunkId"]] = (current + score, chunk)
+        candidates[chunk["chunkId"]] = (current + vector_score, chunk)
     ranked = sorted(candidates.values(), key=lambda item: item[0], reverse=True)
     accepted = [chunk for score, chunk in ranked if evidence_accepts(score)][:5]
     citations = [build_citation(index, chunk) for index, chunk in enumerate(accepted, start=1)]
@@ -1110,7 +1123,7 @@ def create_ingestion_job(
         if existing["tenantId"] == ctx.tenant_id and existing.get("idempotencyKey") == idempotency_key:
             return public_job(existing)
     now = now_iso()
-    job = {
+    job: dict[str, Any] = {
         "jobId": new_id("job"),
         "tenantId": ctx.tenant_id,
         "chatId": chat_id,
@@ -1200,12 +1213,12 @@ async def request_file(request: Request, settings: Settings, require_file: bool 
     if "multipart/form-data" in content_type:
         form = await request.form()
         uploaded = form.get("file")
-        if hasattr(uploaded, "read"):
-            name = getattr(uploaded, "filename", "document.txt") or "document.txt"
+        if isinstance(uploaded, UploadFile):
+            name = uploaded.filename or "document.txt"
             content = await uploaded.read()
             if require_file and not content:
                 raise HTTPException(status_code=400, detail="file is required")
-            validate_upload(name, content, getattr(uploaded, "content_type", None), settings)
+            validate_upload(name, content, uploaded.content_type, settings)
             return name, content
     if require_file:
         raise HTTPException(status_code=400, detail="file is required")
@@ -1294,7 +1307,7 @@ def create_eval_run(store: PlatformStore, ctx: RequestContext, payload: Evaluati
         "failureRate": 0.0,
     }
     now = now_iso()
-    run = {
+    run: dict[str, Any] = {
         "runId": new_id("run"),
         "tenantId": ctx.tenant_id,
         "datasetId": payload.datasetId or "default",

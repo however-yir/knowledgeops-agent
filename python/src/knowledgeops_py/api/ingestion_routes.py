@@ -45,11 +45,11 @@ def register_ingestion_routes(
         source_name, content = await request_file(request, settings, require_file=not legacy)
         idempotency_key = request.headers.get("x-idempotency-key")
         if ingestion_service is not None:
-            job = await ingestion_service.submit(tenant_context(ctx), chatId, source_name, content, idempotency_key)
-            return ok(IngestionJobDto(**persisted_public_job(job)), msg="accepted", trace_id=ctx.trace_id)
-        job = create_ingestion_job(store, settings, ctx, chatId, source_name, content, idempotency_key)
-        enqueue_and_process(store, settings, job["jobId"])
-        return ok(IngestionJobDto(**public_job(store.jobs[job["jobId"]])), msg="accepted", trace_id=ctx.trace_id)
+            persisted_job = await ingestion_service.submit(tenant_context(ctx), chatId, source_name, content, idempotency_key)
+            return ok(IngestionJobDto(**persisted_public_job(persisted_job)), msg="accepted", trace_id=ctx.trace_id)
+        memory_job = create_ingestion_job(store, settings, ctx, chatId, source_name, content, idempotency_key)
+        enqueue_and_process(store, settings, memory_job["jobId"])
+        return ok(IngestionJobDto(**public_job(store.jobs[memory_job["jobId"]])), msg="accepted", trace_id=ctx.trace_id)
 
     @app.get("/ingestion/jobs")
     async def ingestion_jobs(
@@ -66,17 +66,17 @@ def register_ingestion_routes(
             selected_limit = limit
         selected_limit = bounded(selected_limit, 1, 200 if legacy else 100)
         if ingestion_service is not None:
-            jobs = await ingestion_service.repository.list_jobs(ctx.tenant_id, chatId, selected_limit)
+            persisted_jobs = await ingestion_service.repository.list_jobs(ctx.tenant_id, chatId, selected_limit)
             return ok(
-                [IngestionJobDto(**persisted_public_job(job)).model_dump() for job in jobs],
+                [IngestionJobDto(**persisted_public_job(job)).model_dump() for job in persisted_jobs],
                 trace_id=ctx.trace_id,
             )
-        jobs = [
+        memory_jobs = [
             IngestionJobDto(**job).model_dump()
             for job in store.jobs.values()
             if job["tenantId"] == ctx.tenant_id and (not chatId or job["chatId"] == chatId)
         ]
-        return ok(jobs[:selected_limit], trace_id=ctx.trace_id)
+        return ok(memory_jobs[:selected_limit], trace_id=ctx.trace_id)
 
     @app.get("/ingestion/jobs/{jobId}")
     async def ingestion_job(
@@ -114,8 +114,8 @@ def register_ingestion_routes(
             job = await ingestion_service.repository.get(ctx.tenant_id, jobId)
             if job is None:
                 raise HTTPException(status_code=404, detail="job not found")
-            processed = await ingestion_service.process(job.job_id)
-            return ok(None, msg="processed" if processed is not None else "empty", trace_id=ctx.trace_id)
+            processed_job = await ingestion_service.process(job.job_id)
+            return ok(None, msg="processed" if processed_job is not None else "empty", trace_id=ctx.trace_id)
         job = store.jobs.get(jobId)
         if not job or job["tenantId"] != ctx.tenant_id:
             raise HTTPException(status_code=404, detail="job not found")

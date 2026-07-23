@@ -7,19 +7,20 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Query
 
-from knowledgeops_py.dto import AuditLogDto, AuditLogsEnvelope, BudgetUpdateDto, CostEnvelope
+from knowledgeops_py.domain.runtime import PlatformStore
+from knowledgeops_py.dto import AuditLogDto, AuditLogsEnvelope, BudgetUpdateDto, CostEnvelope, CostSummaryDto
 
 
 def register_operations_routes(
     app: FastAPI,
     *,
-    store: Any,
+    store: PlatformStore,
     require_permissions: Callable[..., Callable[..., Any]],
     ok: Callable[..., dict[str, Any]],
     bounded: Callable[[int, int, int], int],
     now_iso: Callable[[], str],
     select_audit_fields: Callable[[dict[str, Any]], dict[str, Any]],
-    cost_summary_data: Callable[[Any, str], dict[str, Any]],
+    cost_summary_data: Callable[[PlatformStore, str], CostSummaryDto],
 ) -> None:
     """Register Java-compatible tenant-scoped audit and cost endpoints."""
 

@@ -77,7 +77,7 @@ def register_workflow_execution_routes(
         request: Request,
         payload: ChatRequestDto,
         ctx: Any = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
+    ) -> PlainTextResponse:
         legacy = is_legacy_request(request)
         try:
             if workflow_service is not None:

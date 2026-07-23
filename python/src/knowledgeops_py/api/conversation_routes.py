@@ -58,7 +58,7 @@ def register_conversation_routes(
         chatId: str | None = Query(default=None),
         modelProfile: str | None = Query(default=None),
         ctx: Any = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
+    ) -> PlainTextResponse:
         payload = chat_request_payload(payload, prompt, chatId, modelProfile)
         data = await chat_response_with_provider(
             store,
@@ -96,7 +96,7 @@ def register_conversation_routes(
         request: Request,
         payload: ChatRequestDto,
         ctx: Any = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
+    ) -> PlainTextResponse:
         legacy = is_legacy_request(request)
         try:
             data = await chat_response_with_provider(
@@ -121,7 +121,7 @@ def register_conversation_routes(
         prompt: str = Query(..., min_length=1),
         chatId: str = Query(default="default"),
         ctx: Any = Depends(require_permissions("PERM_CHAT_WRITE")),
-    ):
+    ) -> PlainTextResponse:
         response = await chat_response_with_provider(
             store,
             ctx,

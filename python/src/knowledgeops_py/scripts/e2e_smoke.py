@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from knowledgeops_py.app import create_app
 
@@ -42,7 +44,7 @@ def main() -> None:
     print("python enterprise e2e smoke ok")
 
 
-def envelope(response):
+def envelope(response: Response) -> Any:
     payload = response.json()
     assert response.status_code == 200, payload
     assert payload["ok"] == 1, payload

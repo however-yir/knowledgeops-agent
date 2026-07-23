@@ -116,7 +116,7 @@ class DeepResearchApplicationService:
         planner: ResearchPlanner,
         retriever: ResearchRetriever,
         writer: ResearchWriter,
-    ):
+    ) -> Any:
         graph = StateGraph(ResearchWorkflowState)
 
         async def plan(state: ResearchWorkflowState) -> ResearchWorkflowState:

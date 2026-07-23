@@ -42,11 +42,20 @@ from knowledgeops_py.infrastructure.security_repository import (
 
 
 class AuthenticationState(Protocol):
-    api_keys: MutableMapping[str, dict[str, Any]]
-    refresh_tokens: MutableMapping[str, dict[str, Any]]
-    revoked_refresh_tokens: set[str]
-    oidc_states: MutableMapping[str, dict[str, Any]]
-    oidc_exchange_codes: MutableMapping[str, dict[str, Any]]
+    @property
+    def api_keys(self) -> MutableMapping[str, dict[str, Any]]: ...
+
+    @property
+    def refresh_tokens(self) -> MutableMapping[str, dict[str, Any]]: ...
+
+    @property
+    def revoked_refresh_tokens(self) -> set[str]: ...
+
+    @property
+    def oidc_states(self) -> MutableMapping[str, dict[str, Any]]: ...
+
+    @property
+    def oidc_exchange_codes(self) -> MutableMapping[str, dict[str, Any]]: ...
 
 
 @dataclass(slots=True)

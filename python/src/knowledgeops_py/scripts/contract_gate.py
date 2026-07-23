@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from fastapi.testclient import TestClient
+from httpx import URL, Response
 
 from knowledgeops_py.app import create_app
 
@@ -78,7 +79,7 @@ REQUIRED_OPENAPI_ENDPOINTS = [
 class LegacyTestClient(TestClient):
     """Exercise the explicitly versioned Python-envelope compatibility surface."""
 
-    def request(self, method, url, *args, **kwargs):
+    def request(self, method: str, url: str | URL, *args: Any, **kwargs: Any) -> Response:
         if isinstance(url, str) and url.startswith("/") and not url.startswith("/python/v1/"):
             url = f"/python/v1{url}"
         return super().request(method, url, *args, **kwargs)
@@ -288,7 +289,7 @@ def check_runtime_contract(client: TestClient, legacy_client: LegacyTestClient) 
     return failures
 
 
-def envelope_data(response) -> Any:
+def envelope_data(response: Response) -> Any:
     payload = response.json()
     if response.status_code >= 400 or payload.get("ok") != 1 or "data" not in payload or "msg" not in payload:
         raise AssertionError(f"invalid envelope: {response.status_code} {payload}")

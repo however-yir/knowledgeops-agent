@@ -67,15 +67,15 @@ def limit_harness_value(value: Any) -> Any:
     if isinstance(value, str):
         return value if len(value) <= 600 else f"{value[:600]}...[truncated]"
     if isinstance(value, dict):
-        result = {str(key): limit_harness_value(item) for key, item in list(value.items())[:60]}
+        result: dict[str, Any] = {str(key): limit_harness_value(item) for key, item in list(value.items())[:60]}
         if len(value) > 60:
             result["_truncated"] = True
         return result
     if isinstance(value, list):
-        result = [limit_harness_value(item) for item in value[:30]]
+        result_list: list[Any] = [limit_harness_value(item) for item in value[:30]]
         if len(value) > 30:
-            result.append({"_truncated": True})
-        return result
+            result_list.append({"_truncated": True})
+        return result_list
     return value
 
 

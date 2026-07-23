@@ -40,7 +40,8 @@ async def canonicalize_response(request: Request, response: Response) -> Respons
         return response
 
     body_iterator = getattr(response, "body_iterator", None)
-    body = await read_response_body(body_iterator) if body_iterator is not None else response.body
+    response_body = await read_response_body(body_iterator) if body_iterator is not None else response.body
+    body = response_body.tobytes() if isinstance(response_body, memoryview) else response_body
     try:
         payload = json.loads(body)
     except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
@@ -204,7 +205,8 @@ def api_key_payload(data: Any, ok: int, message: str) -> dict[str, Any]:
 def ingestion_job_payload(data: Any) -> Any:
     if not isinstance(data, dict):
         return data
-    status = {"QUEUED": "PENDING", "COMPLETED": "SUCCEEDED"}.get(data.get("status"), data.get("status"))
+    raw_status = data.get("status")
+    status = {"QUEUED": "PENDING", "COMPLETED": "SUCCEEDED"}.get(raw_status, raw_status) if isinstance(raw_status, str) else raw_status
     return {
         "jobId": data.get("jobId"),
         "chatId": data.get("chatId"),
@@ -374,8 +376,11 @@ def react_trace_payload(trace: Any) -> dict[str, Any]:
 def model_data(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
-    if hasattr(value, "model_dump"):
-        return value.model_dump()
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        if isinstance(dumped, dict):
+            return {str(key): item for key, item in dumped.items()}
     return {}
 
 

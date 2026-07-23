@@ -119,12 +119,12 @@ def register_research_routes(
         task = store.workflow_tasks.get(taskId)
         return ok(task["events"] if task and task["tenantId"] == ctx.tenant_id else [], trace_id=ctx.trace_id)
 
-    @app.get("/ai/research/tasks/{taskId}/report")
+    @app.get("/ai/research/tasks/{taskId}/report", response_model=None)
     async def research_report(
         request: Request,
         taskId: str,
         ctx: Any = Depends(require_permissions("PERM_CHAT_READ")),
-    ):
+    ) -> dict[str, Any] | PlainTextResponse:
         legacy = is_legacy_request(request)
         if workflow_repository is not None:
             task = await workflow_repository.get(ctx.tenant_id, taskId)

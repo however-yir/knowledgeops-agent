@@ -95,7 +95,7 @@ class ReactWorkflowApplicationService:
             response = stored
         return WorkflowRunResult(completed, response)
 
-    def _graph(self, context: TenantContext, responder: WorkflowResponder):
+    def _graph(self, context: TenantContext, responder: WorkflowResponder) -> Any:
         graph = StateGraph(ReactWorkflowState)
 
         async def plan(state: ReactWorkflowState) -> ReactWorkflowState:

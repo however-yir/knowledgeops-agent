@@ -84,9 +84,7 @@ ignore = ["B008", "E501"]
 python_version = "3.12"
 strict = true
 files = [
-  "src/knowledgeops_py/domain",
-  "src/knowledgeops_py/infrastructure",
-  "src/knowledgeops_py/observability",
+  "src/knowledgeops_py",
 ]
 exclude = ["alembic"]
 

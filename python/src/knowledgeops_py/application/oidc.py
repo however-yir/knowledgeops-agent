@@ -149,9 +149,12 @@ async def oidc_metadata(settings: Settings) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(f"{issuer}/.well-known/openid-configuration")
             response.raise_for_status()
-            metadata = response.json()
+            raw_metadata = response.json()
     except httpx.HTTPError as exc:
         raise OidcFlowError(503, "OIDC discovery is unavailable") from exc
+    if not isinstance(raw_metadata, dict):
+        raise OidcFlowError(503, "OIDC discovery response is incomplete")
+    metadata = {str(key): value for key, value in raw_metadata.items()}
     for required_key in ("authorization_endpoint", "token_endpoint", "jwks_uri", "issuer"):
         if not metadata.get(required_key):
             raise OidcFlowError(503, "OIDC discovery response is incomplete")
