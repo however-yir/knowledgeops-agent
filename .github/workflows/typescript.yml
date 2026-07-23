@@ -144,11 +144,6 @@ jobs:
       - name: Install, generate, build, and migrate
         working-directory: typescript
         run: pnpm install --frozen-lockfile && pnpm db:generate && pnpm build && pnpm db:migrate
-      - name: End-to-end API smoke with Prisma enabled
-        working-directory: typescript
-        env:
-          BASE_URL: http://127.0.0.1:3010
-        run: pnpm e2e:smoke
       - name: Performance smoke with Prisma enabled
         working-directory: typescript
         env:
@@ -165,6 +160,11 @@ jobs:
           LOAD_VUS: "20"
           LOAD_P99_MS: "2500"
         run: pnpm load:gate
+      - name: End-to-end API smoke with Prisma enabled
+        working-directory: typescript
+        env:
+          BASE_URL: http://127.0.0.1:3010
+        run: pnpm e2e:smoke
 
   security-supply-chain:
     name: Dependency audit and validated SBOM
