@@ -6,3 +6,7 @@ data:
 {{- range $key, $value := .Values.config }}
   {{ $key }}: {{ $value | quote }}
 {{- end }}
+{{- if .Values.platform.enabled }}
+  APP_REDIS_URL: {{ printf "redis://%s-redis:6379/0" (include "knowledgeops-python.fullname" .) | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ printf "http://%s-tempo:4318/v1/traces" (include "knowledgeops-python.fullname" .) | quote }}
+{{- end }}

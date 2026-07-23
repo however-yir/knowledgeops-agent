@@ -7,6 +7,7 @@ on:
       - "python/**"
       - "docker-compose.python.yml"
       - "docker-compose.contract.yml"
+      - "python/helm/**"
       - ".github/workflows/python.yml"
   workflow_dispatch:
 
@@ -100,6 +101,16 @@ jobs:
 
       - name: Docker build
         run: docker build -t knowledgeops-agent-python:ci python
+
+      - name: Helm render gate
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work alpine/helm:3.16.3 lint python/helm/knowledgeops-python
+          docker run --rm -v "$PWD:/work" -w /work alpine/helm:3.16.3 template knowledgeops python/helm/knowledgeops-python > /tmp/knowledgeops-python-helm.yaml
+          docker run --rm -v "$PWD:/work" -w /work alpine/helm:3.16.3 template knowledgeops python/helm/knowledgeops-python --set platform.enabled=true --set java.enabled=true > /tmp/knowledgeops-python-platform-helm.yaml
+          docker run --rm -v "$PWD:/work" -w /work alpine/helm:3.16.3 template knowledgeops python/helm/knowledgeops-python --set persistence.enabled=false > /tmp/knowledgeops-python-ephemeral-helm.yaml
+          rg -q 'component: rabbitmq' /tmp/knowledgeops-python-platform-helm.yaml
+          rg -q 'component: frontend' /tmp/knowledgeops-python-platform-helm.yaml
+          rg -F -q 'emptyDir: {}' /tmp/knowledgeops-python-ephemeral-helm.yaml
 
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@master

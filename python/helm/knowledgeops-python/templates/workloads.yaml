@@ -20,10 +20,42 @@ spec:
           envFrom:
             - configMapRef: {name: {{ $name }}}
             - secretRef: {name: {{ .Values.secretName }}}
+          {{- if .Values.platform.enabled }}
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: MYSQL_ROOT_PASSWORD}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD}}
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: RABBITMQ_DEFAULT_USER}}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: RABBITMQ_DEFAULT_PASS}}
+            - name: APP_DATABASE_URL
+              value: "mysql+aiomysql://root:$(MYSQL_ROOT_PASSWORD)@{{ $name }}-mysql:3306/{{ .Values.platform.mysql.database }}"
+            - name: APP_PGVECTOR_URL
+              value: "postgresql+asyncpg://postgres:$(POSTGRES_PASSWORD)@{{ $name }}-pgvector:5432/{{ .Values.platform.pgvector.database }}"
+            - name: APP_RABBITMQ_URL
+              value: "amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@{{ $name }}-rabbitmq:5672/"
+          {{- end }}
+          volumeMounts:
+            - name: files
+              mountPath: /var/lib/knowledgeops/files
+            - name: tmp
+              mountPath: /tmp
           readinessProbe: {httpGet: {path: /actuator/health, port: {{ .Values.api.servicePort }}}, initialDelaySeconds: 10}
           livenessProbe: {httpGet: {path: /actuator/health, port: {{ .Values.api.servicePort }}}, initialDelaySeconds: 20}
           resources: {{- toYaml .Values.api.resources | nindent 12 }}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+      volumes:
+        - name: files
+          {{- if or .Values.persistence.enabled .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-files" $name) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -44,8 +76,40 @@ spec:
           envFrom:
             - configMapRef: {name: {{ $name }}}
             - secretRef: {name: {{ .Values.secretName }}}
+          {{- if .Values.platform.enabled }}
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: MYSQL_ROOT_PASSWORD}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD}}
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: RABBITMQ_DEFAULT_USER}}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: RABBITMQ_DEFAULT_PASS}}
+            - name: APP_DATABASE_URL
+              value: "mysql+aiomysql://root:$(MYSQL_ROOT_PASSWORD)@{{ $name }}-mysql:3306/{{ .Values.platform.mysql.database }}"
+            - name: APP_PGVECTOR_URL
+              value: "postgresql+asyncpg://postgres:$(POSTGRES_PASSWORD)@{{ $name }}-pgvector:5432/{{ .Values.platform.pgvector.database }}"
+            - name: APP_RABBITMQ_URL
+              value: "amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@{{ $name }}-rabbitmq:5672/"
+          {{- end }}
+          volumeMounts:
+            - name: files
+              mountPath: /var/lib/knowledgeops/files
+            - name: tmp
+              mountPath: /tmp
           resources: {{- toYaml .Values.worker.resources | nindent 12 }}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+      volumes:
+        - name: files
+          {{- if or .Values.persistence.enabled .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-files" $name) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

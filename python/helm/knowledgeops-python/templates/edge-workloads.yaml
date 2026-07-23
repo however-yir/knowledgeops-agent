@@ -1,0 +1,85 @@
+{{- $name := include "knowledgeops-python.fullname" . -}}
+{{- if .Values.java.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-java
+spec:
+  replicas: {{ .Values.java.replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: java}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: java}
+    spec:
+      containers:
+        - name: java
+          image: "{{ .Values.java.image.repository }}:{{ .Values.java.image.tag }}"
+          imagePullPolicy: {{ .Values.java.image.pullPolicy }}
+          ports: [{name: http, containerPort: {{ .Values.java.servicePort }}}]
+          envFrom:
+            - secretRef: {name: {{ .Values.java.secretName }}}
+          readinessProbe: {httpGet: {path: /actuator/health, port: http}, initialDelaySeconds: 30}
+          livenessProbe: {httpGet: {path: /actuator/health, port: http}, initialDelaySeconds: 60}
+          resources: {{- toYaml .Values.java.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-java
+spec:
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: java}
+  ports: [{name: http, port: {{ .Values.java.servicePort }}, targetPort: http}]
+---
+{{- end }}
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-frontend
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: frontend}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: frontend}
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports: [{name: http, containerPort: {{ .Values.frontend.servicePort }}}]
+          env:
+            - name: API_UPSTREAM
+              value: {{ default (printf "%s:%v" $name .Values.api.servicePort) .Values.frontend.apiUpstream | quote }}
+          readinessProbe: {httpGet: {path: /, port: http}, initialDelaySeconds: 5}
+          livenessProbe: {httpGet: {path: /, port: http}, initialDelaySeconds: 15}
+          resources: {{- toYaml .Values.frontend.resources | nindent 12 }}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+          volumeMounts:
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-frontend
+spec:
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: frontend}
+  ports: [{name: http, port: {{ .Values.frontend.servicePort }}, targetPort: http}]
+{{- end }}

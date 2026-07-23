@@ -1,0 +1,12 @@
+The Python API and worker read runtime secrets from {{ .Values.secretName }}.
+
+Required production keys include APP_JWT_SECRET, APP_DEMO_API_KEY, APP_DATABASE_URL,
+APP_PGVECTOR_URL, APP_MODEL_BASE_URL, APP_MODEL_API_KEY and APP_RERANKER_URL.
+
+When platform.enabled=true, also provide MYSQL_ROOT_PASSWORD, POSTGRES_PASSWORD,
+RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS. The chart derives in-cluster URLs
+for Python while keeping model, identity and application credentials external.
+
+The Vue service proxies /api to Python by default. Set frontend.apiUpstream to
+{{ include "knowledgeops-python.fullname" . }}-java:{{ .Values.java.servicePort }} after enabling java.enabled
+to switch the same canonical UI to the independently deployed Java baseline.

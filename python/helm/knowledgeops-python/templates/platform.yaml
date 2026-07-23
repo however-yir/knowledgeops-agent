@@ -1,0 +1,236 @@
+{{- if .Values.platform.enabled }}
+{{- $name := include "knowledgeops-python.fullname" . -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-mysql
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: mysql}
+  ports: [{name: mysql, port: 3306, targetPort: mysql}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}-mysql
+spec:
+  serviceName: {{ $name }}-mysql
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: mysql}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: mysql}
+    spec:
+      containers:
+        - name: mysql
+          image: {{ .Values.platform.mysql.image | quote }}
+          args: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+          ports: [{name: mysql, containerPort: 3306}]
+          env:
+            - name: MYSQL_DATABASE
+              value: {{ .Values.platform.mysql.database | quote }}
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: MYSQL_ROOT_PASSWORD}}
+          volumeMounts: [{name: data, mountPath: /var/lib/mysql}]
+          readinessProbe: {exec: {command: ["sh", "-ec", "mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD"]}, initialDelaySeconds: 10}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes:
+{{ toYaml .Values.platformPersistence.accessModes | nindent 10 }}
+        resources: {requests: {storage: {{ .Values.platformPersistence.size }}}}
+        {{- with .Values.platformPersistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-pgvector
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: pgvector}
+  ports: [{name: postgres, port: 5432, targetPort: postgres}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}-pgvector
+spec:
+  serviceName: {{ $name }}-pgvector
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: pgvector}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: pgvector}
+    spec:
+      containers:
+        - name: pgvector
+          image: {{ .Values.platform.pgvector.image | quote }}
+          ports: [{name: postgres, containerPort: 5432}]
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.platform.pgvector.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD}}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+          readinessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U postgres -d $POSTGRES_DB"]}, initialDelaySeconds: 10}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes:
+{{ toYaml .Values.platformPersistence.accessModes | nindent 10 }}
+        resources: {requests: {storage: {{ .Values.platformPersistence.size }}}}
+        {{- with .Values.platformPersistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-redis
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: redis}
+  ports: [{name: redis, port: 6379, targetPort: redis}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}-redis
+spec:
+  serviceName: {{ $name }}-redis
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: redis}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: redis}
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.platform.redis.image | quote }}
+          args: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+          ports: [{name: redis, containerPort: 6379}]
+          volumeMounts: [{name: data, mountPath: /data}]
+          readinessProbe: {exec: {command: ["redis-cli", "ping"]}, initialDelaySeconds: 5}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes:
+{{ toYaml .Values.platformPersistence.accessModes | nindent 10 }}
+        resources: {requests: {storage: {{ .Values.platformPersistence.size }}}}
+        {{- with .Values.platformPersistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-rabbitmq
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: rabbitmq}
+  ports:
+    - {name: amqp, port: 5672, targetPort: amqp}
+    - {name: management, port: 15672, targetPort: management}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}-rabbitmq
+spec:
+  serviceName: {{ $name }}-rabbitmq
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: rabbitmq}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: rabbitmq}
+    spec:
+      containers:
+        - name: rabbitmq
+          image: {{ .Values.platform.rabbitmq.image | quote }}
+          securityContext: {runAsUser: 0, runAsGroup: 0, allowPrivilegeEscalation: false}
+          ports:
+            - {name: amqp, containerPort: 5672}
+            - {name: management, containerPort: 15672}
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: RABBITMQ_DEFAULT_USER}}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: RABBITMQ_DEFAULT_PASS}}
+          volumeMounts: [{name: data, mountPath: /var/lib/rabbitmq}]
+          readinessProbe: {exec: {command: ["rabbitmq-diagnostics", "-q", "ping"]}, initialDelaySeconds: 10}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes:
+{{ toYaml .Values.platformPersistence.accessModes | nindent 10 }}
+        resources: {requests: {storage: {{ .Values.platformPersistence.size }}}}
+        {{- with .Values.platformPersistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-tempo
+data:
+  tempo.yml: |
+    server:
+      http_listen_port: 3200
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            http:
+            grpc:
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /tmp/tempo/traces
+        wal:
+          path: /tmp/tempo/wal
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-tempo
+spec:
+  selector: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: tempo}
+  ports:
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+    - {name: http, port: 3200, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-tempo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: tempo}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: tempo}
+    spec:
+      containers:
+        - name: tempo
+          image: {{ .Values.platform.tempo.image | quote }}
+          args: ["-config.file=/etc/tempo/tempo.yml"]
+          ports:
+            - {name: otlp-http, containerPort: 4318}
+            - {name: http, containerPort: 3200}
+          volumeMounts:
+            - {name: config, mountPath: /etc/tempo/tempo.yml, subPath: tempo.yml}
+            - {name: data, mountPath: /tmp/tempo}
+      volumes:
+        - name: config
+          configMap: {name: {{ $name }}-tempo}
+        - name: data
+          emptyDir: {}
+{{- end }}

@@ -3,7 +3,7 @@ kind: Job
 metadata:
   name: {{ include "knowledgeops-python.fullname" . }}-migrate
   annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook": {{ ternary "post-install,post-upgrade" "pre-install,pre-upgrade" .Values.platform.enabled | quote }}
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 3
@@ -16,8 +16,33 @@ spec:
         - name: migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["sh", "-ec", "alembic upgrade head && APP_DATABASE_URL=$APP_PGVECTOR_URL alembic upgrade head"]
+          command:
+            - sh
+            - -ec
+            - |
+              for attempt in $(seq 1 90); do
+                alembic upgrade head && APP_DATABASE_URL=$APP_PGVECTOR_URL alembic upgrade head && exit 0
+                sleep 2
+              done
+              exit 1
           envFrom:
             - configMapRef: {name: {{ include "knowledgeops-python.fullname" . }}}
             - secretRef: {name: {{ .Values.secretName }}}
+          {{- if .Values.platform.enabled }}
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: MYSQL_ROOT_PASSWORD}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.secretName }}, key: POSTGRES_PASSWORD}}
+            - name: APP_DATABASE_URL
+              value: "mysql+aiomysql://root:$(MYSQL_ROOT_PASSWORD)@{{ include "knowledgeops-python.fullname" . }}-mysql:3306/{{ .Values.platform.mysql.database }}"
+            - name: APP_PGVECTOR_URL
+              value: "postgresql+asyncpg://postgres:$(POSTGRES_PASSWORD)@{{ include "knowledgeops-python.fullname" . }}-pgvector:5432/{{ .Values.platform.pgvector.database }}"
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true}
+      volumes:
+        - name: tmp
+          emptyDir: {}

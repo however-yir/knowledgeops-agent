@@ -15,6 +15,63 @@ worker:
     requests: {cpu: 250m, memory: 512Mi}
     limits: {cpu: "1", memory: 1Gi}
 
+frontend:
+  enabled: true
+  image:
+    repository: ghcr.io/however-yir/knowledgeops-agent-web
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  servicePort: 80
+  # Empty selects the Python canonical service. Set to "<release>-knowledgeops-python-java:8080"
+  # to switch the same Vue bundle to the independently deployed Java baseline.
+  apiUpstream: ""
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+
+java:
+  enabled: false
+  image:
+    repository: ghcr.io/however-yir/knowledgeops-agent
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  servicePort: 8080
+  secretName: knowledgeops-java
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {cpu: "2", memory: 2Gi}
+
+platform:
+  # Set true for a self-contained non-production stack. Production can use managed
+  # MySQL, Redis, RabbitMQ, pgvector and Tempo while retaining the same secret contract.
+  enabled: false
+  mysql:
+    image: mysql:8.0.36
+    database: knowledgeops_python
+  redis:
+    image: redis:7.4-alpine
+  rabbitmq:
+    image: rabbitmq:3.13-management
+  pgvector:
+    image: pgvector/pgvector:pg16
+    database: knowledgeops_python
+  tempo:
+    image: grafana/tempo:2.6.1
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes: [ReadWriteMany]
+  size: 10Gi
+
+platformPersistence:
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+  size: 10Gi
+
 autoscaling:
   enabled: true
   minReplicas: 2
@@ -27,5 +84,6 @@ config:
   APP_VECTOR_BACKEND: pgvector
   APP_RERANKER_BACKEND: remote
   APP_CORS_ALLOWED_ORIGINS: https://knowledgeops.example.com
+  APP_STORAGE_PATH: /var/lib/knowledgeops/files
 
 secretName: knowledgeops-python
