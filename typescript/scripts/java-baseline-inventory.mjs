@@ -7,7 +7,6 @@ const repoRoot = join(root, "..");
 const javaRoot = join(repoRoot, "src", "main", "java");
 const javaMigrationRoot = join(repoRoot, "src", "main", "resources", "db", "migration");
 const manifest = JSON.parse(readFileSync(join(root, "parity", "java-baseline.json"), "utf8"));
-const typescriptSource = readSources(join(root, "apps", "api", "src")).join("\n");
 const prismaSchema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
 const expectedControllers = manifest.controllers.map((controller) => controller.source).sort();
 const actualControllers = findJavaControllers(javaRoot).map((path) => relative(repoRoot, path)).sort();
@@ -44,15 +43,27 @@ for (const controller of manifest.controllers) {
     fail(`missing Java source: ${controller.source}`);
   }
   const javaSource = readFileSync(javaPath, "utf8");
+  const typescriptPath = join(root, controller.typescriptSource ?? "");
+  if (!controller.typescriptSource || !existsSync(typescriptPath)) {
+    fail(`${controller.source} is missing its TypeScript controller source mapping`);
+  }
+  const controllerTypescriptSource = readFileSync(typescriptPath, "utf8");
   assertIncludes(javaSource, controller.javaBase, `${controller.source} baseline mapping`);
   if (controller.typescriptBase) {
-    assertIncludes(typescriptSource, controller.typescriptBase, `${controller.source} TypeScript controller mapping`);
+    assertIncludes(controllerTypescriptSource, controller.typescriptBase, `${controller.source} TypeScript controller mapping`);
   }
   for (const route of controller.routes) {
     routeCount += 1;
     assertIncludes(javaSource, route.java, `${controller.source} Java route`);
+    const routeTypescriptPath = join(root, route.typescriptSource ?? controller.typescriptSource);
+    if (!existsSync(routeTypescriptPath)) {
+      fail(`${controller.source} TypeScript route source is missing: ${route.typescriptSource ?? controller.typescriptSource}`);
+    }
+    const routeTypescriptSource = route.typescriptSource
+      ? readFileSync(routeTypescriptPath, "utf8")
+      : controllerTypescriptSource;
     for (const fragment of route.typescript) {
-      assertIncludes(typescriptSource, fragment, `${controller.source} TypeScript route`);
+      assertIncludes(routeTypescriptSource, fragment, `${controller.source} TypeScript route`);
     }
   }
 }
@@ -122,20 +133,6 @@ function findSources(dir, predicate) {
       files.push(...findSources(path, predicate));
     } else if (predicate(path)) {
       files.push(path);
-    }
-  }
-  return files;
-}
-
-function readSources(dir) {
-  const files = [];
-  for (const entry of readdirSync(dir).sort()) {
-    const path = join(dir, entry);
-    const stats = statSync(path);
-    if (stats.isDirectory()) {
-      files.push(...readSources(path));
-    } else if (path.endsWith(".ts") && !path.endsWith(".spec.ts")) {
-      files.push(readFileSync(path, "utf8"));
     }
   }
   return files;

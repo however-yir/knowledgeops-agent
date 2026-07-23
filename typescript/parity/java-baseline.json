@@ -7,6 +7,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/AgentHarnessController.java",
       "javaBase": "@RequestMapping(\"/ai/harness\")",
+      "typescriptSource": "apps/api/src/agent/harness.controller.ts",
       "typescriptBase": "Controller(\"ai/harness\")",
       "routes": [
         { "java": "@GetMapping(\"/actions\")", "typescript": ["Get(\"actions\")"] },
@@ -17,6 +18,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/AgentSessionController.java",
       "javaBase": "@RequestMapping(\"/ai/sessions\")",
+      "typescriptSource": "apps/api/src/sessions/sessions.controller.ts",
       "typescriptBase": "Controller(\"ai/sessions\")",
       "routes": [
         { "java": "@GetMapping", "typescript": ["Get()"] },
@@ -31,6 +33,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/AuditController.java",
       "javaBase": "@RequestMapping(\"/audit\")",
+      "typescriptSource": "apps/api/src/operations/operations.controller.ts",
       "routes": [
         { "java": "@GetMapping(\"/logs\")", "typescript": ["Get(\"audit/logs\")"] }
       ]
@@ -38,6 +41,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/AuthController.java",
       "javaBase": "@RequestMapping(\"/auth\")",
+      "typescriptSource": "apps/api/src/auth/auth.controller.ts",
       "typescriptBase": "Controller(\"auth\")",
       "routes": [
         { "java": "@PostMapping(\"/token\")", "typescript": ["Post(\"token\")"] },
@@ -50,6 +54,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/ChatController.java",
       "javaBase": "@RequestMapping(\"/ai\")",
+      "typescriptSource": "apps/api/src/ai/ai.controller.ts",
       "routes": [
         { "java": "@RequestMapping(value = \"/chat\"", "typescript": ["Post(\"ai/chat\")", "Get(\"ai/chat\")"] }
       ]
@@ -57,6 +62,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/ChatHistoryController.java",
       "javaBase": "@RequestMapping(\"/ai/history\")",
+      "typescriptSource": "apps/api/src/history/history.controller.ts",
       "typescriptBase": "Controller(\"ai/history\")",
       "routes": [
         { "java": "@GetMapping(\"/{type}\")", "typescript": ["Get(\":type\")"] },
@@ -66,6 +72,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/CostGovernanceController.java",
       "javaBase": "@RequestMapping(\"/cost\")",
+      "typescriptSource": "apps/api/src/operations/operations.controller.ts",
       "routes": [
         { "java": "@GetMapping(\"/summary\")", "typescript": ["Get(\"cost/summary\")"] },
         { "java": "@PostMapping(\"/budget\")", "typescript": ["Post(\"cost/budget\")"] }
@@ -74,6 +81,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/CustomerServiceController.java",
       "javaBase": "@RequestMapping(\"/ai\")",
+      "typescriptSource": "apps/api/src/ai/ai.controller.ts",
       "routes": [
         { "java": "@RequestMapping(value = \"/service\"", "typescript": ["All(\"ai/service\")"] }
       ]
@@ -81,6 +89,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/DeepResearchController.java",
       "javaBase": "@RequestMapping(\"/ai/research\")",
+      "typescriptSource": "apps/api/src/workflow/workflow.controller.ts",
       "routes": [
         { "java": "@PostMapping(\"/tasks\")", "typescript": ["Post(\"ai/research/tasks\")"] },
         { "java": "@GetMapping(\"/tasks/{taskId}\")", "typescript": ["Get(\"ai/research/tasks/:taskId\")"] },
@@ -91,6 +100,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/FeedbackController.java",
       "javaBase": "@RequestMapping(\"/ai/feedback\")",
+      "typescriptSource": "apps/api/src/ai/ai.controller.ts",
       "routes": [
         { "java": "@PostMapping", "typescript": ["Post(\"ai/feedback\")"] }
       ]
@@ -98,6 +108,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/IngestionController.java",
       "javaBase": "@RequestMapping(\"/ingestion\")",
+      "typescriptSource": "apps/api/src/ingestion/ingestion.controller.ts",
       "routes": [
         { "java": "@PostMapping(\"/upload/{chatId}\")", "typescript": ["ingestion/upload/:chatId"] },
         { "java": "@GetMapping(\"/jobs/{jobId}\")", "typescript": ["Get(\"ingestion/jobs/:jobId\")"] },
@@ -108,15 +119,17 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/PdfController.java",
       "javaBase": "@RequestMapping(\"/ai/pdf\")",
+      "typescriptSource": "apps/api/src/ingestion/ingestion.controller.ts",
       "routes": [
         { "java": "@RequestMapping(\"/upload/{chatId}\")", "typescript": ["ai/pdf/upload/:chatId"] },
         { "java": "@GetMapping(\"/file/{chatId}\")", "typescript": ["Get(\"ai/pdf/file/:chatId\")"] },
-        { "java": "@RequestMapping(value = \"/chat\"", "typescript": ["Post(\"ai/pdf/chat\")", "Get(\"ai/pdf/chat\")"] }
+        { "java": "@RequestMapping(value = \"/chat\"", "typescriptSource": "apps/api/src/ai/ai.controller.ts", "typescript": ["Post(\"ai/pdf/chat\")", "Get(\"ai/pdf/chat\")"] }
       ]
     },
     {
       "source": "src/main/java/com/enterprise/iqk/controller/ReactController.java",
       "javaBase": "@RequestMapping(\"/ai/react\")",
+      "typescriptSource": "apps/api/src/ai/ai.controller.ts",
       "routes": [
         { "java": "@PostMapping(value = \"/chat\"", "typescript": ["Post(\"ai/react/chat\")"] },
         { "java": "@PostMapping(value = \"/chat/stream\"", "typescript": ["Post(\"ai/react/chat/stream\")"] }
@@ -125,6 +138,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/controller/WorkflowController.java",
       "javaBase": "@RequestMapping(\"/ai/workflow\")",
+      "typescriptSource": "apps/api/src/workflow/workflow.controller.ts",
       "routes": [
         { "java": "@PostMapping(\"/react/chat\")", "typescript": ["Post(\"ai/workflow/react/chat\")"] },
         { "java": "@PostMapping(value = \"/react/chat/stream\"", "typescript": ["Post(\"ai/workflow/react/chat/stream\")"] },
@@ -136,6 +150,7 @@
     {
       "source": "src/main/java/com/enterprise/iqk/evaluation/EvaluationController.java",
       "javaBase": "@RequestMapping(\"/ai/evaluation\")",
+      "typescriptSource": "apps/api/src/evaluation/evaluation.controller.ts",
       "typescriptBase": "Controller(\"ai/evaluation\")",
       "routes": [
         { "java": "@PostMapping(\"/datasets\")", "typescript": ["Post(\"datasets\")"] },
