@@ -77,6 +77,12 @@ class Settings:
             raise ValueError("APP_VECTOR_BACKEND=pgvector and APP_PGVECTOR_URL are required in production")
         if not self.redis_url:
             raise ValueError("APP_REDIS_URL is required in production")
+        if self.ingestion_queue_backend not in {"redis_stream", "rabbitmq", "db_polling"}:
+            raise ValueError(
+                "APP_INGESTION_QUEUE_BACKEND must be redis_stream, rabbitmq or db_polling in production"
+            )
+        if self.ingestion_queue_backend == "rabbitmq" and not self.rabbitmq_url:
+            raise ValueError("APP_RABBITMQ_URL is required for rabbitmq ingestion in production")
         if self.model_backend not in {"openai_compatible", "ollama"}:
             raise ValueError("APP_MODEL_BACKEND must be openai_compatible or ollama")
         if self.model_backend == "openai_compatible" and (not self.model_base_url or not self.model_api_key):

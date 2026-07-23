@@ -481,6 +481,20 @@ def test_extended_java_routes_file_safety_and_production_configuration(monkeypat
 
     with pytest.raises(ValueError, match="APP_JWT_SECRET"):
         Settings(environment="production", demo_api_key="real-key", database_url="sqlite+aiosqlite:///x", redis_url="redis://x", reranker_backend="remote").validate_startup()
+    with pytest.raises(ValueError, match="APP_INGESTION_QUEUE_BACKEND"):
+        Settings(
+            environment="production",
+            demo_api_key="real-key",
+            jwt_secret="x" * 32,
+            database_url="sqlite+aiosqlite:///x",
+            vector_backend="pgvector",
+            pgvector_url="postgresql+asyncpg://postgres:secret@pgvector/knowledgeops",
+            redis_url="redis://x",
+            model_base_url="https://model.example.test",
+            model_api_key="test-model-key",
+            reranker_backend="remote",
+            reranker_url="https://reranker.example.test",
+        ).validate_startup()
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("APP_JWT_SECRET", "x" * 32)
     monkeypatch.setenv("APP_DEMO_API_KEY", "not-a-default")
@@ -492,4 +506,5 @@ def test_extended_java_routes_file_safety_and_production_configuration(monkeypat
     monkeypatch.setenv("APP_RERANKER_URL", "https://reranker.example.test")
     monkeypatch.setenv("APP_MODEL_BASE_URL", "https://model.example.test")
     monkeypatch.setenv("APP_MODEL_API_KEY", "test-model-key")
+    monkeypatch.setenv("APP_INGESTION_QUEUE_BACKEND", "db_polling")
     assert load_settings().is_production

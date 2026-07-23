@@ -25,7 +25,7 @@ knowledgeops-python-baseline-manifest \
 ## Deployment modes
 
 - `APP_ENV=development` allows the deterministic memory queue and local test key.
-- `APP_ENV=production` requires an explicit JWT secret, non-demo API key, database URL, Redis URL and non-identity reranker.
+- `APP_ENV=production` requires an explicit JWT secret, non-demo API key, database URL, Redis URL, non-identity reranker and a durable ingestion backend: `redis_stream`, `rabbitmq` (with `APP_RABBITMQ_URL`) or `db_polling`.
 - Run `knowledgeops-python-api` and `knowledgeops-python-worker` from the same image. Use `docker compose -f docker-compose.yml -f docker-compose.python.yml up` for the local dependency stack.
 - OIDC needs issuer, client ID and redirect URI. Callback exchange verifies discovery metadata, JWKS, issuer, audience, nonce and a PKCE verifier before it issues a one-time local exchange code.
 

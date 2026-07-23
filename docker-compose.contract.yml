@@ -120,7 +120,7 @@ services:
       APP_PGVECTOR_URL: postgresql+asyncpg://postgres:contract-postgres-pass@pgvector:5432/knowledgeops_python
       APP_REDIS_URL: redis://redis:6379/0
       APP_RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
-      APP_INGESTION_QUEUE_BACKEND: memory
+      APP_INGESTION_QUEUE_BACKEND: db_polling
       APP_VECTOR_BACKEND: pgvector
       APP_DEMO_API_KEY: dev-admin-key-2026
       APP_DEMO_TENANT_ID: public
