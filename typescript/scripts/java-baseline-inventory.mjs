@@ -29,6 +29,9 @@ const actualMigrations = findSources(javaMigrationRoot, (path) => path.endsWith(
   .map((path) => relative(repoRoot, path))
   .sort();
 const expectedConfigurationSources = manifest.configurationMappings.map((mapping) => mapping.source).sort();
+const configurationBySource = new Map(manifest.configurationMappings.map((mapping) => [mapping.source, mapping]));
+const expectedConfigurationSemanticKeys = manifest.configurationMappings.flatMap((mapping) => mapping.typescriptFragments).sort();
+const actualConfigurationSemanticKeys = manifest.configurationSemanticMappings.map((mapping) => mapping.typescriptKey).sort();
 const actualConfigurationSources = findSources(javaRoot, (path) => readFileSync(path, "utf8").includes("@ConfigurationProperties("))
   .map((path) => relative(repoRoot, path))
   .sort();
@@ -74,6 +77,10 @@ let persistenceEntityCount = 0;
 let persistenceFieldCount = 0;
 let persistenceFieldExclusionCount = 0;
 let configurationFragmentCount = 0;
+let configurationSemanticCount = 0;
+let configurationSameCount = 0;
+let configurationRepresentationCount = 0;
+let configurationDifferenceCount = 0;
 let crossCuttingFragmentCount = 0;
 let responsibilityGroupSourceCount = 0;
 let responsibilityGroupAnchorCount = 0;
@@ -86,6 +93,10 @@ assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
 assertSameSet("Java mapper baseline", expectedMappers, actualMappers);
 assertSameSet("Java migration baseline", expectedMigrations, actualMigrations);
 assertSameSet("Java configuration-properties baseline", expectedConfigurationSources, actualConfigurationSources);
+assertSameSet("Java configuration semantic-key baseline", expectedConfigurationSemanticKeys, actualConfigurationSemanticKeys);
+if (new Set(actualConfigurationSemanticKeys).size !== actualConfigurationSemanticKeys.length) {
+  fail("Java configuration semantic-key baseline contains duplicate TypeScript keys");
+}
 assertSameSet("Java cross-cutting-source baseline", expectedCrossCuttingSources, actualCrossCuttingSources);
 assertSameSet("Java security-source baseline", expectedSecuritySources, actualSecuritySources);
 assertSameSet("Java DTO field baseline", expectedFieldDtos, actualFieldDtos);
@@ -149,6 +160,35 @@ for (const configuration of manifest.configurationMappings) {
   for (const fragment of configuration.typescriptFragments) {
     assertIncludes(typescriptSource, fragment, `${configuration.source} TypeScript configuration mapping`);
     configurationFragmentCount += 1;
+  }
+}
+
+for (const mapping of manifest.configurationSemanticMappings) {
+  const configuration = configurationBySource.get(mapping.source);
+  if (!configuration) {
+    fail(`${mapping.source} configuration semantic mapping has no declared configuration source`);
+  }
+  const javaSource = readFileSync(join(repoRoot, mapping.source), "utf8");
+  const typescriptSource = readFileSync(join(root, configuration.typescriptSource), "utf8");
+  assertIncludes(javaSource, mapping.javaFragment, `${mapping.source} Java configuration default`);
+  assertIncludes(
+    findEnvironmentEntry(typescriptSource, mapping.typescriptKey),
+    `.default(${mapping.typescriptDefault})`,
+    `${mapping.source} TypeScript configuration default`
+  );
+  if (!new Set(["same", "representation", "intentional_difference"]).has(mapping.relationship)) {
+    fail(`${mapping.source} configuration semantic mapping has an invalid relationship: ${mapping.relationship}`);
+  }
+  if (mapping.relationship !== "same" && !mapping.note?.trim()) {
+    fail(`${mapping.source} ${mapping.typescriptKey} configuration difference requires a note`);
+  }
+  configurationSemanticCount += 1;
+  if (mapping.relationship === "same") {
+    configurationSameCount += 1;
+  } else if (mapping.relationship === "representation") {
+    configurationRepresentationCount += 1;
+  } else {
+    configurationDifferenceCount += 1;
   }
 }
 
@@ -328,7 +368,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -361,6 +401,17 @@ function assertIncludes(source, fragment, label) {
   if (!source.includes(fragment)) {
     fail(`${label} is missing fragment: ${fragment}`);
   }
+}
+
+function findEnvironmentEntry(source, key) {
+  const marker = `  ${key}:`;
+  const start = source.indexOf(marker);
+  if (start < 0) {
+    fail(`TypeScript environment key is missing: ${key}`);
+  }
+  const remaining = source.slice(start + marker.length);
+  const nextEntry = remaining.search(/\n  [A-Z][A-Z0-9_]*:/);
+  return source.slice(start, nextEntry < 0 ? source.length : start + marker.length + nextEntry);
 }
 
 function assertJavaField(source, field, label) {
