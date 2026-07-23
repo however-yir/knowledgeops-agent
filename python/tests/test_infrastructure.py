@@ -585,6 +585,16 @@ def test_langgraph_react_workflow_checkpoints_response_and_resumes_without_reinv
         assert resumed.task["status"] == "DONE" and resumed.response == stored_response
         with pytest.raises(WorkflowNotResumable):
             await service.resume(context, recovering["taskId"], should_not_run)
+        assert await service.cancel(context, "missing") is None
+        with pytest.raises(WorkflowNotResumable, match="already terminal"):
+            await service.cancel(context, completed.task["taskId"])
+
+        async def failing_responder() -> dict[str, object]:
+            raise RuntimeError("provider failed")
+
+        with pytest.raises(RuntimeError, match="provider failed"):
+            await service.run(context, "fail", "quality", "chat-a", failing_responder)
+        assert any(task["status"] == "FAILED" for task in await repository.list_tasks("tenant-a", 20))
 
         cancellable = await repository.start_task("tenant-a", "REACT", "cancel", "quality", "chat-a")
         cancelled = await service.cancel(context, cancellable["taskId"])

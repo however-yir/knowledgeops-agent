@@ -70,7 +70,9 @@ def test_oidc_authorization_code_pkce_flow_is_one_time(monkeypatch: pytest.Monke
         params = parse_qs(urlparse(login["authorizationUrl"]).query)
         state = login["state"]
         pending = store.oidc_states[state]
-        challenge = base64.urlsafe_b64encode(hashlib.sha256(pending["verifier"].encode("ascii")).digest()).decode().rstrip("=")
+        challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(pending["verifier"].encode("ascii")).digest()).decode().rstrip("=")
+        )
         assert params == {
             "response_type": ["code"],
             "client_id": ["knowledgeops"],
@@ -124,3 +126,153 @@ def test_oidc_id_token_verification_requires_jwks_issuer_audience_and_nonce(monk
     monkeypatch.setattr(oidc_module.jwt, "decode", lambda *_args, **_kwargs: {"sub": "alice", "nonce": "other"})
     with pytest.raises(InvalidTokenError, match="OIDC nonce mismatch"):
         oidc_module.verify_oidc_id_token(settings, metadata, "signed-id-token", "expected")
+
+
+def test_oidc_replay_protection_store_failures_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = oidc_settings()
+    monkeypatch.setattr(oidc_module, "oidc_metadata", fake_oidc_metadata)
+
+    class UnavailableStore:
+        async def put(self, *_: object, **__: object) -> None:
+            raise oidc_module.OidcStateUnavailable("redis is offline")
+
+        async def consume(self, *_: object) -> dict[str, Any] | None:
+            raise oidc_module.OidcStateUnavailable("redis is offline")
+
+    async def exercise() -> None:
+        store = UnavailableStore()
+        with pytest.raises(oidc_module.OidcFlowError, match="state store is unavailable"):
+            await oidc_module.begin_oidc_login({}, settings, store, None)
+        with pytest.raises(oidc_module.OidcFlowError, match="state store is unavailable"):
+            await oidc_module.complete_oidc_callback({}, {}, settings, store, "authorization-code", "state")
+        with pytest.raises(oidc_module.OidcFlowError, match="state store is unavailable"):
+            await oidc_module.consume_oidc_exchange_code({}, store, "exchange-code")
+
+    asyncio.run(exercise())
+
+
+def test_oidc_callback_rejects_provider_claim_and_exchange_store_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = oidc_settings()
+    pending = {
+        "nonce": "expected",
+        "verifier": "verifier",
+        "returnTo": "/console",
+        "expiresAt": oidc_module.epoch_seconds() + 60,
+    }
+    monkeypatch.setattr(oidc_module, "oidc_metadata", fake_oidc_metadata)
+
+    class OfflineTokenClient:
+        async def __aenter__(self) -> OfflineTokenClient:
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def post(self, *_: object, **__: object) -> httpx.Response:
+            raise httpx.ConnectError("idp is offline")
+
+    async def exercise() -> None:
+        monkeypatch.setattr(oidc_module.httpx, "AsyncClient", lambda **_: OfflineTokenClient())
+        with pytest.raises(oidc_module.OidcFlowError, match="OIDC token exchange failed"):
+            await oidc_module.complete_oidc_callback(
+                {"state": pending.copy()}, {}, settings, None, "authorization-code", "state"
+            )
+
+        monkeypatch.setattr(oidc_module.httpx, "AsyncClient", lambda **_: FakeOidcClient())
+        monkeypatch.setattr(oidc_module, "verify_oidc_id_token", lambda *_: {"sub": "alice", "nonce": "expected"})
+        with pytest.raises(oidc_module.OidcFlowError, match="tenant claim is required"):
+            await oidc_module.complete_oidc_callback(
+                {"state": pending.copy()}, {}, settings, None, "authorization-code", "state"
+            )
+
+        class PutUnavailableStore:
+            async def consume(self, *_: object) -> dict[str, Any]:
+                return pending
+
+            async def put(self, *_: object, **__: object) -> None:
+                raise oidc_module.OidcStateUnavailable("redis is offline")
+
+        monkeypatch.setattr(
+            oidc_module,
+            "verify_oidc_id_token",
+            lambda *_: {"sub": "alice", "tenant_id": "tenant-a", "nonce": "expected"},
+        )
+        with pytest.raises(oidc_module.OidcFlowError, match="state store is unavailable"):
+            await oidc_module.complete_oidc_callback(
+                {}, {}, settings, PutUnavailableStore(), "authorization-code", "state"
+            )
+
+        class SerializedIdentityStore:
+            async def consume(self, *_: object) -> dict[str, Any]:
+                return {
+                    "identity": {"principal": "alice", "tenantId": "tenant-a", "roles": ["ADMIN"]},
+                    "expiresAt": oidc_module.epoch_seconds() + 60,
+                }
+
+            async def put(self, *_: object, **__: object) -> None:
+                return None
+
+        identity = await oidc_module.consume_oidc_exchange_code({}, SerializedIdentityStore(), "exchange-code")
+        assert identity is not None and identity.principal == "alice" and identity.roles == ["ADMIN"]
+
+    asyncio.run(exercise())
+
+
+def test_oidc_discovery_requires_configuration_and_complete_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DiscoveryClient:
+        def __init__(self, response: httpx.Response) -> None:
+            self.response = response
+
+        async def __aenter__(self) -> DiscoveryClient:
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def get(self, *_: object) -> httpx.Response:
+            return self.response
+
+    async def exercise() -> None:
+        with pytest.raises(oidc_module.OidcFlowError, match="OIDC is not configured"):
+            await oidc_module.oidc_metadata(Settings())
+
+        error_response = httpx.Response(
+            503, request=httpx.Request("GET", "https://idp.example.test/.well-known/openid-configuration")
+        )
+        monkeypatch.setattr(oidc_module.httpx, "AsyncClient", lambda **_: DiscoveryClient(error_response))
+        with pytest.raises(oidc_module.OidcFlowError, match="OIDC discovery is unavailable"):
+            await oidc_module.oidc_metadata(oidc_settings())
+
+        request = httpx.Request("GET", "https://idp.example.test/.well-known/openid-configuration")
+        for payload in ([], {"authorization_endpoint": "https://idp.example.test/authorize"}):
+            monkeypatch.setattr(
+                oidc_module.httpx,
+                "AsyncClient",
+                lambda payload=payload, **_: DiscoveryClient(httpx.Response(200, request=request, json=payload)),
+            )
+            with pytest.raises(oidc_module.OidcFlowError, match="OIDC discovery response is incomplete"):
+                await oidc_module.oidc_metadata(oidc_settings())
+
+    asyncio.run(exercise())
+
+
+def oidc_settings() -> Settings:
+    return Settings(
+        oidc_issuer_url="https://idp.example.test",
+        oidc_client_id="knowledgeops",
+        oidc_client_secret="client-secret",
+        oidc_redirect_uri="https://app.example.test/auth/callback",
+    )
+
+
+def oidc_metadata() -> dict[str, str]:
+    return {
+        "authorization_endpoint": "https://idp.example.test/authorize",
+        "token_endpoint": "https://idp.example.test/token",
+        "jwks_uri": "https://idp.example.test/keys",
+        "issuer": "https://idp.example.test",
+    }
+
+
+async def fake_oidc_metadata(_: Settings) -> dict[str, str]:
+    return oidc_metadata()
