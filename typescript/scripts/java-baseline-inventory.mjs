@@ -12,6 +12,7 @@ const javaMigrationRoot = join(repoRoot, "src", "main", "resources", "db", "migr
 const manifest = JSON.parse(readFileSync(join(root, "parity", "java-baseline.json"), "utf8"));
 const prismaSchema = readFileSync(join(root, "prisma", "schema.prisma"), "utf8");
 const prismaPhysicalTables = findPrismaPhysicalTables();
+const prismaPhysicalModels = findPrismaPhysicalModels();
 const expectedControllers = manifest.controllers.map((controller) => controller.source).sort();
 const actualControllers = findJavaControllers(javaRoot).map((path) => relative(repoRoot, path)).sort();
 const expectedDtos = manifest.dtoMappings.map((dto) => dto.source).sort();
@@ -78,6 +79,7 @@ let responsibilityGroupSourceCount = 0;
 let responsibilityGroupAnchorCount = 0;
 let securityFragmentCount = 0;
 const javaMigrationTableColumns = new Map();
+const javaMigrationSchema = findJavaMigrationSchema();
 
 assertSameSet("Java controller baseline", expectedControllers, actualControllers);
 assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
@@ -267,6 +269,45 @@ for (const [table, fields] of javaMigrationTableColumns) {
   migrationColumnCount += fields.size;
 }
 
+let migrationSchemaColumnCount = 0;
+let migrationSchemaDefaultCount = 0;
+let migrationSchemaConstraintCount = 0;
+for (const [table, javaTable] of javaMigrationSchema) {
+  const prismaModel = prismaPhysicalModels.get(table);
+  if (!prismaModel) {
+    fail(`Java migration table ${table} is missing from Prisma physical models`);
+  }
+  if (!sameSequence(javaTable.primaryKey, prismaModel.primaryKey)) {
+    fail(`Java migration table ${table} primary key does not match Prisma: ${javaTable.primaryKey.join(", ")}`);
+  }
+  for (const [column, javaColumn] of javaTable.columns) {
+    const prismaColumn = prismaModel.columns.get(column);
+    if (!prismaColumn) {
+      fail(`Java migration column ${table}.${column} is missing from Prisma physical models`);
+    }
+    if (javaColumn.sqlType !== prismaColumn.sqlType) {
+      fail(`Java migration column ${table}.${column} type mismatch: ${javaColumn.sqlType} vs ${prismaColumn.sqlType}`);
+    }
+    if (javaColumn.nullable !== prismaColumn.nullable) {
+      fail(`Java migration column ${table}.${column} nullability mismatch`);
+    }
+    if (javaColumn.defaultValue !== undefined && javaColumn.defaultValue !== prismaColumn.defaultValue) {
+      fail(`Java migration column ${table}.${column} default mismatch: ${javaColumn.defaultValue} vs ${prismaColumn.defaultValue ?? "none"}`);
+    }
+    migrationSchemaColumnCount += 1;
+    if (javaColumn.defaultValue !== undefined) {
+      migrationSchemaDefaultCount += 1;
+    }
+  }
+  for (const constraint of javaTable.constraints.filter((item) => item.named)) {
+    const prismaConstraint = prismaModel.constraints.find((item) => item.name === constraint.name);
+    if (!prismaConstraint || prismaConstraint.kind !== constraint.kind || !sameSequence(prismaConstraint.columns, constraint.columns)) {
+      fail(`Java migration ${constraint.kind} ${constraint.name} on ${table} is missing or differs in Prisma`);
+    }
+    migrationSchemaConstraintCount += 1;
+  }
+}
+
 for (const mapping of manifest.fieldMappings) {
   if (!knownDtoSources.has(mapping.source)) {
     fail(`${mapping.source} field mapping is not a declared Java DTO mapping`);
@@ -287,7 +328,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -354,6 +395,247 @@ function findPrismaPhysicalTables() {
     tables.set(table, fields);
   }
   return tables;
+}
+
+function findJavaMigrationSchema() {
+  const tables = new Map();
+  for (const migration of manifest.migrationMappings) {
+    const source = readFileSync(join(repoRoot, migration.source), "utf8");
+    for (const rawStatement of source.split(";")) {
+      const statement = rawStatement.replace(/^\s*--[^\n]*\n/gm, "").trim();
+      if (!statement) {
+        continue;
+      }
+      if (/^CREATE\s+TABLE\b/i.test(statement)) {
+        addJavaCreateTable(statement, tables);
+      } else if (/^ALTER\s+TABLE\b/i.test(statement)) {
+        applyJavaAlterTable(statement, tables);
+      } else if (/^CREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(statement)) {
+        addJavaIndex(statement, tables);
+      } else if (/^DROP\s+INDEX\b/i.test(statement)) {
+        dropJavaIndex(statement, tables);
+      }
+    }
+  }
+  return tables;
+}
+
+function addJavaCreateTable(statement, tables) {
+  const match = statement.match(/^CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s*\(([\s\S]*)\)$/i);
+  if (!match) {
+    fail(`cannot parse Java CREATE TABLE statement: ${statement.slice(0, 120)}`);
+  }
+  const [, name, body] = match;
+  const table = { columns: new Map(), primaryKey: [], constraints: [] };
+  tables.set(name, table);
+  for (const rawLine of body.split("\n")) {
+    const definition = rawLine.trim().replace(/,$/, "");
+    if (!definition) {
+      continue;
+    }
+    if (/^(PRIMARY|UNIQUE|INDEX|KEY|CONSTRAINT|FOREIGN|CHECK)\b/i.test(definition)) {
+      addJavaTableConstraint(definition, table);
+      continue;
+    }
+    addJavaColumn(definition, table);
+  }
+}
+
+function applyJavaAlterTable(statement, tables) {
+  const match = statement.match(/^ALTER\s+TABLE\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s+([\s\S]*)$/i);
+  if (!match) {
+    fail(`cannot parse Java ALTER TABLE statement: ${statement.slice(0, 120)}`);
+  }
+  const [, tableName, operations] = match;
+  const table = tables.get(tableName);
+  if (!table) {
+    fail(`Java ALTER TABLE references unknown table: ${tableName}`);
+  }
+  for (const operation of operations.split(/,\s*(?=(?:ADD|DROP)\s)/i)) {
+    const normalized = operation.trim();
+    const addColumn = normalized.match(/^ADD\s+COLUMN\s+([\s\S]+)$/i);
+    if (addColumn) {
+      addJavaColumn(addColumn[1].trim(), table);
+      continue;
+    }
+    const addUnique = normalized.match(/^ADD\s+UNIQUE\s+(?:KEY|INDEX)\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s*\(([^)]+)\)$/i);
+    if (addUnique) {
+      table.constraints.push({ name: addUnique[1], kind: "unique", columns: parsePhysicalColumns(addUnique[2]), named: true });
+      continue;
+    }
+    const dropIndex = normalized.match(/^DROP\s+INDEX\s+`?([A-Za-z][A-Za-z0-9_]*)`?$/i);
+    if (dropIndex) {
+      table.constraints = table.constraints.filter((item) => item.name !== dropIndex[1]);
+      continue;
+    }
+    fail(`cannot parse Java ALTER TABLE operation: ${normalized}`);
+  }
+}
+
+function addJavaIndex(statement, tables) {
+  const match = statement.match(/^CREATE\s+(UNIQUE\s+)?INDEX\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s+ON\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s*\(([^)]+)\)$/i);
+  if (!match) {
+    fail(`cannot parse Java CREATE INDEX statement: ${statement.slice(0, 120)}`);
+  }
+  const [, unique, name, tableName, columns] = match;
+  const table = tables.get(tableName);
+  if (!table) {
+    fail(`Java CREATE INDEX references unknown table: ${tableName}`);
+  }
+  table.constraints.push({ name, kind: unique ? "unique" : "index", columns: parsePhysicalColumns(columns), named: true });
+}
+
+function dropJavaIndex(statement, tables) {
+  const match = statement.match(/^DROP\s+INDEX\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s+ON\s+`?([A-Za-z][A-Za-z0-9_]*)`?$/i);
+  if (!match) {
+    fail(`cannot parse Java DROP INDEX statement: ${statement.slice(0, 120)}`);
+  }
+  const [, name, tableName] = match;
+  const table = tables.get(tableName);
+  if (!table) {
+    fail(`Java DROP INDEX references unknown table: ${tableName}`);
+  }
+  table.constraints = table.constraints.filter((item) => item.name !== name);
+}
+
+function addJavaTableConstraint(definition, table) {
+  const primary = definition.match(/^PRIMARY\s+KEY\s*\(([^)]+)\)$/i);
+  if (primary) {
+    table.primaryKey = parsePhysicalColumns(primary[1]);
+    return;
+  }
+  const named = definition.match(/^(UNIQUE\s+KEY|UNIQUE\s+INDEX|INDEX|KEY)\s+`?([A-Za-z][A-Za-z0-9_]*)`?\s*\(([^)]+)\)$/i);
+  if (named) {
+    table.constraints.push({
+      name: named[2],
+      kind: /^UNIQUE/i.test(named[1]) ? "unique" : "index",
+      columns: parsePhysicalColumns(named[3]),
+      named: true
+    });
+  }
+}
+
+function addJavaColumn(definition, table) {
+  const match = definition.match(/^`?([A-Za-z][A-Za-z0-9_]*)`?\s+([A-Za-z]+(?:\s*\([^)]*\))?)([\s\S]*)$/i);
+  if (!match) {
+    fail(`cannot parse Java column definition: ${definition}`);
+  }
+  const [, name, rawType, attributes] = match;
+  const primaryKey = /\bPRIMARY\s+KEY\b/i.test(attributes);
+  table.columns.set(name, {
+    sqlType: normalizeSqlType(rawType),
+    nullable: !primaryKey && !/\bNOT\s+NULL\b/i.test(attributes),
+    defaultValue: parseDefaultValue(attributes, rawType)
+  });
+  if (primaryKey) {
+    table.primaryKey = [name];
+  }
+  if (/\bUNIQUE\b/i.test(attributes)) {
+    table.constraints.push({ name, kind: "unique", columns: [name], named: false });
+  }
+}
+
+function findPrismaPhysicalModels() {
+  const models = new Map();
+  for (const match of prismaSchema.matchAll(/model\s+[A-Za-z][A-Za-z0-9_]*\s*\{([\s\S]*?)\n\}/g)) {
+    const body = match[1];
+    const tableMatch = body.match(/@@map\("([^"]+)"\)/);
+    if (!tableMatch) {
+      continue;
+    }
+    const model = { columns: new Map(), primaryKey: [], constraints: [] };
+    for (const line of body.split("\n")) {
+      const field = line.match(/^\s{2}([A-Za-z][A-Za-z0-9_]*)\s+([A-Za-z][A-Za-z0-9_]*)(\?)?([\s\S]*)$/);
+      if (!field) {
+        continue;
+      }
+      const [, name, type, optional, attributes] = field;
+      const physicalName = attributes.match(/@map\("([^"]+)"\)/)?.[1] ?? name;
+      model.columns.set(physicalName, {
+        fieldName: name,
+        sqlType: prismaSqlType(type, attributes),
+        nullable: optional === "?",
+        defaultValue: parsePrismaDefault(attributes, type)
+      });
+      if (/@id\b/.test(attributes)) {
+        model.primaryKey = [physicalName];
+      }
+      if (/@unique\b/.test(attributes)) {
+        const uniqueName = attributes.match(/@unique\(map:\s*"([^"]+)"\)/)?.[1];
+        model.constraints.push({ name: uniqueName, kind: "unique", columns: [physicalName] });
+      }
+    }
+    for (const constraint of body.matchAll(/@@(unique|index)\(\[([^\]]+)\](?:,\s*map:\s*"([^"]+)")?\)/g)) {
+      const [, kind, fields, name] = constraint;
+      const physicalColumns = fields.split(",").map((field) => field.trim().split(/\s+/)[0]).map((field) => {
+        for (const [column, value] of model.columns) {
+          if (value.fieldName === field) {
+            return column;
+          }
+        }
+        return field;
+      });
+      model.constraints.push({ name, kind, columns: physicalColumns });
+    }
+    models.set(tableMatch[1], model);
+  }
+  return models;
+}
+
+function prismaSqlType(type, attributes) {
+  const databaseType = attributes.match(/@db\.([A-Za-z]+)(?:\(([^)]*)\))?/);
+  if (databaseType) {
+    return normalizeSqlType(`${databaseType[1]}${databaseType[2] === undefined ? "" : `(${databaseType[2]})`}`);
+  }
+  return new Map([
+    ["BigInt", "BIGINT"],
+    ["Int", "INT"],
+    ["Boolean", "TINYINT(1)"],
+    ["Float", "DOUBLE"],
+    ["DateTime", "DATETIME"],
+    ["Json", "JSON"]
+  ]).get(type) ?? type.toUpperCase();
+}
+
+function parsePrismaDefault(attributes, type) {
+  const value = attributes.match(/@default\(([^)]*)\)/)?.[1];
+  if (!value || value === "autoincrement()") {
+    return undefined;
+  }
+  return normalizeDefaultValue(value, type === "Boolean" ? "TINYINT(1)" : type);
+}
+
+function parseDefaultValue(attributes, rawType) {
+  const value = attributes.match(/\bDEFAULT\s+('(?:[^']|'')*'|"(?:[^"]|"")*"|[^\s,]+)/i)?.[1];
+  return value === undefined ? undefined : normalizeDefaultValue(value, rawType);
+}
+
+function normalizeDefaultValue(value, type) {
+  const unquoted = value.trim().replace(/^['"]|['"]$/g, "");
+  if (normalizeSqlType(type) === "TINYINT(1)") {
+    if (unquoted === "1" || unquoted === "true") {
+      return "true";
+    }
+    if (unquoted === "0" || unquoted === "false") {
+      return "false";
+    }
+  }
+  if (/^-?\d+(?:\.\d+)?$/.test(unquoted)) {
+    return String(Number(unquoted));
+  }
+  return unquoted;
+}
+
+function normalizeSqlType(type) {
+  return type.replace(/\s+/g, "").toUpperCase();
+}
+
+function parsePhysicalColumns(value) {
+  return value.split(",").map((column) => column.trim().replace(/`/g, ""));
+}
+
+function sameSequence(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function findJavaMigrationTableColumns(source) {
