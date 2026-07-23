@@ -24,6 +24,8 @@ const expectedMigrations = manifest.migrationMappings.map((mapping) => mapping.s
 const actualMigrations = findSources(javaMigrationRoot, (path) => path.endsWith(".sql"))
   .map((path) => relative(repoRoot, path))
   .sort();
+const expectedFieldDtos = manifest.dtoMappings.map((dto) => dto.source).sort();
+const actualFieldDtos = manifest.fieldMappings.map((mapping) => mapping.source).sort();
 const knownDtoSources = new Set(manifest.dtoMappings.map((dto) => dto.source));
 const fieldCount = manifest.fieldMappings.reduce((count, mapping) => {
   return count + mapping.sameFields.length + (mapping.transforms?.length ?? 0);
@@ -33,6 +35,7 @@ assertSameSet("Java controller baseline", expectedControllers, actualControllers
 assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
 assertSameSet("Java mapper baseline", expectedMappers, actualMappers);
 assertSameSet("Java migration baseline", expectedMigrations, actualMigrations);
+assertSameSet("Java DTO field baseline", expectedFieldDtos, actualFieldDtos);
 
 let routeCount = 0;
 for (const controller of manifest.controllers) {
