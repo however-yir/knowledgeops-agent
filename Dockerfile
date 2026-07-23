@@ -11,11 +11,11 @@ RUN --mount=type=cache,target=/root/.m2 \
     mkdir -p deps && \
     cp target/*.jar deps/app.jar
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre@sha256:92999aea37688157a53a40bfcb187c30f317422e028045fd5fc5c548fde9e626
 WORKDIR /app
 
-RUN addgroup -S appgroup && \
-    adduser -S -G appgroup appuser && \
+RUN groupadd --system appgroup && \
+    useradd --system --gid appgroup --no-create-home appuser && \
     mkdir -p /app/data /app/logs && \
     chown -R appuser:appgroup /app && \
     chmod -R 750 /app
