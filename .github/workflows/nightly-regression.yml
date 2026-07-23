@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: "0 18 * * *"
   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
   regression:
@@ -26,6 +28,73 @@ jobs:
 
       - name: Run regression gate
         run: python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
+
+  python-live-evaluation:
+    name: Python live model evaluation
+    # This is an opt-in external acceptance gate. It must target the isolated
+    # Python deployment, never the Java production write path.
+    if: >-
+      vars.PYTHON_LIVE_EVAL_ENABLED == 'true' &&
+      (github.event_name != 'release' || github.event.release.target_commitish == 'python-rewrite')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHON_LIVE_EVAL_BASE_URL: ${{ secrets.PYTHON_LIVE_EVAL_BASE_URL }}
+      PYTHON_LIVE_EVAL_API_KEY: ${{ secrets.PYTHON_LIVE_EVAL_API_KEY }}
+      PYTHON_LIVE_EVAL_BEARER_TOKEN: ${{ secrets.PYTHON_LIVE_EVAL_BEARER_TOKEN }}
+      PYTHON_LIVE_EVAL_TENANT_ID: ${{ secrets.PYTHON_LIVE_EVAL_TENANT_ID }}
+      PYTHON_LIVE_EVAL_MODEL_PROFILE: ${{ vars.PYTHON_LIVE_EVAL_MODEL_PROFILE || 'balanced' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate isolated live-evaluation configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PYTHON_LIVE_EVAL_BASE_URL"
+          test -n "$PYTHON_LIVE_EVAL_TENANT_ID"
+          if [ -z "$PYTHON_LIVE_EVAL_API_KEY" ] && [ -z "$PYTHON_LIVE_EVAL_BEARER_TOKEN" ]; then
+            echo "Configure an API key or a bearer token for the isolated Python evaluator." >&2
+            exit 1
+          fi
+
+      - name: Run Python live SSE evaluation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports/python-live-evaluation
+          auth_args=()
+          if [ -n "$PYTHON_LIVE_EVAL_BEARER_TOKEN" ]; then
+            auth_args+=(--bearer-token "$PYTHON_LIVE_EVAL_BEARER_TOKEN")
+          else
+            auth_args+=(--api-key "$PYTHON_LIVE_EVAL_API_KEY")
+          fi
+          python3 scripts/eval_live_runner.py \
+            --dataset evaluation/dataset.json \
+            --output reports/python-live-evaluation/predictions.json \
+            --base-url "$PYTHON_LIVE_EVAL_BASE_URL" \
+            --tenant-id "$PYTHON_LIVE_EVAL_TENANT_ID" \
+            --model-profile "$PYTHON_LIVE_EVAL_MODEL_PROFILE" \
+            --timeout 60 \
+            "${auth_args[@]}"
+          python3 scripts/run_regression.py \
+            --dataset evaluation/dataset.json \
+            --predictions reports/python-live-evaluation/predictions.json \
+            --report-dir reports/python-live-evaluation/regression \
+            --threshold 0.70 \
+            --correctness-threshold 0.75 \
+            --citation-hit-threshold 0.70 \
+            --hallucination-max-rate 0.05 \
+            --failure-max-rate 0.02 \
+            --first-token-max-ms 1500 \
+            --require-latency
+
+      - name: Upload Python live-evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-live-evaluation-evidence
+          path: reports/python-live-evaluation/**
 
   owasp-full-scan:
     runs-on: ubuntu-latest

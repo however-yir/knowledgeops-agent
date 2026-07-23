@@ -53,3 +53,25 @@ knowledgeops-python-baseline-manifest \
    ```
 4. Drain Java workers, stamp the compatible Alembic revision, start Python workers, then direct write traffic to Python.
 5. On any breach, route back to Java and restart Java workers. Do not run destructive Python migrations during rollback.
+
+## Nightly live-model gate
+
+Push CI intentionally uses the deterministic provider stub. To exercise a real
+model without exposing production writes, enable the `Python live model
+evaluation` job in `.github/workflows/nightly-regression.yml` only after an
+isolated, Python-only deployment is available.
+
+Set the repository variable `PYTHON_LIVE_EVAL_ENABLED` to `true`, and configure
+these GitHub Actions secrets:
+
+- `PYTHON_LIVE_EVAL_BASE_URL`: isolated Python API base URL.
+- `PYTHON_LIVE_EVAL_TENANT_ID`: evaluation tenant in that isolated deployment.
+- `PYTHON_LIVE_EVAL_API_KEY` or `PYTHON_LIVE_EVAL_BEARER_TOKEN`: least-privilege
+  credential for that tenant.
+
+Optionally set `PYTHON_LIVE_EVAL_MODEL_PROFILE` (defaults to `balanced`). The
+gate calls canonical `/ai/react/chat/stream`, persists only prediction and
+aggregate regression artifacts, and enforces correctness `>= 0.75`, citation
+hit `>= 0.70`, hallucination `<= 0.05`, failure `<= 0.02`, and p95 first-token
+latency `<= 1500 ms`. A skipped job means no live environment is configured;
+it is not evidence of live-model acceptance or shadow cutover readiness.
