@@ -23,12 +23,20 @@ const expectedMigrations = manifest.migrationMappings.map((mapping) => mapping.s
 const actualMigrations = findSources(javaMigrationRoot, (path) => path.endsWith(".sql"))
   .map((path) => relative(repoRoot, path))
   .sort();
+const javaSourcesByBasename = new Map();
+for (const path of findSources(javaRoot, () => true)) {
+  const name = basename(path);
+  javaSourcesByBasename.set(name, [...(javaSourcesByBasename.get(name) ?? []), path]);
+}
 const expectedFieldDtos = manifest.dtoMappings.map((dto) => dto.source).sort();
 const actualFieldDtos = manifest.fieldMappings.map((mapping) => mapping.source).sort();
 const knownDtoSources = new Set(manifest.dtoMappings.map((dto) => dto.source));
 const fieldCount = manifest.fieldMappings.reduce((count, mapping) => {
   return count + mapping.sameFields.length + (mapping.transforms?.length ?? 0);
 }, 0);
+let persistenceEntityCount = 0;
+let persistenceFieldCount = 0;
+let persistenceFieldExclusionCount = 0;
 
 assertSameSet("Java controller baseline", expectedControllers, actualControllers);
 assertSameSet("Java DTO baseline", expectedDtos, actualDtos);
@@ -87,8 +95,37 @@ for (const service of manifest.serviceMappings) {
 for (const mapping of manifest.persistenceMappings) {
   const javaPath = join(repoRoot, mapping.source);
   const javaType = basename(mapping.source, ".java");
-  assertIncludes(readFileSync(javaPath, "utf8"), `interface ${javaType}`, `${mapping.source} Java mapper`);
+  const mapperSource = readFileSync(javaPath, "utf8");
+  assertIncludes(mapperSource, `interface ${javaType}`, `${mapping.source} Java mapper`);
   assertIncludes(prismaSchema, `model ${mapping.typescriptModel} {`, `${mapping.source} Prisma model mapping`);
+  const entityType = mapperSource.match(/BaseMapper<([A-Za-z][A-Za-z0-9_]*)>/)?.[1];
+  if (!entityType) {
+    if (!mapping.fieldMappingExcluded?.trim()) {
+      fail(`${mapping.source} has no BaseMapper entity and must declare a field-mapping exclusion`);
+    }
+    persistenceFieldExclusionCount += 1;
+    continue;
+  }
+  if (mapping.fieldMappingExcluded) {
+    fail(`${mapping.source} has a BaseMapper entity and must not exclude field mapping`);
+  }
+  const entityPaths = javaSourcesByBasename.get(`${entityType}.java`) ?? [];
+  if (entityPaths.length !== 1) {
+    fail(`${mapping.source} BaseMapper entity ${entityType} must resolve to exactly one Java source; found ${entityPaths.length}`);
+  }
+  const entitySource = readFileSync(entityPaths[0], "utf8");
+  const entityFields = findJavaInstanceFields(entitySource);
+  if (entityFields.length === 0) {
+    fail(`${mapping.source} BaseMapper entity ${entityType} has no Java instance fields`);
+  }
+  const prismaFields = findPrismaModelFields(mapping.typescriptModel);
+  for (const field of entityFields) {
+    if (!prismaFields.has(field)) {
+      fail(`${mapping.source} Java entity field ${field} is missing from Prisma model ${mapping.typescriptModel}`);
+    }
+  }
+  persistenceEntityCount += 1;
+  persistenceFieldCount += entityFields.length;
 }
 
 for (const migration of manifest.migrationMappings) {
@@ -117,7 +154,7 @@ for (const mapping of manifest.fieldMappings) {
 }
 
 console.log(
-  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.persistenceMappings.length} mapper/model pairs, ${manifest.migrationMappings.length} migrations, and ${fieldCount} key DTO fields map to TypeScript; static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations, and ${fieldCount} key DTO fields map to TypeScript (${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -156,6 +193,18 @@ function assertJavaField(source, field, label) {
   if (!new RegExp(`\\b${escapeRegex(field)}\\s*;`).test(source)) {
     fail(`${label} is missing: ${field}`);
   }
+}
+
+function findJavaInstanceFields(source) {
+  return [...source.matchAll(/^\s*private\s+(?!static\b)[^;=]+\s+([A-Za-z][A-Za-z0-9_]*)\s*;/gm)].map((match) => match[1]);
+}
+
+function findPrismaModelFields(model) {
+  const match = prismaSchema.match(new RegExp(`model\\s+${escapeRegex(model)}\\s*\\{([\\s\\S]*?)\\n\\}`));
+  if (!match) {
+    fail(`missing Prisma model body: ${model}`);
+  }
+  return new Set([...match[1].matchAll(/^\s{2}([A-Za-z][A-Za-z0-9_]*)\s/gm)].map((field) => field[1]));
 }
 
 function assertTypescriptField(source, field, label) {

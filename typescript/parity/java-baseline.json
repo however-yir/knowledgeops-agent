@@ -233,7 +233,7 @@
     { "source": "src/main/java/com/enterprise/iqk/mapper/CourseReservationMapper.java", "typescriptModel": "CourseReservation" },
     { "source": "src/main/java/com/enterprise/iqk/mapper/IngestionJobMapper.java", "typescriptModel": "IngestionJob" },
     { "source": "src/main/java/com/enterprise/iqk/mapper/ModelAbExposureMapper.java", "typescriptModel": "ModelAbExposure" },
-    { "source": "src/main/java/com/enterprise/iqk/mapper/PermissionMapper.java", "typescriptModel": "Permission" },
+    { "source": "src/main/java/com/enterprise/iqk/mapper/PermissionMapper.java", "typescriptModel": "Permission", "fieldMappingExcluded": "Custom SQL mapper returns permission names and has no Java persistence entity." },
     { "source": "src/main/java/com/enterprise/iqk/mapper/RefreshTokenMapper.java", "typescriptModel": "RefreshToken" },
     { "source": "src/main/java/com/enterprise/iqk/mapper/SchoolMapper.java", "typescriptModel": "School" },
     { "source": "src/main/java/com/enterprise/iqk/mapper/TenantBudgetMapper.java", "typescriptModel": "TenantBudget" },
