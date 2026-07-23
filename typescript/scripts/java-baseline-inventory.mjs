@@ -89,6 +89,9 @@ let responsibilityGroupAnchorCount = 0;
 let securityFragmentCount = 0;
 let fieldTypeFamilyCount = 0;
 let fieldIsoRepresentationCount = 0;
+let nestedTypeFieldCount = 0;
+let nestedTypeSameCount = 0;
+let nestedTypeDifferenceCount = 0;
 const javaMigrationTableColumns = new Map();
 const javaMigrationSchema = findJavaMigrationSchema();
 
@@ -362,19 +365,38 @@ for (const mapping of manifest.fieldMappings) {
     fail(`${mapping.source} field mapping is missing its TypeScript DTO type`);
   }
   const typescriptFields = findTypescriptInterfaceFields(typescriptSource, mapping.typescriptType);
+  const nestedTypeMappings = new Map();
+  for (const nestedMapping of mapping.nestedTypeMappings ?? []) {
+    if (!nestedMapping.note?.trim() || nestedMapping.relationship !== "intentional_difference") {
+      fail(`${mapping.source} nested type mapping requires an intentional-difference relationship and explanatory note`);
+    }
+    const key = `${nestedMapping.java}:${nestedMapping.typescript}`;
+    if (nestedTypeMappings.has(key)) {
+      fail(`${mapping.source} has a duplicate nested type mapping for ${key}`);
+    }
+    nestedTypeMappings.set(key, nestedMapping);
+  }
+  const usedNestedTypeMappings = new Set();
   for (const field of mapping.sameFields) {
     assertFieldTypeFamily(javaSource, typescriptFields, field, field, mapping);
+    assertNestedTypeFamily(javaSource, typescriptFields, field, field, mapping, nestedTypeMappings, usedNestedTypeMappings);
   }
   for (const transform of mapping.transforms ?? []) {
     if (!transform.note?.trim() || transform.java === transform.typescript) {
       fail(`${mapping.source} field transform requires a renamed field and an explanatory note`);
     }
     assertFieldTypeFamily(javaSource, typescriptFields, transform.java, transform.typescript, mapping);
+    assertNestedTypeFamily(javaSource, typescriptFields, transform.java, transform.typescript, mapping, nestedTypeMappings, usedNestedTypeMappings);
+  }
+  for (const key of nestedTypeMappings.keys()) {
+    if (!usedNestedTypeMappings.has(key)) {
+      fail(`${mapping.source} nested type mapping is stale or does not describe a type difference: ${key}`);
+    }
   }
 }
 
 console.log(
-  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript with ${fieldTypeFamilyCount} verified type families (${fieldIsoRepresentationCount} documented ISO-8601 representations; ${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
+  `java baseline inventory ok: ${allJavaSources.length}/${allJavaSources.length} Java production sources accounted for (${manifest.responsibilityGroupMappings.length} responsibility groups covering ${responsibilityGroupSourceCount} grouped sources and ${responsibilityGroupAnchorCount} group anchors), ${manifest.controllers.length} controllers, ${routeCount} route declarations, ${manifest.dtoMappings.length} DTOs, ${manifest.serviceMappings.length} core services, ${manifest.securityMappings.length} security sources and ${securityFragmentCount} security anchors, ${manifest.configurationMappings.length} configuration-property classes and ${configurationFragmentCount} key configuration anchors, ${configurationSemanticCount} configuration defaults (${configurationSameCount} same, ${configurationRepresentationCount} representation mappings, ${configurationDifferenceCount} documented differences), ${manifest.crossCuttingMappings.length} cross-cutting Java sources and ${crossCuttingFragmentCount} responsibility anchors, ${manifest.persistenceMappings.length} mapper/model pairs, ${persistenceEntityCount} Java entities and ${persistenceFieldCount} persistence fields, ${manifest.migrationMappings.length} migrations covering ${migrationTableCount} physical tables and ${migrationColumnCount} columns, ${migrationSchemaColumnCount} final schema columns with ${migrationSchemaDefaultCount} explicit defaults and ${migrationSchemaConstraintCount} named unique/index constraints, and ${fieldCount} key DTO fields map to TypeScript with ${fieldTypeFamilyCount} verified type families and ${nestedTypeFieldCount} verified collection/key-value shapes (${nestedTypeSameCount} same, ${nestedTypeDifferenceCount} documented differences, ${fieldIsoRepresentationCount} documented ISO-8601 representations; ${persistenceFieldExclusionCount} custom mapper field exclusion); static mapping only, not Java runtime parity`
 );
 
 function findJavaControllers(dir) {
@@ -731,6 +753,28 @@ function assertFieldTypeFamily(javaSource, typescriptFields, javaField, typescri
   fieldTypeFamilyCount += 1;
 }
 
+function assertNestedTypeFamily(javaSource, typescriptFields, javaField, typescriptField, mapping, nestedTypeMappings, usedNestedTypeMappings) {
+  const javaType = findJavaFieldType(javaSource, javaField, `${mapping.source} Java field`);
+  const typescriptType = typescriptFields.get(typescriptField);
+  const javaShape = javaTypeShape(javaType);
+  const typescriptShape = typescriptTypeShape(typescriptType);
+  if (!javaShape.nested && !typescriptShape.nested) {
+    return;
+  }
+  nestedTypeFieldCount += 1;
+  const key = `${javaField}:${typescriptField}`;
+  if (sameTypeShape(javaShape, typescriptShape)) {
+    nestedTypeSameCount += 1;
+    return;
+  }
+  const documentedDifference = nestedTypeMappings.get(key);
+  if (!documentedDifference) {
+    fail(`${mapping.source} ${javaField} nested type mismatch: Java ${typeShapeLabel(javaShape)} vs TypeScript ${typeShapeLabel(typescriptShape)}`);
+  }
+  usedNestedTypeMappings.add(key);
+  nestedTypeDifferenceCount += 1;
+}
+
 function findJavaFieldType(source, field, label) {
   const match = source.match(new RegExp(`^\\s*private\\s+(?!static\\b)([^;=]+?)\\s+${escapeRegex(field)}\\s*;\\s*$`, "m"));
   if (!match) {
@@ -824,6 +868,93 @@ function typescriptTypeFamily(type) {
     return "text";
   }
   return "structured";
+}
+
+function javaTypeShape(type) {
+  const normalized = type.replace(/\s+/g, "");
+  const collection = normalized.match(/^(?:List|Set|Collection|Iterable|Stream)<(.*)>$/);
+  if (collection) {
+    return { nested: true, family: "collection", element: javaTypeShape(collection[1]) };
+  }
+  const map = normalized.match(/^Map<(.*)>$/);
+  if (map) {
+    const [key, value] = splitTypeArguments(map[1]);
+    if (!key || !value) {
+      fail(`unsupported Java map type: ${type}`);
+    }
+    return { nested: true, family: "record", key: javaTypeShape(key), value: javaTypeShape(value) };
+  }
+  return { nested: false, family: javaTypeFamily(normalized) };
+}
+
+function typescriptTypeShape(type) {
+  const normalized = removeNullableType(type);
+  const collection = normalized.match(/^(?:Array|ReadonlyArray)<(.*)>$/);
+  if (collection) {
+    return { nested: true, family: "collection", element: typescriptTypeShape(collection[1]) };
+  }
+  if (normalized.endsWith("[]")) {
+    return { nested: true, family: "collection", element: typescriptTypeShape(normalized.slice(0, -2)) };
+  }
+  const record = normalized.match(/^Record<(.*)>$/);
+  if (record) {
+    const [key, value] = splitTypeArguments(record[1]);
+    if (!key || !value) {
+      fail(`unsupported TypeScript record type: ${type}`);
+    }
+    return { nested: true, family: "record", key: typescriptTypeShape(key), value: typescriptTypeShape(value) };
+  }
+  return { nested: false, family: typescriptTypeFamily(normalized) };
+}
+
+function removeNullableType(type) {
+  const parts = splitTopLevel(type, "|").map((part) => part.trim()).filter((part) => part !== "null" && part !== "undefined");
+  return parts.join(" | ");
+}
+
+function splitTypeArguments(value) {
+  return splitTopLevel(value, ",").map((part) => part.trim());
+}
+
+function splitTopLevel(value, separator) {
+  const parts = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "<") {
+      depth += 1;
+    } else if (value[index] === ">") {
+      depth -= 1;
+    } else if (value[index] === separator && depth === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function sameTypeShape(left, right) {
+  if (left.family !== right.family) {
+    return false;
+  }
+  if (left.family === "collection") {
+    return sameTypeShape(left.element, right.element);
+  }
+  if (left.family === "record") {
+    return sameTypeShape(left.key, right.key) && sameTypeShape(left.value, right.value);
+  }
+  return true;
+}
+
+function typeShapeLabel(shape) {
+  if (shape.family === "collection") {
+    return `collection<${typeShapeLabel(shape.element)}>`;
+  }
+  if (shape.family === "record") {
+    return `record<${typeShapeLabel(shape.key)}, ${typeShapeLabel(shape.value)}>`;
+  }
+  return shape.family;
 }
 
 function escapeRegex(value) {
