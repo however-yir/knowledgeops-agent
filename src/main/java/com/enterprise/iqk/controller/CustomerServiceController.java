@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 @RequiredArgsConstructor
 @RestController
@@ -38,7 +38,7 @@ public class CustomerServiceController {
         return serviceChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .user(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .call()
                 .content();
     }

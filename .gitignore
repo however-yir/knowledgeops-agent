@@ -40,6 +40,8 @@ reports/regression/latest.json
 reports/regression/latest.md
 evaluation/predictions.generated.json
 evaluation/predictions.live.json
+evaluation/ragproof/baseline.json
+reports/ragproof/
 logs/*.log
 coverage/
 tmp/

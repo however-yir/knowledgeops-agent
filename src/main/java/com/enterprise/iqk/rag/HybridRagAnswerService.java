@@ -21,12 +21,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.UUID;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 @Slf4j
 @Service
@@ -88,7 +87,7 @@ public class HybridRagAnswerService {
                             .temperature(ragProperties.getTemperature()).build())
                     .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
                     .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
-                    .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                     .call()
                     .content();
 

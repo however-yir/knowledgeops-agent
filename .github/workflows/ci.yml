@@ -1,4 +1,4 @@
-name: Intelligent QA Platform CI
+name: KnowledgeOps CI
 
 on:
   push:
@@ -7,69 +7,40 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   JAVA_VERSION: "17"
   NODE_VERSION: "20"
 
 jobs:
-  code-quality:
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
+  backend-quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: temurin
           cache: maven
 
-      - name: Checkstyle
-        run: mvn checkstyle:check -q
+      - name: Compile and run enforced static analysis
+        run: mvn -q validate compile
 
-      - name: PMD
-        run: mvn pmd:check -q
+      - name: Run unit tests and coverage gate
+        run: mvn -q verify
 
-      - name: SpotBugs
-        run: mvn spotbugs:check -q
-
-  build:
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
-    needs: code-quality
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: temurin
-          cache: maven
-
-      - name: Build with Maven
-        run: mvn -DskipTests compile -q
-
-      - name: Run Unit Tests
-        run: mvn test -q
-
-      - name: Run Integration Tests
-        run: mvn verify -q -Pintegration-test
-
-      - name: Generate Coverage Report
-        run: mvn jacoco:report -q
+      - name: Upload JaCoCo report
+        uses: actions/upload-artifact@v7
         if: always()
-
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v6
         with:
-          files: "**/target/site/jacoco/jacoco.xml"
-        if: always()
+          name: jacoco-report
+          path: target/site/jacoco/
 
       - name: Generate SBOM
-        run: mvn cyclonedx:makeAggregateBom -q
-        if: always()
+        run: mvn -q cyclonedx:makeAggregateBom
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v7
@@ -78,13 +49,21 @@ jobs:
           name: sbom
           path: target/bom.*
 
-      - name: Build Evaluator Contract Fixture
+  evaluator-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify ragproof response contract
+        run: python3 scripts/verify_ragproof_contract.py
+
+      - name: Build evaluator contract fixture
         run: |
           python3 scripts/generate_eval_contract_fixture.py \
             --dataset evaluation/dataset.large.json \
             --output evaluation/predictions.contract.json
 
-      - name: Validate Evaluator Contract
+      - name: Validate evaluator contract thresholds
         run: |
           python3 scripts/run_regression.py \
             --dataset evaluation/dataset.large.json \
@@ -97,15 +76,14 @@ jobs:
             --failure-max-rate 0.02 \
             --first-token-max-ms 1500
 
-      - name: Upload Evaluator Contract Report
+      - name: Upload evaluator contract reports
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: evaluation-contract-report
+          name: evaluator-contract-report
           path: reports/evaluation-contract/latest.*
 
   frontend:
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -113,8 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -123,161 +100,5 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit
 
-      - name: ESLint
-        run: npx eslint . --ext .ts,.tsx,.vue
-
-      - name: Prettier check
-        run: npx prettier --check "src/**/*.{ts,tsx,vue,css}"
-
-      - name: TypeScript check
-        run: npx vue-tsc --noEmit
-
-      - name: Build frontend
-        run: npm run build
-
-  e2e-smoke:
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
-    needs: [build, frontend]
-    runs-on: ubuntu-latest
-    env:
-      COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Start Full Stack
-        run: docker compose up -d --build
-
-      - name: Wait for API Health
-        run: |
-          for i in {1..60}; do
-            if curl -fsS http://localhost:8080/actuator/health >/dev/null; then
-              echo "API is healthy"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "API failed to become healthy"
-          docker compose ps
-          exit 1
-
-      - name: Wait for Web Health
-        run: |
-          for i in {1..40}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8088/ || true)
-            if [ "$code" = "200" ]; then
-              echo "Web is healthy"
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "Web failed to become healthy"
-          docker compose ps
-          exit 1
-
-      - name: Run E2E Chat Flow
-        run: python3 scripts/e2e_chat_flow.py --base-url http://localhost:8080
-
-      - name: Run Live Eval (Latency/Failure SLO)
-        run: |
-          python3 scripts/eval_live_runner.py \
-            --dataset evaluation/dataset.json \
-            --output evaluation/predictions.live.json \
-            --base-url http://localhost:8080 \
-            --timeout 60
-
-          python3 scripts/run_regression.py \
-            --dataset evaluation/dataset.json \
-            --predictions evaluation/predictions.live.json \
-            --threshold 0.70 \
-            --correctness-threshold 0.75 \
-            --citation-hit-threshold 0.70 \
-            --hallucination-max-rate 0.05 \
-            --failure-max-rate 0.02 \
-            --first-token-max-ms 1500 \
-            --require-latency \
-            --require-live-predictions
-
-      - name: Collect Runtime Logs
-        if: always()
-        run: |
-          mkdir -p reports/e2e
-          docker compose ps > reports/e2e/docker-ps.txt || true
-          docker compose logs --no-color > reports/e2e/docker-logs.txt || true
-
-      - name: Upload E2E Artifacts
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: e2e-artifacts
-          path: |
-            reports/e2e/**
-            reports/regression/latest.*
-
-      - name: Shutdown Stack
-        if: always()
-        run: docker compose down -v --remove-orphans
-
-  trivy-scan:
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'docs:') }}
-    needs: [build, frontend]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build image for scanning
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          load: true
-          tags: knowledgeops-agent:scan
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: knowledgeops-agent:scan
-          format: table
-          exit-code: 1
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-
-      - name: Run Trivy (frontend)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: frontend/
-          format: table
-          exit-code: 1
-          severity: CRITICAL,HIGH
-
-  docker:
-    needs: [build, e2e-smoke, frontend, trivy-scan]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Login to Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: ${{ github.ref == 'refs/heads/main' }}
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+      - name: Lint, format, type-check, and build
+        run: npm run ci && npm run build

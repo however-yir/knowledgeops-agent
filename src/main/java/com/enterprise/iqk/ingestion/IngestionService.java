@@ -253,13 +253,13 @@ public class IngestionService {
     }
 
     private List<Document> splitDocuments(List<Document> pages, IngestionJob job) {
-        TokenTextSplitter splitter = new TokenTextSplitter(
-                ragProperties.getSplit().getChunkSize(),
-                ragProperties.getSplit().getMinChunkSize(),
-                5,
-                ragProperties.getSplit().getMaxNumChunks(),
-                true
-        );
+        TokenTextSplitter splitter = TokenTextSplitter.builder()
+                .withChunkSize(ragProperties.getSplit().getChunkSize())
+                .withMinChunkSizeChars(ragProperties.getSplit().getMinChunkSize())
+                .withMinChunkLengthToEmbed(5)
+                .withMaxNumChunks(ragProperties.getSplit().getMaxNumChunks())
+                .withKeepSeparator(true)
+                .build();
         List<Document> chunks = splitter.apply(pages);
         for (int i = 0; i < chunks.size(); i++) {
             Document chunk = chunks.get(i);

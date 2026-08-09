@@ -17,7 +17,6 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -170,7 +169,6 @@ public class AgentSessionService {
 
         Set<String> targetFingerprints = toMessageFingerprintSet(targetMessages);
         Set<String> existingIds = messageIdSet(targetMessages);
-        int added = 0;
         for (AgentSessionMessageVO message : sourceMessages) {
             String fingerprint = fingerprint(message);
             if (targetFingerprints.contains(fingerprint)) {
@@ -179,7 +177,6 @@ public class AgentSessionService {
             ensureUniqueMessageId(message, existingIds);
             targetMessages.add(message);
             targetFingerprints.add(fingerprint);
-            added++;
         }
 
         AgentSessionBranchVO mergedBranch = new AgentSessionBranchVO();

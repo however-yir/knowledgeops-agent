@@ -1,0 +1,3 @@
+{"id":"ko-rag-001","question":"高温健康风险有哪些？","ground_truth":"高温健康风险包括中暑、脱水、慢病加重和户外暴露风险。","tags":["zh","safety"],"difficulty":"easy"}
+{"id":"ko-rag-002","question":"知识库没有匹配内容时应如何回答？","ground_truth":"应明确说明当前没有匹配内容，建议补充资料或调整检索关键词，不应编造结论。","tags":["zh","unanswerable"],"difficulty":"medium"}
+{"id":"ko-rag-003","question":"课程预约需要哪些基础字段？","ground_truth":"课程预约至少需要课程、姓名、联系方式和校区，可补充备注、预约时间和渠道来源。","tags":["zh","workflow"],"difficulty":"easy"}

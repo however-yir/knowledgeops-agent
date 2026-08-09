@@ -7,7 +7,7 @@ import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
-import org.springframework.ai.model.Media;
+import org.springframework.ai.content.Media;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.util.MimeType;
@@ -21,7 +21,7 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 import java.util.Objects;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 @RestController
 @RequestMapping("/ai")
@@ -44,7 +44,7 @@ public class ChatController {
 //        chatHistoryRepository.save("chat",chatId);
 //        return chatClient
 //                .prompt(prompt)
-//                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId))
+//                .advisors(a -> a.param(CONVERSATION_ID, chatId))
 //                .stream()
 //                .content();
 //    }
@@ -87,8 +87,8 @@ public class ChatController {
         }).toList();
 
         return routedPrompt(modelProfile, "chat", chatId)
-                .user(t->t.text(prompt).media(mediaList.toArray(Media[]::new)))
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new)))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
     }
@@ -96,7 +96,7 @@ public class ChatController {
     private Flux<String> textChat(String prompt, String conversationId, String modelProfile, String chatId) {
         return routedPrompt(modelProfile, "chat", chatId)
                 .user(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
     }

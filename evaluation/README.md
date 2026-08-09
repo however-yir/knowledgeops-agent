@@ -121,3 +121,22 @@ regression report.
 - **ci.yml / e2e-smoke**: Runs the real API quality gate with live-source enforcement
 - **ci.yml / build**: Runs only the evaluator contract self-test
 - **nightly-regression.yml**: Runs the large evaluator contract check nightly; it is not a model-quality run
+
+## ragproof External Quality Evaluation
+
+`evaluation/ragproof/knowledgeops-react.json` maps the public
+`POST /ai/react/chat` response directly: `answer`, `evidence`, `citations`, and
+the explicit boolean `fallback`. The contract requires `fallback=false`; a
+deterministic degradation is treated as a failed evaluation response rather
+than evidence of model quality.
+
+The checked-in JSON config and dataset are validated offline with:
+
+```bash
+python3 scripts/verify_ragproof_contract.py
+```
+
+For a real deployed environment, run the manual `ragproof-external.yml`
+workflow with an externally stored baseline URL and repository secrets for the
+endpoint, API key, and tenant. It does not start Docker and does not accept a
+synthetic local baseline as model-quality evidence.

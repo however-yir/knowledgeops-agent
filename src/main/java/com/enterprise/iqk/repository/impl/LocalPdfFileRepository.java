@@ -85,10 +85,8 @@ public class LocalPdfFileRepository implements FileRepository {
             if (vectorStore instanceof SimpleVectorStore simpleVectorStore) {
                 File target = new File(vectorStoreProperties.getSimpleStorePath());
                 File parent = target.getParentFile();
-                if (parent != null && !parent.exists()) {
-                    if (!parent.mkdirs()) {
-                        log.warn("Failed to create parent directories for: {}", parent);
-                    }
+                if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                    log.warn("Failed to create parent directories for: {}", parent);
                 }
                 simpleVectorStore.save(target);
             }

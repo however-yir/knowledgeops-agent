@@ -252,8 +252,12 @@ public class WorkflowReactAgentService {
         try {
             String answer = callModel("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
                     finalPrompt, routeDecision, tenantId, "react_final");
-            if (StringUtils.hasText(answer)) return answer;
-        } catch (RuntimeException ignored) {}
+            if (StringUtils.hasText(answer)) {
+                return answer;
+            }
+        } catch (RuntimeException ignored) {
+            // The deterministic fallback below keeps the workflow response usable.
+        }
         return "当前未能生成最终答案，请稍后重试。";
     }
 
@@ -350,9 +354,13 @@ public class WorkflowReactAgentService {
             String action = normalizeAction(node.path("action").asText("finish"));
             Map<String, Object> input = objectMapper.convertValue(
                     node.path("action_input"), new TypeReference<Map<String, Object>>() {});
-            if (input == null) input = Collections.emptyMap();
+            if (input == null) {
+                input = Collections.emptyMap();
+            }
             if (!List.of("query_school", "query_course", "add_course_reservation", "rag_search", "finish")
-                    .contains(action)) action = "finish";
+                    .contains(action)) {
+                action = "finish";
+            }
             return new ReasonDecision(node.path("thought").asText(""),
                     action, input, node.path("answer").asText(""), List.of(), List.of());
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {

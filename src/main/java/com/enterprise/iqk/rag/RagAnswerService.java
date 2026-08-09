@@ -25,7 +25,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 @Service
 @RequiredArgsConstructor
@@ -77,7 +77,7 @@ public class RagAnswerService {
                             .temperature(ragProperties.getTemperature()).build())
                     .system(SystemConstants.RAG_ANSWER_SYSTEM)
                     .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
-                    .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                     .call()
                     .content();
             long outputTokens = tenantCostService.estimateTokens(answer);
