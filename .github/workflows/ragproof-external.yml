@@ -32,7 +32,7 @@ jobs:
         run: curl --fail --location --proto '=https' --tlsv1.2 '${{ inputs.baseline_url }}' -o evaluation/ragproof/baseline.json
 
       - name: Run ragproof regression gate
-        uses: however-yir/ragproof/.github/actions/evaluate@main
+        uses: however-yir/ragproof/.github/actions/evaluate@082ae88e09b1b529711919db9104bc42969dac83
         with:
           config: evaluation/ragproof/knowledgeops-react.json
           baseline: evaluation/ragproof/baseline.json
