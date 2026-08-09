@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/however-yir/knowledgeops-agent/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/however-yir/knowledgeops-agent)](https://github.com/however-yir/knowledgeops-agent/releases)
-[![Docs](https://img.shields.io/badge/docs-Portfolio-blue)](https://however-yir.github.io/projects/knowledgeops-agent/)
+[![Docs](https://img.shields.io/badge/docs-Repository-blue)](docs/index.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/container-GHCR-blue?logo=docker)](https://github.com/however-yir/knowledgeops-agent/pkgs/container/knowledgeops-agent)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0--M6-yellow?logo=spring&labelColor=6DB33F)](docs/spring-ai-upgrade-plan.md)
@@ -79,7 +79,7 @@ make demo-down
 
 ## Evidence Links
 
-- Documentation: [however-yir.github.io/projects/knowledgeops-agent](https://however-yir.github.io/projects/knowledgeops-agent/)
+- Documentation index: [docs/index.md](docs/index.md)
 - Evidence pack: [docs/evidence/README.md](docs/evidence/README.md)
 - Latest release: [v1.0.0](https://github.com/however-yir/knowledgeops-agent/releases/tag/v1.0.0)
 - 3 条演示路径: [docs/demo-paths.md](docs/demo-paths.md)
