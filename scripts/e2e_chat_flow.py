@@ -105,11 +105,17 @@ def stream_sse(url, body, headers, timeout=40.0):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://localhost:8080")
-    parser.add_argument("--api-key", default=os.getenv("E2E_API_KEY", "dev-admin-key-2026"))
+    parser.add_argument("--api-key", default=os.getenv("E2E_API_KEY"))
     parser.add_argument("--bearer-token", default="")
     parser.add_argument("--tenant-id", default="")
     parser.add_argument("--model-profile", default="balanced")
     args = parser.parse_args()
+
+    if not args.bearer_token and not args.api_key:
+        raise SystemExit(
+            "an explicit credential is required: pass --api-key (or set E2E_API_KEY) "
+            "or --bearer-token; the seeded demo admin keys have been revoked"
+        )
 
     started = time.perf_counter()
 

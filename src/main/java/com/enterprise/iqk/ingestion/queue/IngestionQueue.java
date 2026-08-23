@@ -13,4 +13,13 @@ public interface IngestionQueue {
     void ack(String consumerName, String recordId);
 
     void ensureConsumerGroup();
+
+    /**
+     * Reclaims messages that were delivered to another consumer but never acked
+     * (idle for at least {@code minIdle}). Returns an empty list when the backend
+     * does not support reclaiming.
+     */
+    default List<IngestionQueueMessage> claimIdle(String consumerName, Duration minIdle, int maxCount) {
+        return List.of();
+    }
 }

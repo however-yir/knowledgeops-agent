@@ -2,6 +2,7 @@ package com.enterprise.iqk.retrieval;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -26,6 +29,19 @@ public class HybridRetrievalService {
     private final GraphRetriever graphRetriever;
     private final WebRetriever webRetriever;
     private final MeterRegistry meterRegistry;
+
+    // Retrieval sources perform blocking IO; running them on ForkJoinPool.commonPool()
+    // could starve parallel streams elsewhere in the JVM, so use a dedicated pool.
+    private final ExecutorService retrievalExecutor = Executors.newFixedThreadPool(8, runnable -> {
+        Thread thread = new Thread(runnable, "hybrid-retrieval");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    @PreDestroy
+    void shutdownRetrievalExecutor() {
+        retrievalExecutor.shutdownNow();
+    }
 
     private static final double VECTOR_WEIGHT = 0.40;
     private static final double KEYWORD_WEIGHT = 0.25;
@@ -85,7 +101,7 @@ public class HybridRetrievalService {
                 log.warn("hybrid retrieval source failed: source={}, reason={}", source, ex.toString());
                 return List.<ScoredDocument>of();
             }
-        }).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }, retrievalExecutor).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     private List<ScoredDocument> deduplicate(List<ScoredDocument> docs) {

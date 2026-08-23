@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -68,5 +69,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 Duration.ofSeconds(rateLimitProperties.getRefillSeconds()));
         Bandwidth limit = Bandwidth.classic(rateLimitProperties.getCapacity(), refill);
         return Bucket.builder().addLimit(limit).build();
+    }
+
+    /**
+     * Drops buckets that fully refilled (idle for at least the refill window) so the
+     * per-tenant/per-IP bucket map does not grow without bound. Scheduler-based
+     * eviction is safe: keys knocked out simply start with a fresh bucket.
+     */
+    @Scheduled(fixedDelayString = "${app.rate-limit.evict-interval-ms:300000}")
+    public void evictIdleBuckets() {
+        if (!rateLimitProperties.isEnabled()) {
+            return;
+        }
+        if (buckets.isEmpty()) {
+            return;
+        }
+        long capacity = rateLimitProperties.getCapacity();
+        buckets.entrySet().removeIf(entry -> entry.getValue().getAvailableTokens() >= capacity);
     }
 }

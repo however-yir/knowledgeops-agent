@@ -305,7 +305,10 @@ public class WorkspaceRuntime implements AgentRuntime {
             return command.size() == 1;
         }
         if ("ls".equals(executable) || "rg".equals(executable)) {
-            return true;
+            // Non-flag arguments are filesystem paths (for rg the first non-flag token
+            // is the pattern, which can only fail closed); reject anything resolving
+            // outside the workspace root so the shell cannot be used to read host files.
+            return argsWithinWorkspace(command.subList(1, command.size()));
         }
         if ("git".equals(executable)) {
             return command.size() >= 2
@@ -319,6 +322,23 @@ public class WorkspaceRuntime implements AgentRuntime {
                     || token.startsWith("-D"));
         }
         return false;
+    }
+
+    private boolean argsWithinWorkspace(List<String> args) {
+        for (String arg : args) {
+            if (arg.startsWith("-")) {
+                continue;
+            }
+            try {
+                Path resolved = workspaceRoot.resolve(arg).normalize();
+                if (!resolved.startsWith(workspaceRoot)) {
+                    return false;
+                }
+            } catch (Exception ex) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private int maxCommandOutputBytes() {

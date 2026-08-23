@@ -11,6 +11,7 @@ import org.springframework.ai.content.Media;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.util.MimeType;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -48,7 +49,7 @@ public class ChatController {
 //                .stream()
 //                .content();
 //    }
-    @RequestMapping(value = "/chat", produces = "text/html;charset=utf-8")
+    @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
     public Flux<String> chat(
             @RequestParam("prompt") String prompt,
             @RequestParam("chatId") String chatId,

@@ -30,6 +30,9 @@ public class TrustedActionService {
 
         String token = "ta-" + UUID.randomUUID().toString().replace("-", "");
         Instant expiresAt = Instant.now().plus(TOKEN_TTL);
+        // Sweep tokens whose TTL elapsed without ever being executed; otherwise the
+        // pending map keeps growing for the lifetime of the process.
+        pendingActions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
         pendingActions.put(token, new PendingTrustedAction(action, expiresAt));
         return new TrustedActionPreviewResponse(
                 1,

@@ -30,8 +30,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +53,9 @@ public class IngestionService {
     private final MeterRegistry meterRegistry;
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
+    // Serializes SimpleVectorStore snapshot writes across the worker pool so that
+    // concurrent jobs cannot interleave writes to the same snapshot file.
+    private final Object snapshotLock = new Object();
 
     public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
@@ -292,7 +297,17 @@ public class IngestionService {
             if (path.getParent() != null) {
                 Files.createDirectories(path.getParent());
             }
-            simpleVectorStore.save(path.toFile());
+            Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+            synchronized (snapshotLock) {
+                // Write to a temp file and atomically replace the snapshot so a crash
+                // or concurrent reader never observes a half-written file.
+                simpleVectorStore.save(tmp.toFile());
+                try {
+                    Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException atomicMoveNotSupported) {
+                    Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
         } catch (Exception e) {
             log.warn("Failed to persist SimpleVectorStore snapshot", e);
         }

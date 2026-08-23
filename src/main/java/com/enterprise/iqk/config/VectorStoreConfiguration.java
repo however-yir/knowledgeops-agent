@@ -1,6 +1,7 @@
 package com.enterprise.iqk.config;
 
 import com.enterprise.iqk.config.properties.VectorStoreProperties;
+import com.zaxxer.hikari.HikariDataSource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
@@ -8,7 +9,6 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
@@ -33,15 +33,19 @@ public class VectorStoreConfiguration {
         return SimpleVectorStore.builder(embeddingModel).build();
     }
 
+    @SuppressWarnings("PMD.CloseResource") // pool is owned by the PgVectorStore bean for the app lifetime
     private VectorStore tryBuildPgvectorStore(OpenAiEmbeddingModel embeddingModel, VectorStoreProperties properties) {
         if (!StringUtils.hasText(properties.getPgvector().getUrl())) {
             log.warn("app.vector-store.pgvector.url is empty, skip pgvector initialization.");
             return null;
         }
         try {
-            DriverManagerDataSource dataSource = new DriverManagerDataSource();
+            // Pool connections instead of DriverManagerDataSource: the latter opens a
+            // fresh TCP connection for every retrieval, which collapses under load.
+            HikariDataSource dataSource = new HikariDataSource();
+            dataSource.setPoolName("pgvector-pool");
             dataSource.setDriverClassName("org.postgresql.Driver");
-            dataSource.setUrl(properties.getPgvector().getUrl());
+            dataSource.setJdbcUrl(properties.getPgvector().getUrl());
             dataSource.setUsername(properties.getPgvector().getUsername());
             dataSource.setPassword(properties.getPgvector().getPassword());
             JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);

@@ -20,6 +20,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Properties;
 
@@ -43,7 +44,20 @@ public class LocalPdfFileRepository implements FileRepository {
             log.error("Resource filename is null or blank.");
             return false;
         }
-        File target = new File(filename);
+        // NOTE: this repository currently has no injection point (nothing injects
+        // FileRepository); kept defensive: strip any path components so a crafted
+        // original filename ("../../etc/cron.d/x") cannot escape the storage location.
+        Path fileNameOnly = Path.of(filename).getFileName();
+        if (fileNameOnly == null) {
+            log.error("Resource filename does not contain a file name component: {}", filename);
+            return false;
+        }
+        String normalized = fileNameOnly.toString().replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (normalized.isBlank() || ".".equals(normalized) || "..".equals(normalized)) {
+            log.error("Resource filename normalizes to an invalid target: {}", filename);
+            return false;
+        }
+        File target = new File(normalized);
         if (!target.exists()) {
             try {
                 Files.copy(resource.getInputStream(), target.toPath());
@@ -52,8 +66,9 @@ public class LocalPdfFileRepository implements FileRepository {
                 return false;
             }
         }
+
         // 3.保存映射关系
-        chatFiles.put(chatId, filename);
+        chatFiles.put(chatId, normalized);
         return true;
     }
 

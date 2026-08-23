@@ -61,9 +61,10 @@ public class DeepResearchService {
 
                 StringBuilder finding = new StringBuilder("## " + subQ + "\n\n");
                 for (ScoredDocument doc : retrieval.documents()) {
+                    String content = doc.getContent() == null ? "" : doc.getContent();
                     finding.append("- [").append(doc.getSourceType()).append("] ")
                             .append(doc.getTitle()).append(": ")
-                            .append(doc.getContent().substring(0, Math.min(200, doc.getContent().length())))
+                            .append(content, 0, Math.min(200, content.length()))
                             .append("\n");
                 }
                 findings.add(finding.toString());

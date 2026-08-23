@@ -79,9 +79,14 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (StringUtils.hasText(authorization) && authorization.startsWith("Bearer ")) {
             String token = authorization.substring("Bearer ".length()).trim();
-            AuthIdentity jwtIdentity = jwtService.parse(token);
-            if (jwtIdentity != null) {
-                return jwtIdentity;
+            try {
+                AuthIdentity jwtIdentity = jwtService.parse(token);
+                if (jwtIdentity != null) {
+                    return jwtIdentity;
+                }
+            } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+                // Expired or malformed JWT must not abort the request with a 500;
+                // fall through and try the API key credential instead.
             }
         }
         return apiKeyAuthService.authenticate(request.getHeader(API_KEY_HEADER));

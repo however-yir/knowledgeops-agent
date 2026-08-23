@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -35,7 +36,10 @@ public class SearXNGBackend implements WebSearchBackend {
 
     private RestTemplate getRestTemplate() {
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(properties.getConnectTimeoutMs());
+            factory.setReadTimeout(properties.getReadTimeoutMs());
+            restTemplate = new RestTemplate(factory);
         }
         return restTemplate;
     }

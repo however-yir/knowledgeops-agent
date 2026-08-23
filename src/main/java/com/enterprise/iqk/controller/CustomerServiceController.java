@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.slf4j.MDC;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,7 +26,7 @@ public class CustomerServiceController {
 
     private final ChatHistoryRepository chatHistoryRepository;
 
-    @RequestMapping(value = "/service", produces = "text/html;charset=utf-8")
+    @PostMapping(value = "/service", produces = "text/html;charset=utf-8")
     public String service(String prompt,
                           String chatId,
                           @RequestParam(value = "modelProfile", required = false) String modelProfile) {

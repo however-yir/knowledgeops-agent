@@ -20,7 +20,9 @@ public class AppStartupValidator {
             DEFAULT_JWT_SECRET,
             "replace-me-with-real-secret",
             "change-me",
-            "changeme"
+            "changeme",
+            // former docker-compose fallback; publicly known, must never pass validation
+            "local-demo-secret-change-for-prod-2026"
     );
 
     private final Environment environment;

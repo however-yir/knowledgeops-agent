@@ -30,4 +30,5 @@ public class AgentSessionStateRecord {
     private String sessionPayload;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Long lockVersion;
 }

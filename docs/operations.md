@@ -44,6 +44,10 @@ A pre-built Grafana dashboard is available at `observability/grafana/dashboard.j
 - RabbitMQ: `APP_INGESTION_QUEUE_BACKEND=rabbitmq`
 - DB polling fallback: `APP_INGESTION_QUEUE_BACKEND=db_polling`
 
+All backends consume jobs automatically when `APP_INGESTION_WORKER_ENABLED=true`
+(default). With the worker disabled (e.g. the dev profile), db_polling jobs stay
+PENDING until an admin triggers `POST /ingestion/jobs/process?jobId=...` manually.
+
 Terminal failures enter DLQ stream/queue.
 
 ## 5. Log Shipping

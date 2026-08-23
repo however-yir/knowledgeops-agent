@@ -89,4 +89,25 @@ public interface AgentSessionStateMapper extends BaseMapper<AgentSessionStateRec
     int updateArchived(@Param("tenantId") String tenantId,
                        @Param("sessionId") String sessionId,
                        @Param("archived") int archived);
+
+    @Update("""
+            UPDATE agent_session_state
+            SET title = #{record.title},
+                workspace_id = #{record.workspaceId},
+                model_profile = #{record.modelProfile},
+                streaming = #{record.streaming},
+                pinned = #{record.pinned},
+                archived = #{record.archived},
+                active_branch_id = #{record.activeBranchId},
+                session_payload = #{record.sessionPayload},
+                updated_at = #{record.updatedAt},
+                lock_version = lock_version + 1
+            WHERE tenant_id = #{tenantId}
+              AND session_id = #{sessionId}
+              AND lock_version = #{expectedLockVersion}
+            """)
+    int updateSessionStateIfUnchanged(@Param("record") AgentSessionStateRecord record,
+                                      @Param("tenantId") String tenantId,
+                                      @Param("sessionId") String sessionId,
+                                      @Param("expectedLockVersion") long expectedLockVersion);
 }
