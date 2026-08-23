@@ -10,7 +10,7 @@ This pack collects the shortest public proof path for reviewing the project as a
 - Main CI: `.github/workflows/ci.yml`
 - Regression workflow: `.github/workflows/nightly-regression.yml`
 - Baseline release: `AI Matrix Baseline 2026.05`
-- Release: `v1.0.0 - Enterprise-ready KnowledgeOps Agent`
+- Release: `v1.0.0 - KnowledgeOps Agent Platform Prototype`
 
 ## Product And Architecture Evidence
 
