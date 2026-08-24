@@ -7,6 +7,14 @@ services:
     ports:
       - "8080:8080"
     environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_CHAT_MODEL: ${DEEPSEEK_CHAT_MODEL:-deepseek-v4-flash}
+
+      APP_MODEL_ROUTER_MODEL_ECONOMY: ${APP_MODEL_ROUTER_MODEL_ECONOMY:-deepseek-v4-flash}
+      APP_MODEL_ROUTER_MODEL_BALANCED: ${APP_MODEL_ROUTER_MODEL_BALANCED:-deepseek-v4-flash}
+      APP_MODEL_ROUTER_MODEL_QUALITY: ${APP_MODEL_ROUTER_MODEL_QUALITY:-deepseek-v4-pro}
+
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:mysql://mysql:3306/knowledgeops_agent?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root

@@ -31,7 +31,7 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 @Service
 @RequiredArgsConstructor
 public class HybridRagAnswerService {
-
+//声明
     private final HybridRetrievalService hybridRetrievalService;
     private final EvidenceJudgeService evidenceJudgeService;
     private final CitationService citationService;
@@ -41,10 +41,16 @@ public class HybridRagAnswerService {
     private final MeterRegistry meterRegistry;
     private final TenantCostService tenantCostService;
 
-    public HybridRagResult answer(String prompt, String tenantId, String chatId,
-                                   String conversationId, String modelProfile) {
+    public HybridRagResult answer(
+            String prompt,
+            String tenantId,
+            String chatId,
+            String conversationId, String modelProfile) {
         Timer.Sample pipelineSample = Timer.start(meterRegistry);
-        String traceId = "trace-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String traceId = "trace-" + UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 12);
         String pipelineOutcome = "error";
 
         try {
@@ -52,7 +58,9 @@ public class HybridRagAnswerService {
 
             // Step 1: Hybrid retrieval (vector + keyword + graph + web)
             HybridRetrievalService.HybridRetrievalResult retrievalResult =
-                    hybridRetrievalService.retrieve(prompt, normalizedTenantId, chatId,
+                    hybridRetrievalService.retrieve(prompt,
+                            normalizedTenantId,
+                            chatId,
                             ragProperties.getRetrieveTopK());
 
             List<ScoredDocument> retrievedDocs = retrievalResult.documents();
@@ -68,23 +76,32 @@ public class HybridRagAnswerService {
             }
 
             // Step 2: Evidence judging
-            List<EvidenceItem> evidence = evidenceJudgeService.judge(retrievedDocs, prompt);
+            List<EvidenceItem> evidence = evidenceJudgeService.judge(
+                    retrievedDocs,
+                    prompt);
 
             // Step 3: Build citations
             List<CitationItem> citations = citationService.buildCitations(evidence);
 
-            // Step 4: Build context from top evidence
+            // 根据最终检索文档构造模型上下文。
             String context = buildContext(retrievedDocs);
 
             // Step 5: Generate answer via LLM
             ModelRouter.ModelRouteDecision decision = modelRouter.resolve(
                     modelProfile, "rag_hybrid", normalizedTenantId, chatId);
-            long inputTokens = tenantCostService.estimateTokens(prompt + "\n" + context);
-            tenantCostService.assertBudget(normalizedTenantId, decision.costTier(), inputTokens, 600);
+            long inputTokens = tenantCostService.estimateTokens(
+                    prompt + "\n" + context);
+            tenantCostService.assertBudget(normalizedTenantId,
+                    decision.costTier(),
+                    inputTokens,
+                    600);
 
             String answer = chatClient.prompt()
-                    .options(ChatOptions.builder().model(decision.model())
-                            .temperature(ragProperties.getTemperature()).build())
+                    .options(ChatOptions.builder()
+                            .model(decision.model())
+                            .temperature(ragProperties.getTemperature())
+                            .build())
+
                     .system(SystemConstants.HYBRID_RAG_ANSWER_SYSTEM)
                     .user("用户问题:%n%s%n%n上下文:%n%s%n".formatted(prompt, context))
                 .advisors(a -> a.param(CONVERSATION_ID, conversationId))
@@ -96,7 +113,8 @@ public class HybridRagAnswerService {
                     inputTokens, outputTokens, "rag_hybrid");
 
             // Step 6: Append citation footer
-            String answerWithCitations = answer + citationService.formatCitationFooter(citations);
+            String answerWithCitations = answer +
+                    citationService.formatCitationFooter(citations);
 
             pipelineOutcome = "success";
             return HybridRagResult.builder()

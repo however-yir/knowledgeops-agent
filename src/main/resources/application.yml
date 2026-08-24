@@ -21,9 +21,15 @@ spring:
     openai:
       base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
       api-key: ${OPENAI_API_KEY:}
+
+      # 聊天模型单独覆盖成 DeepSeek
       chat:
+        base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+        api-key: ${DEEPSEEK_API_KEY:}
         options:
-          model: qwen-plus
+          model: ${DEEPSEEK_CHAT_MODEL:deepseek-v4-flash}
+
+      # PDF/RAG 向量化继续使用 DashScope
       embedding:
         options:
           model: text-embedding-v4
@@ -132,19 +138,22 @@ app:
       rag: ${APP_MODEL_ROUTER_RAG_PROFILE:balanced}
     profiles:
       economy:
-        model: ${APP_MODEL_ROUTER_MODEL_ECONOMY:qwen-turbo}
+        model: ${APP_MODEL_ROUTER_MODEL_ECONOMY:deepseek-v4-flash}
         cost-tier: low
         enabled: ${APP_MODEL_ROUTER_ECONOMY_ENABLED:true}
+
       balanced:
-        model: ${APP_MODEL_ROUTER_MODEL_BALANCED:qwen-plus}
+        model: ${APP_MODEL_ROUTER_MODEL_BALANCED:deepseek-v4-flash}
         cost-tier: medium
         enabled: ${APP_MODEL_ROUTER_BALANCED_ENABLED:true}
         fallback-profile: economy
+
       quality:
-        model: ${APP_MODEL_ROUTER_MODEL_QUALITY:qwen-max}
+        model: ${APP_MODEL_ROUTER_MODEL_QUALITY:deepseek-v4-pro}
         cost-tier: high
         enabled: ${APP_MODEL_ROUTER_QUALITY_ENABLED:true}
         fallback-profile: balanced
+
   vector-store:
     backend: ${APP_VECTOR_STORE_BACKEND:pgvector}
     require-pgvector: ${APP_REQUIRE_PGVECTOR:true}

@@ -28,6 +28,8 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
     private final ApiKeyAuthService apiKeyAuthService;
     private final JwtService jwtService;
 
+
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -74,6 +76,13 @@ public class ApiKeyOrJwtAuthFilter extends OncePerRequestFilter {
             SecurityContextHolder.clearContext();
         }
     }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
+
 
     private AuthIdentity resolveIdentity(HttpServletRequest request) {
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);

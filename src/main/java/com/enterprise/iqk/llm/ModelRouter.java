@@ -16,7 +16,7 @@ import java.util.Set;
 
 @Service
 public class ModelRouter {
-    private static final String DEFAULT_MODEL = "qwen-plus";
+    private static final String DEFAULT_MODEL = "deepseek-v4-flash";
 
     private final ModelRouterProperties modelRouterProperties;
     private final ModelAbExposureMapper modelAbExposureMapper;

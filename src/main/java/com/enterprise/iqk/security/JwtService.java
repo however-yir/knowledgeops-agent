@@ -21,7 +21,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class JwtService {
     private final SecurityProperties securityProperties;
-
+//解析Token
     public AuthIdentity parse(String token) {
         if (!StringUtils.hasText(token)) {
             return null;
@@ -52,7 +52,7 @@ public class JwtService {
                 .tenantId(TenantContext.normalize(claims.get("tenant_id", String.class)))
                 .build();
     }
-
+//入口
     public String issueToken(String subject, List<String> roles, List<String> permissions, String tenantId) {
         Instant now = Instant.now();
         return Jwts.builder()
@@ -61,11 +61,12 @@ public class JwtService {
                 .claim("permissions", permissions == null ? Collections.emptyList() : permissions)
                 .claim("tenant_id", TenantContext.normalize(tenantId))
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusSeconds(securityProperties.getJwtExpireMinutes() * 60L)))
+                .expiration(Date.from(now.plusSeconds(
+                        securityProperties.getJwtExpireMinutes() * 60L)))
                 .signWith(secretKey())
                 .compact();
     }
-
+//转换成JWT签名密钥
     private SecretKey secretKey() {
         String secret = securityProperties.getJwtSecret();
         if (!StringUtils.hasText(secret)) {
@@ -79,6 +80,7 @@ public class JwtService {
     }
 
     @SuppressWarnings("unchecked")
+    //parse的辅助方法
     private List<String> extractRoles(Claims claims) {
         Object raw = claims.get("roles");
         if (raw == null) {
@@ -97,6 +99,7 @@ public class JwtService {
     }
 
     @SuppressWarnings("unchecked")
+    //parse的辅助方法
     private List<String> extractPermissions(Claims claims) {
         Object raw = claims.get("permissions");
         if (raw == null) {

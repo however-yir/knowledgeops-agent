@@ -25,6 +25,7 @@ public class HybridRetrievalService {
     private final KeywordRetriever keywordRetriever;
     private final GraphRetriever graphRetriever;
     private final WebRetriever webRetriever;
+
     private final MeterRegistry meterRegistry;
 
     private static final double VECTOR_WEIGHT = 0.40;
@@ -33,10 +34,13 @@ public class HybridRetrievalService {
     private static final double WEB_WEIGHT = 0.15;
     private static final long SOURCE_TIMEOUT_SECONDS = 3;
 
-    public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
+    //入口
+    public HybridRetrievalResult retrieve(
+            String query, String tenantId, String chatId, int topK) {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
+            //调用
             CompletableFuture<List<ScoredDocument>> vectorFuture = retrieveAsync("vector",
                     () -> vectorRetriever.retrieve(query, tenantId, chatId), VECTOR_WEIGHT);
             CompletableFuture<List<ScoredDocument>> keywordFuture = retrieveAsync("keyword",
@@ -46,7 +50,8 @@ public class HybridRetrievalService {
             CompletableFuture<List<ScoredDocument>> webFuture = retrieveAsync("web",
                     () -> webRetriever.retrieve(query, topK), WEB_WEIGHT);
 
-            List<ScoredDocument> allDocs = Stream.of(vectorFuture, keywordFuture, graphFuture, webFuture)
+            List<ScoredDocument> allDocs = Stream.of(
+                            vectorFuture, keywordFuture, graphFuture, webFuture)
                     .flatMap(future -> future.join().stream())
                     .toList();
 
@@ -56,10 +61,16 @@ public class HybridRetrievalService {
             // Sort by weighted score descending
             deduped.sort(Comparator.comparingDouble(ScoredDocument::getFinalScore).reversed());
 
-            List<ScoredDocument> top = deduped.stream().limit(topK).toList();
+            List<ScoredDocument> top = deduped
+                    .stream()
+                    .limit(topK)
+                    .toList();
 
             outcome = top.isEmpty() ? "empty" : "success";
-            return new HybridRetrievalResult(top, allDocs.size(), deduped.size());
+            return new HybridRetrievalResult(
+                    top,
+                    allDocs.size(),
+                    deduped.size());
         } finally {
             sample.stop(Timer.builder("retrieval.hybrid.latency")
                     .tag("outcome", outcome)
@@ -67,17 +78,11 @@ public class HybridRetrievalService {
                     .register(meterRegistry));
         }
     }
-
-    private List<ScoredDocument> applyWeight(List<ScoredDocument> docs, double weight) {
-        for (ScoredDocument d : docs) {
-            d.setFinalScore(d.getRetrievalScore() * weight);
-        }
-        return docs;
-    }
-
-    private CompletableFuture<List<ScoredDocument>> retrieveAsync(String source,
-                                                                  Supplier<List<ScoredDocument>> retrieval,
-                                                                  double weight) {
+    //异步方法的实现
+    private CompletableFuture<List<ScoredDocument>> retrieveAsync(
+            String source,
+            Supplier<List<ScoredDocument>> retrieval,
+            double weight) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return applyWeight(retrieval.get(), weight);
@@ -85,9 +90,22 @@ public class HybridRetrievalService {
                 log.warn("hybrid retrieval source failed: source={}, reason={}", source, ex.toString());
                 return List.<ScoredDocument>of();
             }
-        }).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }).completeOnTimeout(
+                List.of(),
+                SOURCE_TIMEOUT_SECONDS,
+                TimeUnit.SECONDS);
     }
 
+
+                //4
+    private List<ScoredDocument> applyWeight(List<ScoredDocument> docs, double weight) {
+        for (ScoredDocument d : docs) {
+            d.setFinalScore(d.getRetrievalScore() * weight);
+        }
+        return docs;
+    }
+
+//6
     private List<ScoredDocument> deduplicate(List<ScoredDocument> docs) {
         Map<String, ScoredDocument> seen = new LinkedHashMap<>();
         for (ScoredDocument d : docs) {
@@ -99,14 +117,15 @@ public class HybridRetrievalService {
         }
         return new ArrayList<>(seen.values());
     }
-
+//7
     private String fingerprint(ScoredDocument d) {
         String content = d.getContent() != null ? d.getContent() : "";
         // Use first 200 chars as dedup key
         String normalized = content.replaceAll("\\s+", " ").trim();
         return normalized.length() <= 200 ? normalized : normalized.substring(0, 200);
     }
-
+    //8
     public record HybridRetrievalResult(List<ScoredDocument> documents, int totalBeforeDedup,
-                                         int totalAfterDedup) {}
+                                        int totalAfterDedup) {
+    }
 }

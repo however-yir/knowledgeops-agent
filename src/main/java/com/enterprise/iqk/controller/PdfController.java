@@ -32,23 +32,34 @@ import java.util.List;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
+/**
+ * PDF 知识库接口：上传并入库 PDF、下载原文件、根据 PDF 内容进行 RAG 问答。
+ */
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/ai/pdf")
-public class PdfController {
+public class  PdfController {
 
+    /** 创建和查询 PDF 异步入库任务。 */
     private final IngestionService ingestionService;
+    /** 保存 PDF 类型的会话索引。 */
     private final ChatHistoryRepository chatHistoryRepository;
+    /** 检索 PDF 片段并生成答案。 */
     private final RagAnswerService ragAnswerService;
+    /** 提供当前使用的入库队列配置。 */
     private final IngestionProperties ingestionProperties;
 
+    /** 上传 PDF，并提交异步解析、切片和向量化任务。 */
     @RequestMapping("/upload/{chatId}")
     public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
                                        @RequestParam("file") MultipartFile file,
                                        @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+        // 租户 ID 用于隔离不同企业的文件和任务。
         String tenantId = currentTenantId();
+        // 这里只提交任务，不等待 PDF 全部处理完成。
         IngestionJob job = ingestionService.submitPdf(tenantId, chatId, file, idempotencyKey, "");
         chatHistoryRepository.save("pdf", chatId);
+        // 将任务状态包装成前端需要的返回对象。
         return IngestionSubmitVO.builder()
                 .ok(1)
                 .msg("accepted")
@@ -69,8 +80,10 @@ public class PdfController {
                 .build();
     }
 
+    /** 下载该会话最近一次上传的 PDF 原文件。 */
     @GetMapping("/file/{chatId}")
     public ResponseEntity<Resource> download(@PathVariable("chatId") String chatId) {
+        // limit=1 表示只查询最近的一条上传任务。
         List<IngestionJob> jobs = ingestionService.listByChatId(currentTenantId(), chatId, 1);
         if (jobs.isEmpty()) {
             throw new ResponseStatusException(NOT_FOUND, "file not found");
@@ -80,6 +93,7 @@ public class PdfController {
         if (!resource.exists()) {
             throw new ResponseStatusException(NOT_FOUND, "file not found");
         }
+        // 编码文件名，避免中文或特殊字符破坏下载响应头。
         String filename = URLEncoder.encode(
                 resource.getFilename() == null ? "document.pdf" : resource.getFilename(),
                 StandardCharsets.UTF_8
@@ -90,13 +104,16 @@ public class PdfController {
                 .body(resource);
     }
 
+    /** 根据已入库的 PDF 内容回答问题，并返回引用来源。 */
     @RequestMapping(value = "/chat", produces = "text/html;charset=UTF-8")
     public Flux<String> chat(@RequestParam("prompt") String prompt,
                              @RequestParam("chatId") String chatId,
                              @RequestParam(value = "modelProfile", required = false) String modelProfile) {
         String tenantId = currentTenantId();
         chatHistoryRepository.save("pdf", chatId);
+        // 使用 pdf 类型生成独立记忆键，避免与普通聊天串上下文。
         String conversationId = ConversationIdHelper.build("pdf", chatId);
+        // RAG：先检索与问题相关的 PDF 片段，再让模型基于片段回答。
         RagAnswerService.RagResult result = ragAnswerService.answer(
                 prompt,
                 tenantId,
@@ -104,6 +121,7 @@ public class PdfController {
                 conversationId,
                 modelProfile
         );
+        // 把答案和引用来源拼接成前端可直接展示的文本。
         StringBuilder output = new StringBuilder(result.getAnswer());
         if (result.getCitations() != null && !result.getCitations().isEmpty()) {
             output.append("\n\n引用来源:\n");
@@ -111,9 +129,11 @@ public class PdfController {
                 output.append("[").append(i + 1).append("] ").append(result.getCitations().get(i)).append("\n");
             }
         }
+        // Service 当前同步生成完整答案，因此这里返回的是只有一个元素的 Flux。
         return Flux.just(output.toString());
     }
 
+    /** 去除单引号，避免 chatId 破坏向量检索的过滤表达式。 */
     private String sanitize(String value) {
         if (!StringUtils.hasText(value)) {
             return "";
@@ -121,6 +141,7 @@ public class PdfController {
         return value.replace("'", "");
     }
 
+    /** 获取当前请求所属租户，缺失时使用 public。 */
     private String currentTenantId() {
         return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }

@@ -7,10 +7,12 @@ import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.util.ConversationIdHelper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.slf4j.MDC;
@@ -28,7 +30,12 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.enterprise.iqk.service.ReactDecisionParser.ReasonDecision;
 
+
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
+
+
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ReactAgentService {
     private static final int MAX_STEPS = 4;
@@ -167,7 +174,8 @@ public class ReactAgentService {
                             buildFinalPrompt(request, trace, rollingContext),
                             routeDecision,
                             tenantId,
-                            "react_final"
+                            "react_final",
+                            ConversationIdHelper.build("react-final", request.getChatId())
                     );
 
                     Flux<String> tokenFlux = answerSourceFlux
@@ -269,10 +277,13 @@ public class ReactAgentService {
                     planningPrompt,
                     routeDecision,
                     tenantId,
-                    "react_planner"
+                    "react_planner",
+                    ConversationIdHelper.build("react-planner", request.getChatId())
             );
             return decisionParser.parse(raw);
         } catch (RuntimeException ex) {
+            log.warn("ReAct planner failed, using fallback: model={}, tenant={}, chatId={}",
+                    routeDecision.model(), tenantId, request.getChatId(), ex);
             return decisionParser.fallback(request.getPrompt());
         }
     }
@@ -305,13 +316,15 @@ public class ReactAgentService {
                     finalPrompt,
                     routeDecision,
                     tenantId,
-                    "react_final"
+                    "react_final",
+                    ConversationIdHelper.build("react-final", request.getChatId())
             );
             if (StringUtils.hasText(answer)) {
                 return new AnswerResult(answer, false);
             }
-        } catch (RuntimeException ignored) {
-            // fallback below
+        } catch (RuntimeException ex) {
+            log.warn("ReAct final answer failed, using fallback: model={}, tenant={}, chatId={}",
+                    routeDecision.model(), tenantId, request.getChatId(), ex);
         }
         return new AnswerResult("当前未能生成最终答案，请稍后重试。", true);
     }
@@ -349,16 +362,25 @@ public class ReactAgentService {
                              String userPrompt,
                              ModelRouter.ModelRouteDecision routeDecision,
                              String tenantId,
-                             String endpointTag) {
+                             String endpointTag,
+                             String conversationId) {
         long inputTokens = tenantCostService.estimateTokens(systemPrompt) + tenantCostService.estimateTokens(userPrompt);
         tenantCostService.assertBudget(tenantId, routeDecision.costTier(), inputTokens, 600);
         String output = routedPrompt(routeDecision)
                 .system(systemPrompt)
                 .user(userPrompt)
+                .advisors(advisor -> advisor.param(
+                        CONVERSATION_ID,
+                        conversationId
+                ))
                 .call()
                 .content();
         long outputTokens = tenantCostService.estimateTokens(output);
-        tenantCostService.recordUsage(tenantId, routeDecision.costTier(), inputTokens, outputTokens, endpointTag);
+        tenantCostService.recordUsage(tenantId,
+                routeDecision.costTier(),
+                inputTokens,
+                outputTokens,
+                endpointTag);
         return output;
     }
 
@@ -366,7 +388,8 @@ public class ReactAgentService {
                                          String userPrompt,
                                          ModelRouter.ModelRouteDecision routeDecision,
                                          String tenantId,
-                                         String endpointTag) {
+                                         String endpointTag,
+                                         String conversationId) {
         long inputTokens = tenantCostService.estimateTokens(systemPrompt) + tenantCostService.estimateTokens(userPrompt);
         tenantCostService.assertBudget(tenantId, routeDecision.costTier(), inputTokens, 600);
 
@@ -375,6 +398,10 @@ public class ReactAgentService {
         return routedPrompt(routeDecision)
                 .system(systemPrompt)
                 .user(userPrompt)
+                .advisors(advisor -> advisor.param(
+                        CONVERSATION_ID,
+                        conversationId
+                ))
                 .stream()
                 .content()
                 .doOnNext(chunk -> outputCollector.append(emptyIfBlank(chunk)))

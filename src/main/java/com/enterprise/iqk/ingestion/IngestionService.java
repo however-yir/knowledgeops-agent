@@ -51,9 +51,10 @@ public class IngestionService {
     private final MeterRegistry meterRegistry;
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
-
+// 1.上传入口
     public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
+        //参数和安全校验
         if (!StringUtils.hasText(chatId)) {
             throw new IllegalArgumentException("chatId is required");
         }
@@ -62,9 +63,16 @@ public class IngestionService {
         }
         fileSafetyScanner.scan(file);
 
-        String sourceName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename() : "unknown.pdf";
-        String normalizedKey = normalizeIdempotencyKey(normalizedTenantId, chatId, file, idempotencyKey);
-        IngestionJob existing = ingestionJobMapper.findByIdempotencyKey(normalizedTenantId, normalizedKey);
+        String sourceName = StringUtils.hasText(file.getOriginalFilename())
+                ? file.getOriginalFilename() : "unknown.pdf";
+        //生成幂等键
+        String normalizedKey = normalizeIdempotencyKey(normalizedTenantId,
+                chatId,
+                file,
+                idempotencyKey);
+        //防止重复检查
+        IngestionJob existing = ingestionJobMapper.
+                findByIdempotencyKey(normalizedTenantId, normalizedKey);
         if (existing != null) {
             return existing;
         }
@@ -106,7 +114,34 @@ public class IngestionService {
             throw duplicateKeyException;
         }
     }
+    //2.上传相关辅助方法
+    private String normalizeIdempotencyKey(String tenantId, String chatId, MultipartFile file, String provided) {
+        if (StringUtils.hasText(provided)) {
+            return "client:" + provided.trim();
+        }
+        try {
+            String contentHash = HashUtils.sha256Hex(file.getInputStream());
+            return "auto:" + HashUtils.sha256Hex(tenantId + "|" + chatId + "|" + contentHash);
+        } catch (IOException e) {
+            String seed = tenantId + "|" + chatId + "|" + file.getOriginalFilename() + "|" + file.getSize();
+            return "auto:" + HashUtils.sha256Hex(seed);
+        }
+    }
 
+    private String persistFile(String jobId, String sourceName, MultipartFile file) {
+        String sanitized = sourceName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        Path root = Path.of(ingestionProperties.getStorageDir());
+        Path target = root.resolve(jobId + "_" + sanitized);
+        try {
+            Files.createDirectories(root);
+            file.transferTo(target);
+            return target.toAbsolutePath().toString();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to store uploaded PDF", e);
+        }
+    }
+
+    //3.任务查询
     public IngestionJob getByJobId(String tenantId, String jobId) {
         return ingestionJobMapper.findByJobIdAndTenant(TenantContext.normalize(tenantId), jobId);
     }
@@ -115,6 +150,11 @@ public class IngestionService {
         return ingestionJobMapper.findLatestByChatId(TenantContext.normalize(tenantId), chatId, Math.max(limit, 1));
     }
 
+
+
+
+
+    //4.消费入口
     public IngestionProcessResult processQueuedJob(String jobId, String traceId) {
         if (!StringUtils.hasText(jobId)) {
             return IngestionProcessResult.builder()
@@ -218,22 +258,10 @@ public class IngestionService {
         }
     }
 
-    public int enqueueReadyRetries(int limit) {
-        if ("db_polling".equalsIgnoreCase(ingestionProperties.getQueueBackend())) {
-            return 0;
-        }
-        List<IngestionJob> ready = ingestionJobMapper.findReadyRetries(LocalDateTime.now(), Math.max(1, limit));
-        int count = 0;
-        for (IngestionJob job : ready) {
-            int updated = ingestionJobMapper.requeueRetry(job.getJobId(), LocalDateTime.now());
-            if (updated > 0) {
-                ingestionQueue.publishJob(job.getJobId(), job.getTraceId());
-                count++;
-            }
-        }
-        return count;
-    }
 
+
+
+    //5.pdf处理链
     private void processPdfJob(IngestionJob job) {
         File source = new File(job.getFilePath());
         if (!source.exists()) {
@@ -298,36 +326,38 @@ public class IngestionService {
         }
     }
 
-    private String persistFile(String jobId, String sourceName, MultipartFile file) {
-        String sanitized = sourceName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        Path root = Path.of(ingestionProperties.getStorageDir());
-        Path target = root.resolve(jobId + "_" + sanitized);
-        try {
-            Files.createDirectories(root);
-            file.transferTo(target);
-            return target.toAbsolutePath().toString();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to store uploaded PDF", e);
+
+    //6.重试任务重新入队
+    public int enqueueReadyRetries(int limit) {
+        if ("db_polling".equalsIgnoreCase(ingestionProperties.getQueueBackend())) {
+            return 0;
         }
+        List<IngestionJob> ready = ingestionJobMapper.findReadyRetries(LocalDateTime.now(), Math.max(1, limit));
+        int count = 0;
+        for (IngestionJob job : ready) {
+            int updated = ingestionJobMapper.requeueRetry(job.getJobId(), LocalDateTime.now());
+            if (updated > 0) {
+                ingestionQueue.publishJob(job.getJobId(), job.getTraceId());
+                count++;
+            }
+        }
+        return count;
     }
 
-    private String normalizeIdempotencyKey(String tenantId, String chatId, MultipartFile file, String provided) {
-        if (StringUtils.hasText(provided)) {
-            return "client:" + provided.trim();
-        }
-        try {
-            String contentHash = HashUtils.sha256Hex(file.getInputStream());
-            return "auto:" + HashUtils.sha256Hex(tenantId + "|" + chatId + "|" + contentHash);
-        } catch (IOException e) {
-            String seed = tenantId + "|" + chatId + "|" + file.getOriginalFilename() + "|" + file.getSize();
-            return "auto:" + HashUtils.sha256Hex(seed);
-        }
-    }
-
+    //7.通用错误处理
     private String truncateError(String msg) {
         if (!StringUtils.hasText(msg)) {
             return "unknown error";
         }
         return msg.length() <= 1000 ? msg : msg.substring(0, 1000);
     }
+
+
+
+
+
+
+
+
+
 }
