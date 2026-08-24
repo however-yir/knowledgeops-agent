@@ -56,12 +56,14 @@ public class IngestionService {
         String normalizedTenantId = TenantContext.normalize(tenantId);
         //参数和安全校验
         if (!StringUtils.hasText(chatId)) {
-            throw new IllegalArgumentException("chatId is required");
+            throw new IllegalArgumentException("会话id不能为空");
         }
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("file is required");
+            throw new IllegalArgumentException("上传文件不能为空");
         }
         fileSafetyScanner.scan(file);
+
+
 
         String sourceName = StringUtils.hasText(file.getOriginalFilename())
                 ? file.getOriginalFilename() : "unknown.pdf";

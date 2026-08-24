@@ -10,7 +10,7 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   autoconfigure:
     exclude:
-      - org.springframework.ai.autoconfigure.vectorstore.pgvector.PgVectorStoreAutoConfiguration
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
   ai:
     ollama:
       base-url: http://localhost:11434

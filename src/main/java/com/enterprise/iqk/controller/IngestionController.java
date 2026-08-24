@@ -38,9 +38,19 @@ public class IngestionController {
     private final IngestionProperties ingestionProperties;
 
     @PostMapping("/upload/{chatId}")
-    public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
-                                       @RequestParam("file") MultipartFile file,
-                                       @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+    public IngestionSubmitVO uploadPdf(
+            @PathVariable String chatId,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestHeader(value = "X-Idempotency-Key",
+                    required = false) String idempotencyKey) {
+
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "上传文件不能为空"
+            );
+        }
+
         String traceId = currentTraceId();
         IngestionJob job = ingestionService.submitPdf(currentTenantId(), chatId, file, idempotencyKey, traceId);
         chatHistoryRepository.save("pdf", chatId);

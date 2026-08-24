@@ -13,10 +13,12 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,6 +31,9 @@ import reactor.core.publisher.Flux;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
+
+
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
@@ -38,26 +43,72 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/ai/pdf")
-public class  PdfController {
+public class PdfController {
 
-    /** 创建和查询 PDF 异步入库任务。 */
+    /**
+     * 创建和查询 PDF 异步入库任务。
+     */
     private final IngestionService ingestionService;
-    /** 保存 PDF 类型的会话索引。 */
+    /**
+     * 保存 PDF 类型的会话索引。
+     */
     private final ChatHistoryRepository chatHistoryRepository;
-    /** 检索 PDF 片段并生成答案。 */
+    /**
+     * 检索 PDF 片段并生成答案。
+     */
     private final RagAnswerService ragAnswerService;
-    /** 提供当前使用的入库队列配置。 */
+    /**
+     * 提供当前使用的入库队列配置。
+     */
     private final IngestionProperties ingestionProperties;
 
-    /** 上传 PDF，并提交异步解析、切片和向量化任务。 */
-    @RequestMapping("/upload/{chatId}")
-    public IngestionSubmitVO uploadPdf(@PathVariable String chatId,
-                                       @RequestParam("file") MultipartFile file,
-                                       @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+    /**
+     * 上传 PDF，并提交异步解析、切片和向量化任务。
+     */
+    @PostMapping(
+            value = "/upload/{chatId}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public IngestionSubmitVO uploadPdf(
+            @PathVariable String chatId,
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestHeader(value = "X-Idempotency-Key",
+                    required = false) String idempotencyKey) {
+
+        //新增入口检验
+        if(file == null || file.isEmpty()){
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "上传文件不能为空"
+            );
+        }
+
+        String filename = file.getOriginalFilename();
+        String contentType = file.getContentType();
+
+        //将文件名统一转换为小写后，再判断是否是.pdf结尾
+        boolean pdfByName = StringUtils.hasText(filename)
+                && filename.toLowerCase(Locale.ROOT).endsWith(".pdf");
+
+        boolean pdfByContentType = MediaType.APPLICATION_PDF_VALUE.equalsIgnoreCase(contentType);
+
+        if (!pdfByName || !pdfByContentType){
+            throw  new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "只允许上传PDF文件"
+            );
+        }
+
+
         // 租户 ID 用于隔离不同企业的文件和任务。
         String tenantId = currentTenantId();
         // 这里只提交任务，不等待 PDF 全部处理完成。
-        IngestionJob job = ingestionService.submitPdf(tenantId, chatId, file, idempotencyKey, "");
+        IngestionJob job = ingestionService.submitPdf(
+                tenantId,
+                chatId,
+                file,
+                idempotencyKey,
+                "");
         chatHistoryRepository.save("pdf", chatId);
         // 将任务状态包装成前端需要的返回对象。
         return IngestionSubmitVO.builder()
@@ -80,7 +131,9 @@ public class  PdfController {
                 .build();
     }
 
-    /** 下载该会话最近一次上传的 PDF 原文件。 */
+    /**
+     * 下载该会话最近一次上传的 PDF 原文件。
+     */
     @GetMapping("/file/{chatId}")
     public ResponseEntity<Resource> download(@PathVariable("chatId") String chatId) {
         // limit=1 表示只查询最近的一条上传任务。
@@ -104,7 +157,9 @@ public class  PdfController {
                 .body(resource);
     }
 
-    /** 根据已入库的 PDF 内容回答问题，并返回引用来源。 */
+    /**
+     * 根据已入库的 PDF 内容回答问题，并返回引用来源。
+     */
     @RequestMapping(value = "/chat", produces = "text/html;charset=UTF-8")
     public Flux<String> chat(@RequestParam("prompt") String prompt,
                              @RequestParam("chatId") String chatId,
@@ -133,7 +188,9 @@ public class  PdfController {
         return Flux.just(output.toString());
     }
 
-    /** 去除单引号，避免 chatId 破坏向量检索的过滤表达式。 */
+    /**
+     * 去除单引号，避免 chatId 破坏向量检索的过滤表达式。
+     */
     private String sanitize(String value) {
         if (!StringUtils.hasText(value)) {
             return "";
@@ -141,7 +198,9 @@ public class  PdfController {
         return value.replace("'", "");
     }
 
-    /** 获取当前请求所属租户，缺失时使用 public。 */
+    /**
+     * 获取当前请求所属租户，缺失时使用 public。
+     */
     private String currentTenantId() {
         return TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
     }
