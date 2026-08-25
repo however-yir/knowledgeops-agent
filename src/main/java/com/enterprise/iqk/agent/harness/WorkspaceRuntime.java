@@ -212,26 +212,31 @@ public class WorkspaceRuntime implements AgentRuntime {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workspaceRoot.toFile());
         Process process = builder.start();
-        CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
-                () -> readProcessOutput(process.getInputStream()));
-        CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
-                () -> readProcessOutput(process.getErrorStream()));
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
+        try {
+            CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
+                    () -> readProcessOutput(process.getInputStream()));
+            CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
+                    () -> readProcessOutput(process.getErrorStream()));
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                return Map.of("status", "error", "message", "command timed out");
+            }
+            ProcessOutput stdoutOutput = stdout.join();
+            ProcessOutput stderrOutput = stderr.join();
+            String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
+            String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
+            return Map.of(
+                    "exitCode", process.exitValue(),
+                    "stdout", stdoutText,
+                    "stderr", stderrText,
+                    "output", stdoutText + stderrText,
+                    "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
+            );
+        } finally {
+            // No-op for an already-exited process; guarantees the child is reaped even
+            // when waitFor is interrupted, so no handle is left behind.
             process.destroyForcibly();
-            return Map.of("status", "error", "message", "command timed out");
         }
-        ProcessOutput stdoutOutput = stdout.join();
-        ProcessOutput stderrOutput = stderr.join();
-        String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
-        String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
-        return Map.of(
-                "exitCode", process.exitValue(),
-                "stdout", stdoutText,
-                "stderr", stderrText,
-                "output", stdoutText + stderrText,
-                "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
-        );
     }
 
     private Map<String, Object> fileSummary(Path path) {
