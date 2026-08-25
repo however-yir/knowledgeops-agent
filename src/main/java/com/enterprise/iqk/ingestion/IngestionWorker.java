@@ -74,8 +74,12 @@ public class IngestionWorker {
                 }
                 for (IngestionQueueMessage msg : records) {
                     try {
+                        // Read tenant from the job itself; this thread has no MDC
+                        // and the SQL now requires the owning tenant to claim the row.
+                        IngestionJob job = ingestionJobMapper.findByJobId(msg.getJobId());
+                        String ownerTenant = job == null ? null : job.getTenantId();
                         IngestionProcessResult processed = ingestionService.processQueuedJob(
-                                msg.getJobId(), msg.getTraceId());
+                                msg.getJobId(), ownerTenant, msg.getTraceId());
                         if (processed.isPicked()) {
                             // Only ack when the job moved to a terminal status; otherwise
                             // leave it pending so the idle-claimer can retry instead of
@@ -126,7 +130,7 @@ public class IngestionWorker {
                 break;
             }
             try {
-                if (!ingestionService.processQueuedJob(job.getJobId(), job.getTraceId()).isPicked()) {
+                if (!ingestionService.processQueuedJob(job.getJobId(), job.getTenantId(), job.getTraceId()).isPicked()) {
                     break;
                 }
             } catch (Exception ex) {
