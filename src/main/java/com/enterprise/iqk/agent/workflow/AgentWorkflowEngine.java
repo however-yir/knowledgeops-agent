@@ -77,7 +77,7 @@ public class AgentWorkflowEngine {
                               String errorMessage) {
         stepMapper.completeStep(stepId, status,
                 toJson(output), toJson(observation),
-                outputTokens, latencyMs, errorMessage);
+                inputTokens, outputTokens, latencyMs, errorMessage);
 
         AgentStepRecord step = stepMapper.findByStepId(stepId);
         if (StringUtils.hasText(thought) && step != null) {

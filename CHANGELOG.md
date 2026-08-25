@@ -4,7 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Fixed
+- Workspace shell commands no longer leak the child `Process` when `waitFor` is interrupted: the process is now always destroyed in a `finally` block (PMD `CloseResource` also flagged this, which was failing the build).
+- PMD `CloseResource` rule now recognizes `destroy()`/`destroyForcibly()` as closing a `Process`, so the `workspace_run_shell` action no longer trips the check.
+- Streaming ReAct requests (`/ai/react/chat/stream`) now mark the workflow task `FAILED` when the stream errors, instead of leaving orphaned task records stuck in non-terminal states.
+- Per-step `input_tokens` are now persisted by `AgentStepMapper.completeStep` instead of being silently dropped (column existed in the schema but was never written).
+- `WorkspaceRuntimeTest.runsOnlyAllowedCommandFamilies` now asserts on the workspace directory name instead of the full absolute path, fixing a Windows/Git-Bash failure where `pwd` returns an MSYS-style path.
 
 ## [1.0.0] - 2026-04-28
 

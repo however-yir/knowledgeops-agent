@@ -30,7 +30,12 @@
     <rule ref="category/java/errorprone.xml/UnconditionalIfStatement"/>
     <rule ref="category/java/errorprone.xml/OverrideBothEqualsAndHashcode"/>
     <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock"/>
-    <rule ref="category/java/errorprone.xml/CloseResource"/>
+    <rule ref="category/java/errorprone.xml/CloseResource">
+        <properties>
+            <!-- Process is AutoCloseable-less; destroy()/destroyForcibly() release it. -->
+            <property name="closeTargets" value="close,closeQuietly,quit,dispose,destroy,destroyForcibly"/>
+        </properties>
+    </rule>
 
     <!-- Performance -->
     <rule ref="category/java/performance.xml/StringInstantiation"/>

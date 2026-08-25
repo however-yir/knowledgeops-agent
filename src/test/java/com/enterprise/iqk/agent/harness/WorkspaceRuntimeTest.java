@@ -56,7 +56,8 @@ class WorkspaceRuntimeTest {
         assertThat(denied.toMap()).containsEntry("status", "error");
         assertThat(deniedGitPush.toMap()).containsEntry("status", "error");
         assertThat(allowed.toMap()).containsEntry("exitCode", 0);
-        assertThat((String) allowed.toMap().get("stdout")).contains(workspace.toString());
+        String stdout = (String) allowed.toMap().get("stdout");
+        assertThat(stdout).contains(workspace.toAbsolutePath().getFileName().toString());
     }
 
     @Test
