@@ -95,17 +95,6 @@ public class HybridRetrievalService {
                     () -> graphRetriever.retrieve(query, tenantId, topK), normalized.graphWeight());
             CompletableFuture<List<ScoredDocument>> webFuture = retrieveAsync("web",
                     () -> webRetriever.retrieve(query, topK), normalized.webWeight());
-        Timer.Sample sample = Timer.start(meterRegistry);
-        String outcome = "error";
-        try {
-            CompletableFuture<List<ScoredDocument>> vectorFuture = retrieveAsync("vector",
-                    () -> vectorRetriever.retrieve(query, tenantId, chatId), VECTOR_WEIGHT);
-            CompletableFuture<List<ScoredDocument>> keywordFuture = retrieveAsync("keyword",
-                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), KEYWORD_WEIGHT);
-            CompletableFuture<List<ScoredDocument>> graphFuture = retrieveAsync("graph",
-                    () -> graphRetriever.retrieve(query, tenantId, topK), GRAPH_WEIGHT);
-            CompletableFuture<List<ScoredDocument>> webFuture = retrieveAsync("web",
-                    () -> webRetriever.retrieve(query, topK), WEB_WEIGHT);
 
             List<ScoredDocument> allDocs = Stream.of(vectorFuture, keywordFuture, graphFuture, webFuture)
                     .flatMap(future -> future.join().stream())
