@@ -73,7 +73,9 @@ public class IngestionWorker {
                     continue;
                 }
                 for (IngestionQueueMessage msg : records) {
-                    ingestionService.processQueuedJob(msg.getJobId(), msg.getTraceId());
+                    IngestionJob job = ingestionJobMapper.findByJobId(msg.getJobId());
+                    String ownerTenant = job == null ? null : job.getTenantId();
+                    ingestionService.processQueuedJob(msg.getJobId(), ownerTenant, msg.getTraceId());
                     ingestionQueue.ack(consumerName, msg.getRecordId());
                 }
             } catch (Exception ex) {
@@ -115,7 +117,7 @@ public class IngestionWorker {
                 break;
             }
             try {
-                if (!ingestionService.processQueuedJob(job.getJobId(), job.getTraceId()).isPicked()) {
+                if (!ingestionService.processQueuedJob(job.getJobId(), job.getTenantId(), job.getTraceId()).isPicked()) {
                     break;
                 }
             } catch (Exception ex) {

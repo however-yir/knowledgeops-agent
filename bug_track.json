@@ -1,6 +1,6 @@
 {
   "project": "knowledgeops-agent",
-  "tracked_at": "2026-08-25T13:45:00+08:00",
+  "tracked_at": "2026-08-25T15:10:00+08:00",
   "bugs": [
     {
       "id": 1,
@@ -37,6 +37,33 @@
       "location": "src/test/java/com/enterprise/iqk/agent/harness/WorkspaceRuntimeTest.java (runsOnlyAllowedCommandFamilies)",
       "description": "测试断言 pwd 命令输出包含 workspace.toString()（Windows 绝对路径），但 Windows 上 PATH 中的 pwd.exe（Git Bash/MSYS）输出 /tmp/junit-... 风格路径，导致断言失败。仅 Linux CI 上能通过。",
       "handling": "断言改为包含 workspace.toAbsolutePath().getFileName()（工作区目录名），不依赖具体路径风格，全平台通过。"
+    },
+    {
+      "id": 5,
+      "title": "IngestionService.processQueuedJob 跨租户 claim 漏洞",
+      "discovered_at": "2026-08-25T15:00:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/mapper/IngestionJobMapper.java (claimForRun) + IngestionService.processQueuedJob",
+      "description": "POST /ingestion/jobs/process 接口先 getByJobId(tenant, jobId) 校验存在，但 processQueuedJob(jobId, traceId) 调用的 claimForRun SQL 只按 job_id 过滤不带 tenant。攻击者用合法 token + 任意其他租户的 jobId 即可绕过校验，让系统 claim 并处理别人的任务（跨租户副作用 + 成本与状态污染）。",
+      "handling": "1) claimForRun SQL 加 tenant_id = #{tenantId} 条件；2) IngestionService 加重载 processQueuedJob(jobId, tenantId, traceId)：HTTP 路径从 MDC 取，Worker/Rabbit 路径从 job 自带 tenantId 取（其线程无 MDC）；3) IngestionWorker 与 RabbitMqIngestionListener 改用新重载，传入 job.getTenantId()。修复后其他租户的 jobId 在 claim 阶段就会被 0 行拒绝。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 6,
+      "title": "[不修] CourseTools 跨租户读写 — schema 设计问题，非代码 bug",
+      "discovered_at": "2026-08-25T14:30:00+08:00",
+      "severity": "info",
+      "location": "src/main/java/com/enterprise/iqk/tools/CourseTools.java",
+      "description": "CourseTools.queryCourse/querySchool/addCourseReservation 没有 tenant 过滤，直接调用 service.list(qw) 与 service.save()，全平台共享同一张表。但 V1 迁移中 course_reservation/course/school 表本身就没有 tenant_id 列，schema 设计就是平台级共享数据。",
+      "handling": "暂不修。要支持多租户需要新 Flyway 迁移添加 tenant_id、回填、改所有查询路径，影响面大且涉及产品决策；当前 PR 仅记录以便后续规划。"
+    },
+    {
+      "id": 7,
+      "title": "[待评估] ChatController 与 CustomerServiceController 未走成本计费",
+      "discovered_at": "2026-08-25T15:05:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java 与 CustomerServiceController.java",
+      "description": "/ai/chat 与 /ai/service 两个端点直接调用 chatClient.stream().content()，从未调用 tenantCostService.assertBudget / recordUsage，与 RAG/REACT 路径不一致——可被滥用为免费 LLM 通道。",
+      "handling": "待评估。修复需要在两个 controller 中加与 RAG 相同的计费链（assertBudget → call → recordUsage），改动可控但涉及业务策略（这些端点是否走预算治理），建议所有者决策后再合并。"
     }
   ],
   "commit": "ba0791c",

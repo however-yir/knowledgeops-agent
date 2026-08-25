@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 - Streaming ReAct requests (`/ai/react/chat/stream`) now mark the workflow task `FAILED` when the stream errors, instead of leaving orphaned task records stuck in non-terminal states.
 - Per-step `input_tokens` are now persisted by `AgentStepMapper.completeStep` instead of being silently dropped (column existed in the schema but was never written).
 - `WorkspaceRuntimeTest.runsOnlyAllowedCommandFamilies` now asserts on the workspace directory name instead of the full absolute path, fixing a Windows/Git-Bash failure where `pwd` returns an MSYS-style path.
+- `IngestionService.processQueuedJob` now requires the owning tenant to claim a job, closing a cross-tenant hijack path where any caller could pass another tenant's `jobId` to `POST /ingestion/jobs/process` and trigger the job. The new `processQueuedJob(jobId, tenantId, traceId)` overload also lets the Redis/RabbitMQ/db-polling workers pass the job's own tenant (their threads have no MDC). `IngestionJobMapper.claimForRun` SQL now filters on `tenant_id`.
 
 ## [1.0.0] - 2026-04-28
 
