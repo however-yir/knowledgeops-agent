@@ -1,6 +1,6 @@
 {
   "project": "knowledgeops-agent",
-  "tracked_at": "2026-08-25T13:05:00+08:00",
+  "tracked_at": "2026-08-25T13:45:00+08:00",
   "bugs": [
     {
       "id": 1,
@@ -41,5 +41,47 @@
   ],
   "commit": "ba0791c",
   "pr": "https://github.com/however-yir/knowledgeops-agent/pull/135",
-  "status": "已修复并提交，PR 待所有者合并"
+  "status": "已修复并提交，PR 待所有者合并",
+  "dynamic_analysis": {
+    "analyzed_at": "2026-08-25T13:45:00+08:00",
+    "hardware_notes": "本地 JDK 26.0.1；Mockito 4.x + ByteBuddy 与 JDK 26 不兼容导致 25 个测试 error（CI 上 JDK 17 正常）。本机直连 GitHub 不稳定，PR 推送已切换到 127.0.0.1:7897 (Clash) 代理。",
+    "fatal_blockers": [
+      {
+        "id": 1,
+        "file": "WorkspaceRuntime.java",
+        "verdict": "pass",
+        "reason": "finally 中 destroyForcibly 对已退出进程为 no-op；waitFor 成功后 exitValue 必不抛；Process.start() 一定返回非空。无 NPE/死锁。"
+      },
+      {
+        "id": 2,
+        "file": "WorkflowReactAgentService.java",
+        "verdict": "pass",
+        "reason": "taskIdRef 用 AtomicRef 初始化为 \"\"；defer 内部 startTask 成功后 set；onErrorResume 读非空 + StringUtils.hasText 判空，failTask/recordTaskMetrics 内部无外部依赖。修复后错误路径 task 必转 FAILED，无孤儿。"
+      },
+      {
+        "id": 3,
+        "file": "AgentStepMapper.java",
+        "verdict": "pass",
+        "reason": "纯加性变更，新增 input_tokens 入参为 long 自动装箱为 Long 非空，DB 列允许 NULL。"
+      },
+      {
+        "id": 4,
+        "file": "WorkspaceRuntimeTest.java",
+        "verdict": "pass",
+        "reason": "getFileName().toString() 在 @TempDir 存在时必非空；Windows/Linux 均通过。"
+      }
+    ],
+    "business_trace": "POST /ai/react/chat/stream → stream() 入参校验 → startTask 拿到 taskId → 写入 taskIdRef → 推理循环中 step 抛 LLM timeout 异常 → 异常沿 Flux 链路上行 → onErrorResume 读取 taskIdRef 非空 → failTask + recordTaskMetrics(REACT_STREAM, FAILED) → emit TASK_FAILED 事件 → SSE 错误事件下发客户端。任务终态 FAILED，指标与状态一致，业务轨迹正确。",
+    "config_dependencies": {
+      "added": [
+        "pmd-ruleset.xml CloseResource 规则的 closeTargets=close,closeQuietly,quit,dispose,destroy,destroyForcibly（硬编码无需外部配置）"
+      ],
+      "external_runtime": [
+        "git remote fork https://github.com/Randycarteronion/knowledgeops-agent.git",
+        "Windows 凭据管理器下 git:https://github.com 的 PAT (Randycarteronion)",
+        "可选代理 http://127.0.0.1:7897 (本机 Clash)"
+      ],
+      "missing": []
+    }
+  }
 }
