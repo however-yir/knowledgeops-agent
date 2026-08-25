@@ -1,0 +1,45 @@
+{
+  "project": "knowledgeops-agent",
+  "tracked_at": "2026-08-25T13:05:00+08:00",
+  "bugs": [
+    {
+      "id": 1,
+      "title": "mvn test 构建失败：WorkspaceRuntime Process 未关闭（PMD CloseResource）",
+      "discovered_at": "2026-08-25T10:28:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (runCommand)",
+      "description": "pmd 7.24 升级后，mvn test 在 PMD 检查阶段直接失败（测试套件无法运行）。workspace_run_shell 启动的 Process 从未关闭：waitFor 抛 InterruptedException 时子进程泄漏，且 CloseResource 规则不识别 destroyForcibly 为关闭操作。",
+      "handling": "runCommand 改为 try/finally，finally 中调用 process.destroyForcibly() 保证子进程必然被回收；同时更新 pmd-ruleset.xml，为 CloseResource 规则配置 closeTargets 加入 destroy/destroyForcibly。验证：mvn compile 与 mvn pmd:check 均通过。"
+    },
+    {
+      "id": 2,
+      "title": "流式 ReAct 请求出错时任务永久卡在非终态（任务孤儿）",
+      "discovered_at": "2026-08-25T11:20:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/agent/workflow/WorkflowReactAgentService.java (stream)",
+      "description": "stream() 的 onErrorResume 只向客户端发送 SSE error 事件，从不调用 workflowEngine.failTask，导致任务记录永远停留在 PLANNING/SEARCHING 等非终态，与 chat() 路径行为不一致。",
+      "handling": "在 stream() 的 onErrorResume 中调用 workflowEngine.failTask(taskId, message) 并将任务标记为 FAILED，同时记录 FAILED 指标；通过 AtomicReference 传递 defer 内创建的任务 ID。"
+    },
+    {
+      "id": 3,
+      "title": "agent_step.input_tokens 列从未被写入（数据丢失）",
+      "discovered_at": "2026-08-25T11:40:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/agent/workflow/AgentStepMapper.java (completeStep)",
+      "description": "数据库 schema（V10 迁移）存在 input_tokens 列，AgentWorkflowEngine.completeStep 也接收 inputTokens 参数，WorkflowStepVO 也暴露该字段，但 completeStep 的 UPDATE SQL 从不写入该列，步骤级输入 token 统计永远为 0。",
+      "handling": "completeStep SQL 增加 input_tokens = #{inputTokens}，引擎调用处把 inputTokens 参数传入 mapper。"
+    },
+    {
+      "id": 4,
+      "title": "WorkspaceRuntimeTest 在 Windows/Git Bash 下失败（跨平台路径断言）",
+      "discovered_at": "2026-08-25T11:50:00+08:00",
+      "severity": "medium",
+      "location": "src/test/java/com/enterprise/iqk/agent/harness/WorkspaceRuntimeTest.java (runsOnlyAllowedCommandFamilies)",
+      "description": "测试断言 pwd 命令输出包含 workspace.toString()（Windows 绝对路径），但 Windows 上 PATH 中的 pwd.exe（Git Bash/MSYS）输出 /tmp/junit-... 风格路径，导致断言失败。仅 Linux CI 上能通过。",
+      "handling": "断言改为包含 workspace.toAbsolutePath().getFileName()（工作区目录名），不依赖具体路径风格，全平台通过。"
+    }
+  ],
+  "commit": "ba0791c",
+  "pr": "https://github.com/however-yir/knowledgeops-agent/pull/135",
+  "status": "已修复并提交，PR 待所有者合并"
+}
