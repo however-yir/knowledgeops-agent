@@ -49,7 +49,52 @@ public class HybridRetrievalService {
     private static final double WEB_WEIGHT = 0.15;
     private static final long SOURCE_TIMEOUT_SECONDS = 3;
 
+    /**
+     * Retrieve documents using hybrid search with default source weights.
+     * Equivalent to calling {@link #retrieve(String, String, String, int, HybridWeights)}
+     * with default weights (vector=0.40, keyword=0.25, graph=0.20, web=0.15).
+     *
+     * @param query    search query
+     * @param tenantId tenant identifier for filtering
+     * @param chatId   chat/conversation identifier for filtering
+     * @param topK     number of top results to return
+     * @return hybrid retrieval result with deduplicated, scored documents
+     */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
+        return retrieve(query, tenantId, chatId, topK, HybridWeights.DEFAULT);
+    }
+
+    /**
+     * Retrieve documents using hybrid search with configurable per-source weights.
+     * Each source runs in parallel via {@link CompletableFuture} and results are
+     * merged, deduplicated by content fingerprint, and sorted by final weighted score.
+     *
+     * Tuning tip: factual/definitional queries benefit from higher vector weight;
+     * exact-match/lookup queries benefit from higher keyword weight.
+     *
+     * @param query    search query
+     * @param tenantId tenant identifier for filtering
+     * @param chatId   chat/conversation identifier for filtering
+     * @param topK     number of top results to return
+     * @param weights  per-source weight configuration; weights are normalized to sum to 1.0
+     * @return hybrid retrieval result with deduplicated, scored documents
+     */
+    public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK, HybridWeights weights) {
+
+        // Normalize weights to sum to 1.0
+        HybridWeights normalized = weights.normalize();
+
+        Timer.Sample sample = Timer.start(meterRegistry);
+        String outcome = "error";
+        try {
+            CompletableFuture<List<ScoredDocument>> vectorFuture = retrieveAsync("vector",
+                    () -> vectorRetriever.retrieve(query, tenantId, chatId), normalized.vectorWeight());
+            CompletableFuture<List<ScoredDocument>> keywordFuture = retrieveAsync("keyword",
+                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), normalized.keywordWeight());
+            CompletableFuture<List<ScoredDocument>> graphFuture = retrieveAsync("graph",
+                    () -> graphRetriever.retrieve(query, tenantId, topK), normalized.graphWeight());
+            CompletableFuture<List<ScoredDocument>> webFuture = retrieveAsync("web",
+                    () -> webRetriever.retrieve(query, topK), normalized.webWeight());
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
