@@ -107,8 +107,13 @@ public class AgentWorkflowEngine {
     public void transitionStatus(String taskId, WorkflowState from, WorkflowState to) {
         if (!from.canTransitionTo(to)) {
             log.warn("Invalid state transition: {} -> {} for task {}", from, to, taskId);
+            return;
         }
-        taskMapper.updateStatus(taskId, to.name());
+        int updated = taskMapper.updateStatus(taskId, to.name());
+        if (updated == 0) {
+            log.warn("State transition had no effect: task {} already in terminal state", taskId);
+            return;
+        }
         emitEvent(taskId, null, "STATE_CHANGED",
                 Map.of("from", from.name(), "to", to.name()));
     }

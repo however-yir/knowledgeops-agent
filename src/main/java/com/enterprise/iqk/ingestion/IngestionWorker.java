@@ -73,8 +73,19 @@ public class IngestionWorker {
                     continue;
                 }
                 for (IngestionQueueMessage msg : records) {
-                    ingestionService.processQueuedJob(msg.getJobId(), msg.getTraceId());
-                    ingestionQueue.ack(consumerName, msg.getRecordId());
+                    try {
+                        IngestionProcessResult processed = ingestionService.processQueuedJob(
+                                msg.getJobId(), msg.getTraceId());
+                        if (processed.isPicked()) {
+                            // Only ack when the job moved to a terminal status; otherwise
+                            // leave it pending so the idle-claimer can retry instead of
+                            // losing transient failures.
+                            ingestionQueue.ack(consumerName, msg.getRecordId());
+                        }
+                    } catch (RuntimeException ex) {
+                        log.error("Ingestion worker failed for job {}; leaving message pending for reclaim: {}",
+                                msg.getJobId(), ex.getMessage());
+                    }
                 }
             } catch (Exception ex) {
                 log.error("Redis ingestion worker failed for consumer {}", consumerName, ex);

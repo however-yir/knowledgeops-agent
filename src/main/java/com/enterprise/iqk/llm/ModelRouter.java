@@ -4,7 +4,6 @@ import com.enterprise.iqk.config.properties.ModelRouterProperties;
 import com.enterprise.iqk.domain.ModelAbExposure;
 import com.enterprise.iqk.mapper.ModelAbExposureMapper;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -21,12 +20,6 @@ public class ModelRouter {
     private final ModelRouterProperties modelRouterProperties;
     private final ModelAbExposureMapper modelAbExposureMapper;
 
-    public ModelRouter(ModelRouterProperties modelRouterProperties) {
-        this.modelRouterProperties = modelRouterProperties;
-        this.modelAbExposureMapper = null;
-    }
-
-    @Autowired
     public ModelRouter(ModelRouterProperties modelRouterProperties,
                        ObjectProvider<ModelAbExposureMapper> modelAbExposureMapperProvider) {
         this.modelRouterProperties = modelRouterProperties;

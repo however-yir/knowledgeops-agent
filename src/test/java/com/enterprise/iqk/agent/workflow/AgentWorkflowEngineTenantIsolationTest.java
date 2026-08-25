@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AgentWorkflowEngineTenantIsolationTest {
@@ -150,5 +151,23 @@ class AgentWorkflowEngineTenantIsolationTest {
         when(taskMapper.findByTaskId("missing")).thenReturn(null);
         assertThat(engine.currentState("missing")).isNull();
 
+    }
+
+    @Test
+    void rejectsInvalidStateTransitionWithoutPersisting() {
+        engine.transitionStatus("task-illegal", WorkflowState.CREATED, WorkflowState.DONE);
+
+        verify(taskMapper, never()).updateStatus("task-illegal", WorkflowState.DONE.name());
+        verifyNoInteractions(eventMapper);
+    }
+
+    @Test
+    void skipsEventWhenTransitionAffectsZeroRows() {
+        when(taskMapper.updateStatus("task-stale", WorkflowState.PLANNING.name())).thenReturn(0);
+
+        engine.transitionStatus("task-stale", WorkflowState.CREATED, WorkflowState.PLANNING);
+
+        verify(taskMapper).updateStatus("task-stale", WorkflowState.PLANNING.name());
+        verifyNoInteractions(eventMapper);
     }
 }

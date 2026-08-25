@@ -97,17 +97,12 @@ public class DeepResearchService {
                     .status("DONE")
                     .build();
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Deep research failed for task {}", task.getTaskId(), e);
             workflowEngine.failTask(task.getTaskId(), e.getMessage());
             workflowEngine.recordTaskMetrics("DEEP_RESEARCH", "FAILED",
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs));
-            return DeepResearchResult.builder()
-                    .taskId(task.getTaskId())
-                    .topic(request.getTopic())
-                    .report("Research failed: " + e.getMessage())
-                    .status("FAILED")
-                    .build();
+            throw e;
         }
     }
 

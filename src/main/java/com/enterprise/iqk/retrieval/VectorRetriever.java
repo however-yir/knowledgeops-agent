@@ -24,7 +24,8 @@ public class VectorRetriever {
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
-            String filter = "tenant_id == '" + sanitize(tenantId) + "' && chat_id == '" + sanitize(chatId) + "'";
+            String filter = "tenant_id == \"" + escapeFilter(tenantId)
+                    + "\" && chat_id == \"" + escapeFilter(chatId) + "\"";
             SearchRequest request = SearchRequest.builder()
                     .query(query)
                     .topK(ragProperties.getRetrieveTopK())
@@ -36,14 +37,13 @@ public class VectorRetriever {
             List<ScoredDocument> results = new ArrayList<>();
             for (int i = 0; i < docs.size(); i++) {
                 Document d = docs.get(i);
-                double score = 1.0 - (i * 0.05); // approximate; real score from metadata if available
                 results.add(ScoredDocument.builder()
                         .docId("vec-" + i)
                         .sourceType("vector")
                         .title(metaStr(d, "file_name", "unknown"))
                         .chunkId("chunk-" + metaStr(d, "chunk_index", String.valueOf(i)))
                         .content(d.getFormattedContent())
-                        .retrievalScore(Math.max(0.1, score))
+                        .retrievalScore(extractScore(d, i))
                         .metadata(d.getMetadata())
                         .build());
             }
@@ -61,7 +61,55 @@ public class VectorRetriever {
         return v == null ? fallback : v.toString();
     }
 
-    private String sanitize(String v) {
-        return (v == null ? "" : v).replace("'", "");
+    // Real retrieval scores live in Spring AI's standard metadata keys
+    // (distance / score). Falling back to rank-based decay keeps the pipeline
+    // functional for stores that do not populate them.
+    private double extractScore(Document d, int rank) {
+        Double explicit = readDouble(d.getMetadata(), "score");
+        if (explicit != null) {
+            return clamp01(explicit);
+        }
+        Double distance = readDouble(d.getMetadata(), "distance");
+        if (distance != null) {
+            return clamp01(1.0 - distance);
+        }
+        double fallback = 1.0 - (rank * 0.05);
+        return Math.max(0.1, fallback);
+    }
+
+    private Double readDouble(java.util.Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object v = metadata.get(key);
+        if (v instanceof Number n) {
+            return n.doubleValue();
+        }
+        if (v instanceof String s) {
+            try {
+                return Double.parseDouble(s.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private double clamp01(double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            return 0.0;
+        }
+        if (value < 0.0) return 0.0;
+        if (value > 1.0) return 1.0;
+        return value;
+    }
+
+    // Escape values for double-quoted filter expressions. The previous
+    // implementation only stripped single quotes, so an input containing a
+    // double quote (or backslash) could break out of the filter and inject
+    // an unintended predicate.
+    private String escapeFilter(String v) {
+        if (v == null) return "";
+        return v.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

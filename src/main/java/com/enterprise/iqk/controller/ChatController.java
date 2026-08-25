@@ -34,21 +34,6 @@ public class ChatController {
 
     private final ChatHistoryRepository chatHistoryRepository;
 
-//    @RequestMapping(value = "/chat", produces = "text/html;charset=UTF-8")
-//    @SneakyThrows
-//    public Flux<String> chat(String prompt,String chatId){
-//        //        String content = chatClient
-////                .prompt(prompt)
-////                .call()//同步调用，就是等他全部执行完，才返回结果
-////                .content();
-////        return content;
-//        chatHistoryRepository.save("chat",chatId);
-//        return chatClient
-//                .prompt(prompt)
-//                .advisors(a -> a.param(CONVERSATION_ID, chatId))
-//                .stream()
-//                .content();
-//    }
     @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
     public Flux<String> chat(
             @RequestParam("prompt") String prompt,

@@ -1,18 +1,22 @@
 package com.enterprise.iqk.llm;
 
 import com.enterprise.iqk.config.properties.ModelRouterProperties;
+import com.enterprise.iqk.mapper.ModelAbExposureMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ModelRouterTest {
 
     @Test
     void shouldResolveByRequestedProfile() {
-        ModelRouter router = new ModelRouter(buildProperties(true));
+        ModelRouter router = new ModelRouter(buildProperties(true), emptyMapperProvider());
 
         ModelRouter.ModelRouteDecision decision = router.resolve("quality", "chat");
 
@@ -26,7 +30,7 @@ class ModelRouterTest {
     void shouldFallbackToBalancedWhenProfileDisabled() {
         ModelRouterProperties properties = buildProperties(true);
         properties.getProfiles().get("quality").setEnabled(false);
-        ModelRouter router = new ModelRouter(properties);
+        ModelRouter router = new ModelRouter(properties, emptyMapperProvider());
 
         ModelRouter.ModelRouteDecision decision = router.resolve("quality", "chat");
 
@@ -37,12 +41,19 @@ class ModelRouterTest {
 
     @Test
     void shouldUseEndpointDefaultWhenNoRequestedProfile() {
-        ModelRouter router = new ModelRouter(buildProperties(true));
+        ModelRouter router = new ModelRouter(buildProperties(true), emptyMapperProvider());
 
         ModelRouter.ModelRouteDecision decision = router.resolve("", "service");
 
         assertEquals("quality", decision.profile());
         assertEquals("qwen-max", decision.model());
+    }
+
+    @SuppressWarnings("unchecked")
+    private ObjectProvider<ModelAbExposureMapper> emptyMapperProvider() {
+        ObjectProvider<ModelAbExposureMapper> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(null);
+        return provider;
     }
 
     private ModelRouterProperties buildProperties(boolean enabled) {

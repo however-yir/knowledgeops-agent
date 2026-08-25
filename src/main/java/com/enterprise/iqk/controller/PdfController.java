@@ -105,14 +105,7 @@ public class PdfController {
                 conversationId,
                 modelProfile
         );
-        StringBuilder output = new StringBuilder(result.getAnswer());
-        if (result.getCitations() != null && !result.getCitations().isEmpty()) {
-            output.append("\n\n引用来源:\n");
-            for (int i = 0; i < result.getCitations().size(); i++) {
-                output.append("[").append(i + 1).append("] ").append(result.getCitations().get(i)).append("\n");
-            }
-        }
-        return Flux.just(output.toString());
+        return Flux.just(result.getAnswer());
     }
 
     private String sanitize(String value) {

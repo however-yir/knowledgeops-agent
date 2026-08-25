@@ -26,6 +26,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitProperties rateLimitProperties;
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    // Hard ceiling on the per-process bucket map so a burst of distinct keys
+    // cannot exhaust the JVM. Once exceeded we drop everything; legitimate
+    // callers rebuild their bucket on the next request.
+    private static final int MAX_BUCKETS = 50_000;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -36,6 +40,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
         String key = resolveKey(request);
+        if (buckets.size() >= MAX_BUCKETS) {
+            // Memory-safety guard: when the map is full (likely a flood of
+            // distinct keys), drop everything before adding a new entry.
+            buckets.clear();
+        }
         Bucket bucket = buckets.computeIfAbsent(key, k -> newBucket());
         if (!bucket.tryConsume(1)) {
             response.setStatus(429);

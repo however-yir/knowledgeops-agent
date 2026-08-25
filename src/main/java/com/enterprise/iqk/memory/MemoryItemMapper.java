@@ -16,6 +16,7 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
             WHERE tenant_id = #{tenantId}
               AND user_id = #{userId}
               AND type = #{type}
+              AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)
@@ -44,6 +45,7 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
             WHERE tenant_id = #{tenantId}
               AND type = #{type}
               AND confidence >= #{minConfidence}
+              AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)

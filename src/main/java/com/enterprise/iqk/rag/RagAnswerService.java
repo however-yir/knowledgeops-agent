@@ -44,8 +44,8 @@ public class RagAnswerService {
 
         try {
             String normalizedTenantId = TenantContext.normalize(tenantId);
-            String filterExpression = "tenant_id == '" + sanitizeFilterValue(normalizedTenantId) + "' && chat_id == '"
-                    + sanitizeFilterValue(chatId) + "'";
+            String filterExpression = "tenant_id == \"" + escapeFilterValue(normalizedTenantId)
+                    + "\" && chat_id == \"" + escapeFilterValue(chatId) + "\"";
             SearchRequest request = SearchRequest.builder()
                     .query(prompt)
                     .topK(ragProperties.getRetrieveTopK())
@@ -89,10 +89,11 @@ public class RagAnswerService {
             List<String> evidence = selected.stream()
                     .map(this::evidenceText)
                     .toList();
+            String answerWithFooter = answer + formatCitationFooter(citations);
 
             pipelineOutcome = "success";
             return RagResult.builder()
-                    .answer(answer)
+                    .answer(answerWithFooter)
                     .citations(citations)
                     .evidence(evidence)
                     .build();
@@ -203,8 +204,20 @@ public class RagAnswerService {
         return StringUtils.hasText(value) ? value : "";
     }
 
-    private String sanitizeFilterValue(String value) {
-        return emptyIfBlank(value).replace("'", "");
+    private String escapeFilterValue(String value) {
+        String raw = emptyIfBlank(value);
+        return raw.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private String formatCitationFooter(List<String> citations) {
+        if (citations == null || citations.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("\n\n---\n引用来源:\n");
+        for (int i = 0; i < citations.size(); i++) {
+            sb.append("[").append(i + 1).append("] ").append(citations.get(i)).append("\n");
+        }
+        return sb.toString();
     }
 
     @Data
