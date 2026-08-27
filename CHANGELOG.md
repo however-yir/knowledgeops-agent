@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file.
 - Per-step `input_tokens` are now persisted by `AgentStepMapper.completeStep` instead of being silently dropped (column existed in the schema but was never written).
 - `WorkspaceRuntimeTest.runsOnlyAllowedCommandFamilies` now asserts on the workspace directory name instead of the full absolute path, fixing a Windows/Git-Bash failure where `pwd` returns an MSYS-style path.
 - `IngestionService.processQueuedJob` now requires the owning tenant to claim a job, closing a cross-tenant hijack path where any caller could pass another tenant's `jobId` to `POST /ingestion/jobs/process` and trigger the job. The new `processQueuedJob(jobId, tenantId, traceId)` overload also lets the Redis/RabbitMQ/db-polling workers pass the job's own tenant (their threads have no MDC). `IngestionJobMapper.claimForRun` SQL now filters on `tenant_id`.
+- SQL `LIKE` keyword injection in graph and session search: `GraphService.searchEntities / searchFacts` and `AgentSessionService.list` now route the user-supplied keyword through a new `SqlLikeUtils.escapeForLike` so `%`, `_`, and `\` no longer widen the search. Without this, a search for `%` would match every row in the tenant's `kg_entity` / `kg_fact` / `agent_session_state` tables, turning any of those endpoints into a one-request DoS / data-exhaustion vector.
 
 ## [1.0.0] - 2026-04-28
 

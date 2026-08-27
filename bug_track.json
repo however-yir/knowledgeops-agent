@@ -64,6 +64,15 @@
       "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java 与 CustomerServiceController.java",
       "description": "/ai/chat 与 /ai/service 两个端点直接调用 chatClient.stream().content()，从未调用 tenantCostService.assertBudget / recordUsage，与 RAG/REACT 路径不一致——可被滥用为免费 LLM 通道。",
       "handling": "待评估。修复需要在两个 controller 中加与 RAG 相同的计费链（assertBudget → call → recordUsage），改动可控但涉及业务策略（这些端点是否走预算治理），建议所有者决策后再合并。"
+    },
+    {
+      "id": 8,
+      "title": "SQL LIKE 通配符注入：graph 与 session 搜索可被 % _ \\ 扩大匹配",
+      "discovered_at": "2026-08-27T07:45:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/graph/GraphService.java + src/main/java/com/enterprise/iqk/mapper/AgentSessionStateMapper.java（被 src/main/java/com/enterprise/iqk/service/AgentSessionService.java 调用）",
+      "description": "KgEntityMapper.searchByName、KgFactMapper.searchByKeyword、AgentSessionStateMapper.countByTenant / findByTenant 都用 LIKE CONCAT('%', #{keyword}, '%') 直接拼接用户输入。MyBatis #{} 做了预编译但不会转义 LIKE 通配符——攻击者传 % 或 _ 会匹配整张表的全部行（即使有 tenant_id 过滤，仍能拉回本租户的全部记录），属于 DoS + 数据过载。GraphRetriever.extractMainKeyword 取 query 最长 token 直接透传，RAG / 深度研究 / Agent harness 走 rag_search action 时用户可触发。",
+      "handling": "1) 新增 util/SqlLikeUtils.escapeForLike 转义 \\ % _；2) GraphService.searchEntities / searchFacts 在传 mapper 前调用 escapeForLike；3) AgentSessionService.list 对 keyword 同样转义后再传 mapper。ConversationMapper 的 LIKE CONCAT(#{type}, '::%') 不修——type 来自受控字典 (chat / service / pdf / react / eval)，非用户输入。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",

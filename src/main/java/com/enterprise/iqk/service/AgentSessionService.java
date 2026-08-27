@@ -9,6 +9,7 @@ import com.enterprise.iqk.domain.vo.BranchMergeResultVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.mapper.AgentSessionStateMapper;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.util.SqlLikeUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
@@ -43,12 +44,15 @@ public class AgentSessionService {
         String tenant = TenantContext.normalize(tenantId);
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, pageSize);
-        long total = agentSessionStateMapper.countByTenant(tenant, emptyToNull(keyword), workspaceId, includeArchived);
+        // Escape SQL LIKE wildcards in the user-supplied keyword so a search
+        // for "%" or "_" cannot widen the result set beyond the intended rows.
+        String safeKeyword = SqlLikeUtils.escapeForLike(emptyToNull(keyword));
+        long total = agentSessionStateMapper.countByTenant(tenant, safeKeyword, workspaceId, includeArchived);
         if (total == 0) {
             return new PagedResult<>(Collections.emptyList(), 0, safePage, safePageSize);
         }
         long offset = (long) (safePage - 1) * safePageSize;
-        List<AgentSessionStateVO> items = agentSessionStateMapper.findByTenant(tenant, emptyToNull(keyword), workspaceId, includeArchived, offset, safePageSize)
+        List<AgentSessionStateVO> items = agentSessionStateMapper.findByTenant(tenant, safeKeyword, workspaceId, includeArchived, offset, safePageSize)
                 .stream()
                 .map(this::toSessionState)
                 .toList();
