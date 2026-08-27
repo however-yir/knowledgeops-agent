@@ -73,6 +73,24 @@
       "location": "src/main/java/com/enterprise/iqk/graph/GraphService.java + src/main/java/com/enterprise/iqk/mapper/AgentSessionStateMapper.java（被 src/main/java/com/enterprise/iqk/service/AgentSessionService.java 调用）",
       "description": "KgEntityMapper.searchByName、KgFactMapper.searchByKeyword、AgentSessionStateMapper.countByTenant / findByTenant 都用 LIKE CONCAT('%', #{keyword}, '%') 直接拼接用户输入。MyBatis #{} 做了预编译但不会转义 LIKE 通配符——攻击者传 % 或 _ 会匹配整张表的全部行（即使有 tenant_id 过滤，仍能拉回本租户的全部记录），属于 DoS + 数据过载。GraphRetriever.extractMainKeyword 取 query 最长 token 直接透传，RAG / 深度研究 / Agent harness 走 rag_search action 时用户可触发。",
       "handling": "1) 新增 util/SqlLikeUtils.escapeForLike 转义 \\ % _；2) GraphService.searchEntities / searchFacts 在传 mapper 前调用 escapeForLike；3) AgentSessionService.list 对 keyword 同样转义后再传 mapper。ConversationMapper 的 LIKE CONCAT(#{type}, '::%') 不修——type 来自受控字典 (chat / service / pdf / react / eval)，非用户输入。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 9,
+      "title": "前端 LLM 输出渲染缺少 rel=noopener 防护（反向 tabnabbing）",
+      "discovered_at": "2026-08-27T11:00:00+08:00",
+      "severity": "medium",
+      "location": "frontend/src/App.vue (renderMarkdown)",
+      "description": "App.vue 第 333 行用 v-html 渲染 LLM 输出的 Markdown。renderMarkdown 调 marked.parse + DOMPurify.sanitize 但配置过宽：(1) 未禁用 style、on* 事件属性（虽 DOMPurify 默认会拦但代码显式 allow-list 才能防版本升级带来的回归）；(2) DOMPurify 默认会保留 target 属性却不会强制 rel=noopener，prompt 注入的 <a target=_blank href=...> 渲染后新窗口可经 window.opener 操纵原页面（reverse-tabnabbing）。",
+      "handling": "1) DOMPurify.sanitize 显式传 ALLOWED_ATTR / FORBID_ATTR / FORBID_TAGS 白名单（保留 markdown 必需属性、显式拒绝 on* 与 style / iframe 等）；2) 模块加载时注册 DOMPurify.addHook('afterSanitizeAttributes')，对所有 target=_blank 链接强制合并 rel=noopener noreferrer；3) hook 用 module-level 一次性注册，避免 renderMarkdown 多次调用时 addHook 重复问题。"
+    },
+    {
+      "id": 10,
+      "title": "[待评估] 前端把 API key / JWT refresh token 明文存到 localStorage",
+      "discovered_at": "2026-08-27T11:05:00+08:00",
+      "severity": "high",
+      "location": "frontend/src/App.vue (STORAGE_KEY + bootstrap ref)",
+      "description": "App.vue 第 755-1349 行：登录后把 token、refreshToken、apiKey、tenantId 全部以 JSON 形式写入 localStorage('knowledgeops-agent-react-console-v2')，刷新页面从 localStorage 恢复。XSS 一旦发生（即使低危），攻击者 localStorage.getItem 一行就能拿到所有用户的 API key 与 refresh token——账户完全失陷，且 refresh token 可签发新 JWT 持续 14 天。建议改用 httpOnly Secure SameSite=Strict cookie 存 refresh token，前端只放短期 access token。",
+      "handling": "暂不修——是架构性方案变更（前后端都要改：后端 AuthController 改用 Set-Cookie + CSRF token；前端 axios 改 credentials=include + 移除 localStorage 持久化）。建议单独建一个 issue 与所有者讨论，注明风险等级与影响范围。"
     }
   ],
   "commit": "ba0791c",

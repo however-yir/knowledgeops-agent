@@ -1009,13 +1009,40 @@ function shortId(id: string): string {
   return id.slice(0, 10);
 }
 
+// Module-level hook: force rel="noopener noreferrer" on every link with
+// target="_blank" rendered from LLM output. Without this, a prompt-injected
+// response could open a new tab and the new tab's JS would be able to reach
+// back to window.opener.location of the original page (reverse-tabnabbing).
+// Registered once at module load; DOMPurify hooks are keyed by event name and
+// replace prior registrations, so this is safe across re-renders.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A' && node.getAttribute('target') === '_blank') {
+    const existing = (node.getAttribute('rel') || '').toLowerCase();
+    const merged = new Set(existing.split(/\s+/).filter(Boolean));
+    merged.add('noopener');
+    merged.add('noreferrer');
+    node.setAttribute('rel', Array.from(merged).join(' '));
+  }
+});
+
 function renderMarkdown(content: string): string {
   if (!content?.trim()) {
     return '<p>等待模型输出...</p>';
   }
   const html = marked.parse(content) as string;
+  // Defense-in-depth: explicitly forbid inline event handlers, javascript:
+  // URLs, and target=_blank without rel=noopener. DOMPurify already strips
+  // the dangerous forms (script, onerror, javascript:), but the defaults
+  // leave target and a few other attributes alone, which is enough to
+  // enable reverse-tabnabbing on links rendered from LLM output.
   return DOMPurify.sanitize(html, {
     ADD_ATTR: ['data-code'],
+    ALLOWED_ATTR: [
+      'href', 'title', 'alt', 'src', 'name', 'target', 'rel', 'class',
+      'id', 'data-code', 'data-line', 'colspan', 'rowspan', 'align',
+    ],
+    FORBID_ATTR: ['style', 'onload', 'onclick', 'onerror', 'onmouseover'],
+    FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form', 'input'],
   });
 }
 
