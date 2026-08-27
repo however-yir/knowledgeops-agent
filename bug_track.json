@@ -91,6 +91,15 @@
       "location": "frontend/src/App.vue (STORAGE_KEY + bootstrap ref)",
       "description": "App.vue 第 755-1349 行：登录后把 token、refreshToken、apiKey、tenantId 全部以 JSON 形式写入 localStorage('knowledgeops-agent-react-console-v2')，刷新页面从 localStorage 恢复。XSS 一旦发生（即使低危），攻击者 localStorage.getItem 一行就能拿到所有用户的 API key 与 refresh token——账户完全失陷，且 refresh token 可签发新 JWT 持续 14 天。建议改用 httpOnly Secure SameSite=Strict cookie 存 refresh token，前端只放短期 access token。",
       "handling": "暂不修——是架构性方案变更（前后端都要改：后端 AuthController 改用 Set-Cookie + CSRF token；前端 axios 改 credentials=include + 移除 localStorage 持久化）。建议单独建一个 issue 与所有者讨论，注明风险等级与影响范围。"
+    },
+    {
+      "id": 11,
+      "title": "WebSearch 后端 RestTemplate 懒加载非线程安全（高危并发竞争）",
+      "discovered_at": "2026-08-27T11:30:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/retrieval/web/BingSearchBackend.java + SearXNGBackend.java",
+      "description": "BingSearchBackend 和 SearXNGBackend 的 getRestTemplate() 用裸 if (restTemplate == null) 懒初始化，无同步。多线程同时首次调用会导致：(1) 两个线程都看到 null 都 new RestTemplate()，其中一个实例被默默丢弃；(2) 两个 SimpleClientHttpRequestFactory 同时被构造但只一个的 setConnectTimeout / setReadTimeout 生效，另一个用默认超时，行为不确定；(3) 最坏情况请求走的是 half-configured factory 导致 IllegalStateException 或静默使用默认 30s 超时。附加：两个 backend 自己 new ObjectMapper() 绕过 Spring 注入，模块配置与其他服务不一致。",
+      "handling": "1) 改为 volatile + double-checked locking，懒初始化只发生一次；2) ObjectMapper 改用构造器注入（Spring 管理的 bean），与全局 JSON 配置对齐。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
