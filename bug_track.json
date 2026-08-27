@@ -1,6 +1,6 @@
 {
   "project": "knowledgeops-agent",
-  "tracked_at": "2026-08-25T13:05:00+08:00",
+  "tracked_at": "2026-08-25T15:10:00+08:00",
   "bugs": [
     {
       "id": 1,
@@ -37,9 +37,87 @@
       "location": "src/test/java/com/enterprise/iqk/agent/harness/WorkspaceRuntimeTest.java (runsOnlyAllowedCommandFamilies)",
       "description": "测试断言 pwd 命令输出包含 workspace.toString()（Windows 绝对路径），但 Windows 上 PATH 中的 pwd.exe（Git Bash/MSYS）输出 /tmp/junit-... 风格路径，导致断言失败。仅 Linux CI 上能通过。",
       "handling": "断言改为包含 workspace.toAbsolutePath().getFileName()（工作区目录名），不依赖具体路径风格，全平台通过。"
+    },
+    {
+      "id": 5,
+      "title": "IngestionService.processQueuedJob 跨租户 claim 漏洞",
+      "discovered_at": "2026-08-25T15:00:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/mapper/IngestionJobMapper.java (claimForRun) + IngestionService.processQueuedJob",
+      "description": "POST /ingestion/jobs/process 接口先 getByJobId(tenant, jobId) 校验存在，但 processQueuedJob(jobId, traceId) 调用的 claimForRun SQL 只按 job_id 过滤不带 tenant。攻击者用合法 token + 任意其他租户的 jobId 即可绕过校验，让系统 claim 并处理别人的任务（跨租户副作用 + 成本与状态污染）。",
+      "handling": "1) claimForRun SQL 加 tenant_id = #{tenantId} 条件；2) IngestionService 加重载 processQueuedJob(jobId, tenantId, traceId)：HTTP 路径从 MDC 取，Worker/Rabbit 路径从 job 自带 tenantId 取（其线程无 MDC）；3) IngestionWorker 与 RabbitMqIngestionListener 改用新重载，传入 job.getTenantId()。修复后其他租户的 jobId 在 claim 阶段就会被 0 行拒绝。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 6,
+      "title": "[不修] CourseTools 跨租户读写 — schema 设计问题，非代码 bug",
+      "discovered_at": "2026-08-25T14:30:00+08:00",
+      "severity": "info",
+      "location": "src/main/java/com/enterprise/iqk/tools/CourseTools.java",
+      "description": "CourseTools.queryCourse/querySchool/addCourseReservation 没有 tenant 过滤，直接调用 service.list(qw) 与 service.save()，全平台共享同一张表。但 V1 迁移中 course_reservation/course/school 表本身就没有 tenant_id 列，schema 设计就是平台级共享数据。",
+      "handling": "暂不修。要支持多租户需要新 Flyway 迁移添加 tenant_id、回填、改所有查询路径，影响面大且涉及产品决策；当前 PR 仅记录以便后续规划。"
+    },
+    {
+      "id": 7,
+      "title": "[待评估] ChatController 与 CustomerServiceController 未走成本计费",
+      "discovered_at": "2026-08-25T15:05:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java 与 CustomerServiceController.java",
+      "description": "/ai/chat 与 /ai/service 两个端点直接调用 chatClient.stream().content()，从未调用 tenantCostService.assertBudget / recordUsage，与 RAG/REACT 路径不一致——可被滥用为免费 LLM 通道。",
+      "handling": "待评估。修复需要在两个 controller 中加与 RAG 相同的计费链（assertBudget → call → recordUsage），改动可控但涉及业务策略（这些端点是否走预算治理），建议所有者决策后再合并。"
+    },
+    {
+      "id": 8,
+      "title": "SQL LIKE 通配符注入：graph 与 session 搜索可被 % _ \\ 扩大匹配",
+      "discovered_at": "2026-08-27T07:45:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/graph/GraphService.java + src/main/java/com/enterprise/iqk/mapper/AgentSessionStateMapper.java（被 src/main/java/com/enterprise/iqk/service/AgentSessionService.java 调用）",
+      "description": "KgEntityMapper.searchByName、KgFactMapper.searchByKeyword、AgentSessionStateMapper.countByTenant / findByTenant 都用 LIKE CONCAT('%', #{keyword}, '%') 直接拼接用户输入。MyBatis #{} 做了预编译但不会转义 LIKE 通配符——攻击者传 % 或 _ 会匹配整张表的全部行（即使有 tenant_id 过滤，仍能拉回本租户的全部记录），属于 DoS + 数据过载。GraphRetriever.extractMainKeyword 取 query 最长 token 直接透传，RAG / 深度研究 / Agent harness 走 rag_search action 时用户可触发。",
+      "handling": "1) 新增 util/SqlLikeUtils.escapeForLike 转义 \\ % _；2) GraphService.searchEntities / searchFacts 在传 mapper 前调用 escapeForLike；3) AgentSessionService.list 对 keyword 同样转义后再传 mapper。ConversationMapper 的 LIKE CONCAT(#{type}, '::%') 不修——type 来自受控字典 (chat / service / pdf / react / eval)，非用户输入。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
   "pr": "https://github.com/however-yir/knowledgeops-agent/pull/135",
-  "status": "已修复并提交，PR 待所有者合并"
+  "status": "已修复并提交，PR 待所有者合并",
+  "dynamic_analysis": {
+    "analyzed_at": "2026-08-25T13:45:00+08:00",
+    "hardware_notes": "本地 JDK 26.0.1；Mockito 4.x + ByteBuddy 与 JDK 26 不兼容导致 25 个测试 error（CI 上 JDK 17 正常）。本机直连 GitHub 不稳定，PR 推送已切换到 127.0.0.1:7897 (Clash) 代理。",
+    "fatal_blockers": [
+      {
+        "id": 1,
+        "file": "WorkspaceRuntime.java",
+        "verdict": "pass",
+        "reason": "finally 中 destroyForcibly 对已退出进程为 no-op；waitFor 成功后 exitValue 必不抛；Process.start() 一定返回非空。无 NPE/死锁。"
+      },
+      {
+        "id": 2,
+        "file": "WorkflowReactAgentService.java",
+        "verdict": "pass",
+        "reason": "taskIdRef 用 AtomicRef 初始化为 \"\"；defer 内部 startTask 成功后 set；onErrorResume 读非空 + StringUtils.hasText 判空，failTask/recordTaskMetrics 内部无外部依赖。修复后错误路径 task 必转 FAILED，无孤儿。"
+      },
+      {
+        "id": 3,
+        "file": "AgentStepMapper.java",
+        "verdict": "pass",
+        "reason": "纯加性变更，新增 input_tokens 入参为 long 自动装箱为 Long 非空，DB 列允许 NULL。"
+      },
+      {
+        "id": 4,
+        "file": "WorkspaceRuntimeTest.java",
+        "verdict": "pass",
+        "reason": "getFileName().toString() 在 @TempDir 存在时必非空；Windows/Linux 均通过。"
+      }
+    ],
+    "business_trace": "POST /ai/react/chat/stream → stream() 入参校验 → startTask 拿到 taskId → 写入 taskIdRef → 推理循环中 step 抛 LLM timeout 异常 → 异常沿 Flux 链路上行 → onErrorResume 读取 taskIdRef 非空 → failTask + recordTaskMetrics(REACT_STREAM, FAILED) → emit TASK_FAILED 事件 → SSE 错误事件下发客户端。任务终态 FAILED，指标与状态一致，业务轨迹正确。",
+    "config_dependencies": {
+      "added": [
+        "pmd-ruleset.xml CloseResource 规则的 closeTargets=close,closeQuietly,quit,dispose,destroy,destroyForcibly（硬编码无需外部配置）"
+      ],
+      "external_runtime": [
+        "git remote fork https://github.com/Randycarteronion/knowledgeops-agent.git",
+        "Windows 凭据管理器下 git:https://github.com 的 PAT (Randycarteronion)",
+        "可选代理 http://127.0.0.1:7897 (本机 Clash)"
+      ],
+      "missing": []
+    }
+  }
 }

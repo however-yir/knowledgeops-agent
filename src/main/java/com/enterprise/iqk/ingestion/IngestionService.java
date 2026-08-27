@@ -15,6 +15,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.ExtractedTextFormatter;
 import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
@@ -121,6 +122,10 @@ public class IngestionService {
     }
 
     public IngestionProcessResult processQueuedJob(String jobId, String traceId) {
+        return processQueuedJob(jobId, null, traceId);
+    }
+
+    public IngestionProcessResult processQueuedJob(String jobId, String tenantId, String traceId) {
         if (!StringUtils.hasText(jobId)) {
             return IngestionProcessResult.builder()
                     .picked(false)
@@ -130,8 +135,17 @@ public class IngestionService {
                     .errorMessage("jobId missing")
                     .build();
         }
+        // Tenant scoping is required for both call paths:
+        //  - HTTP controllers reach here through the MDC-scoped TenantContext filter.
+        //  - Background workers (Redis / RabbitMQ / db_polling) run on threads without
+        //    an MDC, so they must pass the job's tenantId explicitly.
+        // Falling back to MDC keeps existing call sites working while the SQL now
+        // refuses to claim a job owned by another tenant.
+        String claimTenantId = StringUtils.hasText(tenantId)
+                ? TenantContext.normalize(tenantId)
+                : TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
         LocalDateTime now = LocalDateTime.now();
-        int claimed = ingestionJobMapper.claimForRun(jobId, IngestionJobStatus.RUNNING, now, now);
+        int claimed = ingestionJobMapper.claimForRun(jobId, claimTenantId, IngestionJobStatus.RUNNING, now, now);
         if (claimed == 0) {
             return IngestionProcessResult.builder()
                     .picked(false)

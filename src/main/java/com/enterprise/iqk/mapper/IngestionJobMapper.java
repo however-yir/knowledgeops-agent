@@ -50,9 +50,12 @@ public interface IngestionJobMapper extends BaseMapper<IngestionJob> {
                 updated_at = #{updatedAt},
                 attempt_count = attempt_count + 1,
                 error_message = NULL
-            WHERE job_id = #{jobId} AND status IN ('PENDING','RETRY')
+            WHERE job_id = #{jobId}
+              AND tenant_id = #{tenantId}
+              AND status IN ('PENDING','RETRY')
             """)
     int claimForRun(@Param("jobId") String jobId,
+                    @Param("tenantId") String tenantId,
                     @Param("toStatus") IngestionJobStatus toStatus,
                     @Param("startedAt") LocalDateTime startedAt,
                     @Param("updatedAt") LocalDateTime updatedAt);
