@@ -2,7 +2,6 @@ package com.enterprise.iqk.retrieval.web;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -27,21 +26,33 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SearXNGBackend implements WebSearchBackend {
 
     private final WebSearchProperties properties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+    // volatile + double-checked initialization: see BingSearchBackend.
+    private volatile RestTemplate restTemplate;
+
+    public SearXNGBackend(WebSearchProperties properties, ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+    }
 
     private RestTemplate getRestTemplate() {
-        if (restTemplate == null) {
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(properties.getConnectTimeoutMs());
-            factory.setReadTimeout(properties.getReadTimeoutMs());
-            restTemplate = new RestTemplate(factory);
+        RestTemplate local = restTemplate;
+        if (local == null) {
+            synchronized (this) {
+                local = restTemplate;
+                if (local == null) {
+                    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+                    factory.setConnectTimeout(properties.getConnectTimeoutMs());
+                    factory.setReadTimeout(properties.getReadTimeoutMs());
+                    local = new RestTemplate(factory);
+                    restTemplate = local;
+                }
+            }
         }
-        return restTemplate;
+        return local;
     }
 
     @Override
