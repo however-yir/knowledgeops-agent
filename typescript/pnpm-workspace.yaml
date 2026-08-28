@@ -1,3 +1,20 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# pnpm v10 reads overrides/onlyBuiltDependencies from the workspace root;
+# the previous package.json#pnpm block was silently ignored (fast-uri 3.1.4
+# stayed pinned, which the 2026-08 advisories flagged).
+overrides:
+  fast-uri: 3.1.5
+  vite: 8.0.16
+  "find-my-way@<9.7.0": 9.7.0
+  "nanoid@<3.3.18": 3.3.18
+  "postcss@<=8.5.17": 8.5.18
+  "deepmerge-ts@<8.0.0": 8.0.0
+onlyBuiltDependencies:
+  - "@nestjs/core"
+  - "@prisma/client"
+  - "@prisma/engines"
+  - esbuild
+  - prisma

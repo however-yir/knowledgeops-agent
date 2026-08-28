@@ -23,7 +23,7 @@
     "fastify": "^5.6.2",
     "ioredis": "^5.11.0",
     "jsonwebtoken": "^9.0.3",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "^6.2.108",
     "pg": "^8.22.0",
     "pgvector": "^0.3.0",
     "prisma": "^6.19.3",

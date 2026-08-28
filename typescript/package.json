@@ -36,18 +36,5 @@
     "@vitest/coverage-v8": "4.1.7",
     "typescript": "^6.0.3",
     "vitest": "^4.0.15"
-  },
-  "pnpm": {
-    "overrides": {
-      "fast-uri": "3.1.4",
-      "vite": "8.0.16"
-    },
-    "onlyBuiltDependencies": [
-      "@nestjs/core",
-      "@prisma/client",
-      "@prisma/engines",
-      "esbuild",
-      "prisma"
-    ]
   }
 }
