@@ -66,3 +66,37 @@ def test_apply_unified_diff_rejects_mismatched_context() -> None:
         assert str(error) == "patch removal does not match workspace file"
     else:
         raise AssertionError("expected invalid diff to be rejected")
+
+
+def test_workspace_shell_ls_and_rg_arguments_must_stay_in_root(tmp_path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "code.py").write_text("value = 1\n", encoding="utf-8")
+    workspace = runtime(tmp_path, shell_enabled=True)
+
+    inside = workspace.execute("workspace_run_shell", {"command": "rg value src"})
+    flags_only = workspace.execute("workspace_run_shell", {"command": "ls -la"})
+    listing = workspace.execute("workspace_run_shell", {"command": "ls src"})
+
+    assert inside["status"] == "success" and inside["exitCode"] == 0
+    assert flags_only["status"] == "success"
+    assert listing["status"] == "success" and "code.py" in listing["stdout"]
+
+    for command in ("rg value /etc/passwd", "rg value ../secret.txt", "ls /etc", "ls ..", "rg -e value /etc/passwd"):
+        result = workspace.execute("workspace_run_shell", {"command": command})
+        assert result["status"] == "error", command
+        assert result["message"] == "command is not allowed", command
+
+
+def test_workspace_shell_rg_accepts_pattern_and_rooted_paths(tmp_path) -> None:
+    (tmp_path / "readme.md").write_text("hello world\n", encoding="utf-8")
+    workspace = runtime(tmp_path, shell_enabled=True)
+
+    pattern_only = workspace._allowed_command(["rg", "hello.*world"])
+    separator = workspace._allowed_command(["rg", "--", "--pattern-like"])
+    rooted = workspace._allowed_command(["rg", "hello", "readme.md"])
+    outside = workspace._allowed_command(["rg", "hello", "/etc/passwd"])
+
+    assert pattern_only is True
+    assert separator is True
+    assert rooted is True
+    assert outside is False

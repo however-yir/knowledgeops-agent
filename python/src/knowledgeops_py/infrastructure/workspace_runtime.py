@@ -190,12 +190,37 @@ class WorkspaceRuntime:
         if command[0] == "pwd":
             return len(command) == 1
         if command[0] in {"ls", "rg"}:
-            return True
+            return self._args_within_workspace(command)
         if command[0] == "git":
             return len(command) >= 2 and command[1] in self.allowed_git_subcommands
         return command[0] == "mvn" and "test" in command and all(
             item in {"mvn", "test", "-q"} or item.startswith("-D") for item in command
         )
+
+    def _args_within_workspace(self, command: list[str]) -> bool:
+        """Every path-like argument of ls/rg must stay inside the workspace root.
+
+        Mirrors the Java WorkspaceRuntime.argsWithinWorkspace hardening: both
+        commands accept path arguments, so without this check an agent could
+        read arbitrary host files (e.g. ``rg pattern /etc/passwd``). For rg the
+        first non-flag argument is the search pattern, not a path; anything
+        that is not unambiguously a workspace path fails closed.
+        """
+        pattern_pending = command[0] == "rg"
+        seen_separator = False
+        for item in command[1:]:
+            if not seen_separator and item == "--":
+                seen_separator = True
+                continue
+            if not seen_separator and item.startswith("-"):
+                continue
+            if pattern_pending:
+                pattern_pending = False
+                continue
+            resolved = (self.root / item).resolve()
+            if not resolved.is_relative_to(self.root):
+                return False
+        return True
 
 
 def apply_unified_diff(original: str, patch: str) -> str:
