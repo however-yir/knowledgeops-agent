@@ -66,6 +66,10 @@ services:
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      # Java a373082 registers its own vectorStore bean while Spring AI's
+      # pgvector auto-configuration also contributes one on this classpath;
+      # let the application bean win so the contract stack can boot.
+      SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING: "true"
       DB_URL: jdbc:mysql://java-mysql:3306/knowledgeops_java?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root
       DB_PASSWORD: contract-mysql-pass
