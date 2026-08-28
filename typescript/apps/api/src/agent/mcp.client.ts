@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lookup as dnsLookup } from "node:dns/promises";
 
 import { Injectable } from "@nestjs/common";
 
@@ -51,6 +52,7 @@ export class McpClient {
 
   async listTools(server: string): Promise<McpToolDefinition[]> {
     const config = this.server(server);
+    await assertSafeMcpEndpoint(config.endpoint, parseAllowedHosts(env.APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS));
     const session = await this.initialize(config);
     const tools: McpToolDefinition[] = [];
     let cursor: string | undefined;
@@ -69,6 +71,7 @@ export class McpClient {
   async callTool(server: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
     const config = this.server(server);
     if (!config.allowedTools.has(tool)) throw new Error(`MCP tool is not allowed: ${server}/${tool}`);
+    await assertSafeMcpEndpoint(config.endpoint, parseAllowedHosts(env.APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS));
     const advertised = await this.listTools(server);
     if (!advertised.some((candidate) => candidate.name === tool)) {
       throw new Error(`MCP server did not advertise tool: ${server}/${tool}`);
@@ -281,4 +284,72 @@ function clean(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function parseAllowedHosts(raw: string): string[] {
+  return raw.split(",").map((host) => host.trim()).filter(Boolean);
+}
+
+export function hostMatchesAllowList(host: string, allowedHosts: string[]): boolean {
+  const normalized = host.toLowerCase();
+  return allowedHosts.some((pattern) => {
+    const candidate = pattern.trim().toLowerCase();
+    if (!candidate) return false;
+    return candidate.startsWith(".") ? normalized.endsWith(candidate) : candidate === normalized;
+  });
+}
+
+/**
+ * Refuse addresses an outbound MCP call must never reach: loopback, the
+ * unspecified address, RFC1918 private ranges, IPv6 ULA, link-local
+ * (including the cloud-metadata range 169.254.0.0/16), and multicast.
+ */
+export function isRestrictedMcpAddress(raw: string): boolean {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(raw.trim().toLowerCase());
+  const address = mapped ? mapped[1] : raw.trim().toLowerCase();
+  if (address === "::" || address === "::1" || address === "0:0:0:0:0:0:0:1") return true;
+  if (address.includes(":")) {
+    return /^fe[89ab]/.test(address) || /^fe[c-f]/.test(address) || /^f[cd]/.test(address) || /^ff/.test(address);
+  }
+  const octets = address.split(".").map((octet) => Number(octet));
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return false;
+  const [first, second] = octets as [number, number];
+  if (first === 0 || first === 10 || first === 127) return true;
+  if (first === 169 && second === 254) return true;
+  if (first === 172 && second >= 16 && second <= 31) return true;
+  if (first === 192 && second === 168) return true;
+  return first >= 224 && first <= 239;
+}
+
+/**
+ * Refuse MCP endpoints whose host resolves to a restricted address so an
+ * agent invocation of mcp_call / mcp_http_call cannot be turned into an
+ * SSRF probe against internal services or the cloud metadata API.
+ * Operators can exempt curated hosts (exact or ".suffix" match) via
+ * APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS; resolution failure fails closed.
+ */
+export async function assertSafeMcpEndpoint(
+  endpoint: string,
+  allowedHosts: string[],
+  resolveHost: (host: string) => Promise<{ address: string }[]> = (host) => dnsLookup(host, { all: true, verbatim: true })
+): Promise<void> {
+  const url = new URL(endpoint);
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error(`MCP endpoint must use http(s): ${endpoint}`);
+  }
+  if (hostMatchesAllowList(url.hostname, allowedHosts)) return;
+  let addresses: { address: string }[];
+  try {
+    addresses = await resolveHost(url.hostname);
+  } catch {
+    throw new Error(`MCP endpoint host could not be resolved: ${url.hostname}`);
+  }
+  if (addresses.length === 0) {
+    throw new Error(`MCP endpoint host could not be resolved: ${url.hostname}`);
+  }
+  for (const { address } of addresses) {
+    if (isRestrictedMcpAddress(address)) {
+      throw new Error(`MCP endpoint host resolves to a restricted private/loopback/link-local/multicast address: ${url.hostname}`);
+    }
+  }
 }

@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "../config/env.js";
-import { McpClient } from "./mcp.client.js";
+import { hostMatchesAllowList, isRestrictedMcpAddress, McpClient, parseAllowedHosts } from "./mcp.client.js";
+
+const dnsLookup = vi.hoisted(() =>
+  vi.fn(async () => [{ address: "93.184.216.34", family: 4 as const }])
+);
+vi.mock("node:dns/promises", () => ({ lookup: dnsLookup }));
 
 const originalConfig = env.APP_MCP_SERVERS_JSON;
+const originalAllowedHosts = env.APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS;
 
 afterEach(() => {
   env.APP_MCP_SERVERS_JSON = originalConfig;
+  env.APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS = originalAllowedHosts;
+  dnsLookup.mockClear();
   vi.unstubAllGlobals();
 });
 
@@ -93,6 +101,62 @@ describe("McpClient", () => {
 
     expect(() => client.assertConfigured("missing")).toThrow("not configured or enabled");
     expect(() => client.assertConfigured("catalog")).toThrow("requires a non-empty tool allowlist");
+  });
+
+  it("refuses endpoints resolving to private/loopback/link-local addresses before any network call", async () => {
+    env.APP_MCP_SERVERS_JSON = JSON.stringify({ catalog: { endpoint: "http://metadata.internal/rpc", allowedTools: ["search"] } });
+    dnsLookup.mockResolvedValueOnce([{ address: "169.254.169.254", family: 4 as const }]);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new McpClient().listTools("catalog")).rejects.toThrow("restricted private/loopback/link-local/multicast");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses unresolvable endpoint hosts (fail closed)", async () => {
+    env.APP_MCP_SERVERS_JSON = JSON.stringify({ catalog: { endpoint: "https://no-such-host.invalid/rpc", allowedTools: ["search"] } });
+    dnsLookup.mockRejectedValueOnce(new Error("ENOTFOUND"));
+
+    await expect(new McpClient().listTools("catalog")).rejects.toThrow("could not be resolved");
+  });
+
+  it("lets operator-allowlisted hosts reach private endpoints", async () => {
+    env.APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS = "localhost";
+    env.APP_MCP_SERVERS_JSON = JSON.stringify({ catalog: { endpoint: "http://localhost:9999/rpc", allowedTools: ["search"] } });
+    const fetchMock = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      if (payload.method === "initialize") {
+        return rpcResponse(payload.id, { protocolVersion: "2024-11-05", capabilities: {} });
+      }
+      if (payload.method === "notifications/initialized") return new Response(null, { status: 202 });
+      return rpcResponse(payload.id, { tools: [{ name: "search" }] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tools = await new McpClient().listTools("catalog");
+    expect(tools.map((tool) => tool.name)).toEqual(["search"]);
+  });
+
+  it("classifies restricted addresses across the SSRF rejection matrix", () => {
+    const restricted = [
+      "127.0.0.1", "127.254.1.2", "10.1.2.3", "172.16.0.1", "172.31.255.255",
+      "192.168.1.1", "169.254.169.254", "0.0.0.0", "224.0.0.1", "239.255.255.255",
+      "::1", "::", "fe80::1", "fec0::1", "fd00::1", "ff02::1", "::ffff:127.0.0.1"
+    ];
+    const publicAddresses = ["8.8.8.8", "172.32.0.1", "192.169.0.1", "169.255.1.1", "93.184.216.34", "2400:cb00::1"];
+    for (const address of restricted) expect(isRestrictedMcpAddress(address), address).toBe(true);
+    for (const address of publicAddresses) expect(isRestrictedMcpAddress(address), address).toBe(false);
+  });
+
+  it("matches operator allowlists by exact host or dot suffix (subdomains only)", () => {
+    expect(hostMatchesAllowList("localhost", ["localhost", "127.0.0.1", "::1"])).toBe(true);
+    expect(hostMatchesAllowList("a.internal.example.com", [".internal.example.com"])).toBe(true);
+    expect(hostMatchesAllowList("internal.example.com", [".internal.example.com"])).toBe(false);
+    expect(hostMatchesAllowList("internal.example.com", ["internal.example.com"])).toBe(true);
+    expect(hostMatchesAllowList("evil-internal.example.com", [".internal.example.com"])).toBe(false);
+    expect(hostMatchesAllowList("internal.example.com", [])).toBe(false);
+    expect(hostMatchesAllowList("INTERNAL.Example.COM", ["internal.example.com"])).toBe(true);
+    expect(parseAllowedHosts(" localhost, 127.0.0.1 , , ::1 ")).toEqual(["localhost", "127.0.0.1", "::1"]);
   });
 });
 
