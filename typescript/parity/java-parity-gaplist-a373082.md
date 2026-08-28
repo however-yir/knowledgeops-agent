@@ -20,11 +20,11 @@
 |---|---|---|---|
 | 1 | MCP baseUrl SSRF gate | `1cf29c2` (#145) | ✅ mirrored (`assertSafeMcpEndpoint`, dns + restricted-address classifier + operator allowlist) |
 | 2 | rate-limit XFF client IP + bucket hygiene | `a373082` (#146) | ✅ mirrored (`resolveClientIp`, rightmost non-private hop, 50k bucket ceiling, idle eviction timer) |
-| 3 | refresh token concurrent reuse | `6f75b32` | ⬜ pending |
-| 4 | tenant header override + seeded admin key revocation + JWT/queue/vector paths | `a4f2565` + `84a064d` | ⬜ pending |
-| 5 | harness shell/write/trusted runtime default-off | `5b65df9` | ◑ TS defaults already false (stricter than old Java); update manifest javaFragments/relationship to `same` |
-| 6 | dependency & container hygiene | `ac62bb3` + `dcf93b7` + `1f8dc8c` | ◑ TS CI already runs pnpm audit / SBOM / Trivy; run and archive current findings |
-| 7 | web search backend init hardening | `f841958` | ⬜ pending |
+| 3 | refresh token concurrent reuse | `6f75b32` | ✅ Prisma path was already conditional-atomic; closed a real concurrent-replay window in the in-memory mode (persistence injected + Prisma disabled skipped the `Map.delete` gate across an await boundary) |
+| 4 | tenant header override + seeded admin key revocation + JWT/queue/vector paths | `a4f2565` + `84a064d` | ✅ H1 verified already closed (TS is stricter: mismatched tenant header ⇒ 401); seeded demo ADMIN key no longer materializes in production; forbidden-secret startup guards added; M1 (JWT 401 fallback) verified closed via `parseJwt` internal catch; M2 holds by construction (NestJS method decorators); queue/vector reliability sub-items tracked under item 15 |
+| 5 | harness shell/write/trusted runtime default-off | `5b65df9` | ✅ TS defaults already false (stricter than old Java); manifest javaFragments/relationship updated to `same` where Java caught up |
+| 6 | dependency & container hygiene | `ac62bb3` + `dcf93b7` + `1f8dc8c` | ✅ overrides restored to effective scope (pnpm v10 workspace root) + 2026-08 advisory wave cleared; `security:audit` gate green |
+| 7 | web search backend init hardening | `f841958` | ✅ verified structurally absent in TS (per-call fetch with `AbortSignal.timeout`, no shared lazily-initialized client); frontend DOMPurify/noopener fixes live on the Java tree's frontend, no TS frontend to patch |
 | 8 | per-source hybrid retrieval weights (#115) | `69f9141` | ⬜ pending (new `HybridWeights.java`) |
 | 9 | hybrid retrieval flow fix (#137) | `d17ab9d` | ⬜ pending |
 | 10 | workspace lifecycle + orphaned streams + step input tokens (#135) | `60a69da` | ⬜ pending (V16 → Prisma optimistic lock) |
