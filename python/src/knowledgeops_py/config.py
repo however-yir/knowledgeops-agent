@@ -15,6 +15,8 @@ class Settings:
     cors_allowed_origins: tuple[str, ...] = ("http://localhost:8088", "http://localhost:5173")
     demo_api_key: str = "local-demo-api-key"
     demo_tenant_id: str = "public"
+    bootstrap_api_key: str | None = None
+    bootstrap_key_name: str = "bootstrap-admin"
     token_ttl_seconds: int = 3600
     refresh_token_ttl_days: int = 14
     jwt_secret: str = "local-python-jwt-secret-change-me"
@@ -88,6 +90,8 @@ class Settings:
             raise ValueError("APP_JWT_SECRET must be explicitly configured in production")
         if self.demo_api_key == "local-demo-api-key":
             raise ValueError("APP_DEMO_API_KEY must not use the development default in production")
+        if self.bootstrap_api_key == "local-demo-api-key":
+            raise ValueError("APP_BOOTSTRAP_API_KEY must not reuse the development default in production")
         if not self.database_url:
             raise ValueError("APP_DATABASE_URL is required in production")
         if self.vector_backend != "pgvector" or not self.pgvector_url:
@@ -130,6 +134,8 @@ def load_settings() -> Settings:
         or ("http://localhost:8088", "http://localhost:5173"),
         demo_api_key=os.getenv("APP_DEMO_API_KEY", "local-demo-api-key"),
         demo_tenant_id=os.getenv("APP_DEMO_TENANT_ID", "public"),
+        bootstrap_api_key=os.getenv("APP_BOOTSTRAP_API_KEY"),
+        bootstrap_key_name=os.getenv("APP_BOOTSTRAP_KEY_NAME", "bootstrap-admin"),
         token_ttl_seconds=int(os.getenv("APP_TOKEN_TTL_SECONDS", "3600")),
         refresh_token_ttl_days=int(os.getenv("APP_JWT_REFRESH_EXPIRE_DAYS", "14")),
         jwt_secret=os.getenv("APP_JWT_SECRET", "local-python-jwt-secret-change-me"),

@@ -163,6 +163,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 active_settings.demo_tenant_id,
                 "ADMIN",
             )
+        if active_settings.bootstrap_api_key and isinstance(security_repository, SqlAlchemySecurityRepository):
+            # Operator-provided bootstrap credential (Java parity: real admin
+            # credentials are issued explicitly per deployment, never seeded
+            # from repository defaults). Works in production environments.
+            await security_repository.bootstrap_api_key(
+                active_settings.bootstrap_api_key,
+                active_settings.bootstrap_key_name,
+                active_settings.demo_tenant_id,
+                "ADMIN",
+            )
         if evaluation_repository is not None:
             default_dataset = store.eval_datasets["default"]
             await evaluation_repository.ensure_default_dataset(
@@ -1484,6 +1494,16 @@ def seed_store(store: PlatformStore, settings: Settings) -> None:
         store.api_keys[sha256_hex(settings.demo_api_key)] = {
             "keyHash": sha256_hex(settings.demo_api_key),
             "keyName": "local-demo",
+            "role": "ADMIN",
+            "tenantId": settings.demo_tenant_id,
+            "enabled": True,
+            "createdAt": now_iso(),
+            "updatedAt": now_iso(),
+        }
+    if settings.bootstrap_api_key:
+        store.api_keys[sha256_hex(settings.bootstrap_api_key)] = {
+            "keyHash": sha256_hex(settings.bootstrap_api_key),
+            "keyName": settings.bootstrap_key_name,
             "role": "ADMIN",
             "tenantId": settings.demo_tenant_id,
             "enabled": True,
