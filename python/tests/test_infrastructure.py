@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from redis.exceptions import RedisError
@@ -298,7 +299,7 @@ def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkey
         def __init__(self) -> None:
             self.upsert_rows: list[tuple[object, ...]] = []
             self.search_args: tuple[object, ...] = ()
-            self.closed = False
+            self.released = False
 
         async def executemany(self, query: str, rows: list[tuple[object, ...]]) -> None:
             assert "ON CONFLICT (chunk_id)" in query and "$7::vector" in query
@@ -319,16 +320,32 @@ def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkey
                 }
             ]
 
-        async def close(self) -> None:
-            self.closed = True
+    class Pool:
+        def __init__(self, connection: Connection) -> None:
+            self.connection = connection
+            self.acquires = 0
+
+        def acquire(self) -> Any:
+            pool = self
+
+            class Lease:
+                async def __aenter__(self) -> Connection:
+                    pool.acquires += 1
+                    return pool.connection
+
+                async def __aexit__(self, *args: object) -> None:
+                    pool.connection.released = True
+
+            return Lease()
 
     connection = Connection()
+    pool = Pool(connection)
 
-    async def connect(url: str) -> Connection:
+    async def create_pool(url: str, **kwargs: object) -> Pool:
         assert url == "postgresql://postgres:secret@pgvector/knowledgeops"
-        return connection
+        return pool
 
-    monkeypatch.setattr("knowledgeops_py.infrastructure.pgvector_store.asyncpg.connect", connect)
+    monkeypatch.setattr("knowledgeops_py.infrastructure.pgvector_store.asyncpg.create_pool", create_pool)
     projection = PgVectorProjection("postgresql+asyncpg://postgres:secret@pgvector/knowledgeops", dimensions=2)
     context = TenantContext("trace", "tenant-a", "alice", (), (), "jwt")
 
@@ -352,7 +369,9 @@ def test_pgvector_projection_preserves_tenant_scope_and_vector_parameters(monkey
     asyncio.run(exercise())
     assert connection.upsert_rows[0][-1] == "[1.0,0.5]"
     assert connection.search_args == ("tenant-a", "chat-1", "[0.5,1.0]", 3)
-    assert connection.closed
+    # Both operations leased the SAME pooled connection; leases are released.
+    assert pool.acquires == 2
+    assert connection.released
     assert asyncpg_url("postgresql+asyncpg://db") == "postgresql://db"
     assert vector_literal([1, 0.5]) == "[1.0,0.5]"
     assert vector_literal([1, 0.5], dimensions=2) == "[1.0,0.5]"

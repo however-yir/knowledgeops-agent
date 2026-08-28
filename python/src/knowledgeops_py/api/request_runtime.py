@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request
 from knowledgeops_py.application.security import bearer_token
 from knowledgeops_py.config import Settings
 from knowledgeops_py.domain.runtime import PlatformStore, RequestContext
-from knowledgeops_py.infrastructure.rate_limit import RateLimitUnavailable, RedisTokenBucket
+from knowledgeops_py.infrastructure.rate_limit import RateLimitUnavailable, shared_token_bucket
 
 TENANT_HEADER = "x-tenant-id"
 API_KEY_HEADER = "x-api-key"
@@ -102,7 +102,7 @@ async def enforce_rate_limit(store: PlatformStore, settings: Settings, ctx: Requ
     key = _rate_limit_key(ctx, request)
     if settings.is_production:
         try:
-            allowed = await RedisTokenBucket(settings.redis_url, settings.rate_limit_per_minute).allow(key)
+            allowed = await shared_token_bucket(settings.redis_url, settings.rate_limit_per_minute).allow(key)
         except RateLimitUnavailable as exc:
             raise HTTPException(status_code=503, detail="rate limiter unavailable") from exc
         if not allowed:

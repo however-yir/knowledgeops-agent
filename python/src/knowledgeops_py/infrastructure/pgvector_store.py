@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from typing import Any
 
 import asyncpg  # type: ignore[import-untyped]
@@ -14,6 +15,22 @@ from knowledgeops_py.domain.context import TenantContext
 class PgVectorProjection:
     database_url: str
     dimensions: int = 1024
+    _pool: Any = field(default=None, compare=False, repr=False)
+    _pool_lock: Any = field(default_factory=asyncio.Lock, compare=False, repr=False)
+
+    async def _connection_pool(self) -> Any:
+        # Java parity (a373082): replace per-operation connections with a
+        # bounded pool so retrieval does not open a fresh TCP connection on
+        # every search.
+        if self._pool is None:
+            async with self._pool_lock:
+                if self._pool is None:
+                    object.__setattr__(
+                        self,
+                        "_pool",
+                        await asyncpg.create_pool(asyncpg_url(self.database_url), min_size=1, max_size=4),
+                    )
+        return self._pool
 
     async def upsert(self, chunks: list[dict[str, Any]]) -> None:
         rows = [
@@ -32,8 +49,8 @@ class PgVectorProjection:
         if not rows:
             return
         try:
-            connection = await asyncpg.connect(asyncpg_url(self.database_url))
-            try:
+            pool = await self._connection_pool()
+            async with pool.acquire() as connection:
                 await connection.executemany(
                     """
                     INSERT INTO py_pgvector_chunks
@@ -49,15 +66,13 @@ class PgVectorProjection:
                     """,
                     rows,
                 )
-            finally:
-                await connection.close()
         except (OSError, asyncpg.PostgresError) as exc:
             raise VectorStoreUnavailable("pgvector upsert failed") from exc
 
     async def search(self, context: TenantContext, chat_id: str, embedding: list[float], limit: int) -> list[dict[str, Any]]:
         try:
-            connection = await asyncpg.connect(asyncpg_url(self.database_url))
-            try:
+            pool = await self._connection_pool()
+            async with pool.acquire() as connection:
                 records = await connection.fetch(
                     """
                     SELECT chunk_id, tenant_id, chat_id, source_name, chunk_index, content,
@@ -73,8 +88,6 @@ class PgVectorProjection:
                     max(1, limit),
                 )
                 return [dict(record) for record in records]
-            finally:
-                await connection.close()
         except (OSError, asyncpg.PostgresError) as exc:
             raise VectorStoreUnavailable("pgvector search failed") from exc
 

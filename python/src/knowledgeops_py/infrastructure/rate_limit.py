@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import redis.asyncio as redis
 from redis.exceptions import RedisError
@@ -26,14 +27,33 @@ redis.call('PEXPIRE', key, math.ceil((capacity / refill) * 2000))
 return 1
 """
 
+# One client per URL for the whole process: redis.Redis owns a connection
+# pool, so sharing it means no fresh TCP connection per request.
+_CLIENTS: dict[str, Any] = {}
+
+
+def shared_client(url: str) -> Any:
+    client = _CLIENTS.get(url)
+    if client is None:
+        client = redis.Redis.from_url(url, decode_responses=True)
+        _CLIENTS[url] = client
+    return client
+
 
 @dataclass(slots=True)
 class RedisTokenBucket:
+    """Token bucket backed by Redis.
+
+    Buckets are cheap value objects; the Redis client (and its connection
+    pool) is shared process-wide via :func:`shared_client`. Use
+    :func:`shared_token_bucket` in request paths to avoid rebuilding buckets.
+    """
+
     url: str
     capacity: int
 
     async def allow(self, key: str) -> bool:
-        client = redis.Redis.from_url(self.url, decode_responses=True)
+        client = shared_client(self.url)
         try:
             result = await client.eval(
                 RATE_LIMIT_LUA,
@@ -46,8 +66,19 @@ class RedisTokenBucket:
             return bool(result)
         except RedisError as exc:
             raise RateLimitUnavailable("Redis rate limiter is unavailable") from exc
-        finally:
-            await client.aclose()
+
+
+_BUCKETS: dict[tuple[str, int], RedisTokenBucket] = {}
+
+
+def shared_token_bucket(url: str, capacity: int) -> RedisTokenBucket:
+    """Return the process-wide bucket for a (url, capacity) pair."""
+    cache_key = (url, capacity)
+    bucket = _BUCKETS.get(cache_key)
+    if bucket is None:
+        bucket = RedisTokenBucket(url=url, capacity=capacity)
+        _BUCKETS[cache_key] = bucket
+    return bucket
 
 
 def now_millis() -> int:

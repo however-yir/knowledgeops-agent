@@ -11,6 +11,17 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from knowledgeops_py.application.harness import CanonicalHarnessApplicationService
 
 
+def sweep_expired_confirmations(store: Any, epoch_seconds: Callable[[], int]) -> None:
+    """Drop used-up confirmation records so the map cannot grow without bound.
+
+    Java parity (a373082 misc hardening): expired pending tokens used to live
+    forever because execution only flips ``used``.
+    """
+    expired = [key for key, record in store.action_confirmations.items() if record["expiresAt"] <= epoch_seconds()]
+    for key in expired:
+        store.action_confirmations.pop(key, None)
+
+
 def register_harness_routes(
     app: FastAPI,
     *,
@@ -77,6 +88,7 @@ def register_harness_routes(
                 raise HTTPException(status_code=400, detail=f"action does not require trusted runtime: {action}")
             token = f"ta-{secrets.token_hex(16)}"
             expires_at = epoch_seconds() + 600
+        sweep_expired_confirmations(store, epoch_seconds)
         store.action_confirmations[sha256_hex(token)] = {
             "tenantId": ctx.tenant_id,
             "principal": ctx.principal,
