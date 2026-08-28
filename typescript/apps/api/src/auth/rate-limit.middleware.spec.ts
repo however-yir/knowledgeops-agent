@@ -56,6 +56,20 @@ describe("resolveClientIp", () => {
   it("supports repeated X-Forwarded-For headers", () => {
     expect(resolveClientIp(requestFrom("127.0.0.1", ["10.0.0.1", "203.0.113.9"]))).toBe("203.0.113.9");
   });
+
+  it("resolves the client IP from the raw middleware request shape", () => {
+    // Nest middlewares run through middie, so the request is the raw
+    // IncomingMessage (socket at the top level, no `raw` wrapper).
+    const request = {
+      socket: { remoteAddress: "127.0.0.1" },
+      headers: { "x-forwarded-for": "203.0.113.9" }
+    } as unknown as FastifyRequest;
+    expect(resolveClientIp(request)).toBe("203.0.113.9");
+  });
+
+  it("resolves the client IP when neither shape exposes a socket address", () => {
+    expect(resolveClientIp({ headers: {} } as unknown as FastifyRequest)).toBe("unknown");
+  });
 });
 
 describe("isPrivateOrLoopbackAddress", () => {

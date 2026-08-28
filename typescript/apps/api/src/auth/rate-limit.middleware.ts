@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Redis } from "ioredis";
-import type { ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RequestWithContext } from "../common/request-context.js";
 import { normalizeTenant } from "../common/tenant.js";
@@ -125,9 +125,15 @@ function reject(req: FastifyRequest, res: FastifyReply | ServerResponse): void {
  * (i.e. we are behind a proxy), and prefer the rightmost non-private hop so
  * a malicious caller cannot inject a fake leftmost entry to rotate their
  * own bucket. Unparseable values fail closed to the direct address.
+ *
+ * Nest registers middlewares on Fastify through middie, so `req` arrives as
+ * the raw IncomingMessage (with `socket`, no `raw` wrapper); guards see the
+ * FastifyRequest (with `raw`). Read the socket address from both shapes.
  */
 export function resolveClientIp(req: Pick<FastifyRequest, "ip" | "raw" | "headers">): string {
-  const direct = normalizeAddress(req.raw.socket?.remoteAddress) ?? (req.ip?.trim() ? req.ip.trim() : "unknown");
+  const carrier = req as unknown as (IncomingMessage & { raw?: IncomingMessage }) & { ip?: string };
+  const direct = normalizeAddress(carrier.raw?.socket?.remoteAddress ?? carrier.socket?.remoteAddress)
+    ?? (carrier.ip?.trim() ? carrier.ip.trim() : "unknown");
   const header = req.headers["x-forwarded-for"];
   const forwarded = (Array.isArray(header) ? header.join(",") : header ?? "").trim();
   if (!forwarded) return direct;
