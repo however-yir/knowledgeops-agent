@@ -23,13 +23,19 @@ def normalize(value: Any) -> Any:
     return value
 
 
-def compare_case(case: dict[str, Any], java: httpx.Response, python: httpx.Response) -> list[str]:
+def compare_case(case: dict[str, Any], java: httpx.Response | None, python: httpx.Response) -> list[str]:
     label = str(case["label"])
     expected_status = int(case["expectStatus"])
     failures: list[str] = []
-    for runtime, response in (("Java", java), ("Python", python)):
-        if response.status_code != expected_status:
-            failures.append(f"{label}: {runtime} status {response.status_code} != expected {expected_status}")
+    if java is not None and java.status_code != expected_status:
+        failures.append(f"{label}: Java status {java.status_code} != expected {expected_status}")
+    if python.status_code != expected_status:
+        failures.append(f"{label}: Python status {python.status_code} != expected {expected_status}")
+    if java is None:
+        # javaKnownDefect case: the pinned Java baseline cannot serve this
+        # request at all (documented oracle defect), so only Python is
+        # validated.
+        return failures
     if java.status_code != python.status_code:
         failures.append(f"{label}: status {java.status_code} != {python.status_code}")
         return failures
@@ -43,7 +49,7 @@ def compare_case(case: dict[str, Any], java: httpx.Response, python: httpx.Respo
     if case.get("comparison") == "status":
         return failures
     fields_by_runtime = {
-        "Java": [str(field) for field in case.get("javaFields", case.get("fields", []))],
+        "Java": [] if java is None else [str(field) for field in case.get("javaFields", case.get("fields", []))],
         "Python": [str(field) for field in case.get("pythonFields", case.get("fields", []))],
     }
     if any(fields_by_runtime.values()):
@@ -204,13 +210,15 @@ def main() -> None:
     python_variables: dict[str, Any] = {}
     with httpx.Client(timeout=30.0) as client:
         for case in cases:
-            try:
-                java_url = args.java_base_url.rstrip("/") + str(render_value(case["path"], java_variables))
-                java = request_contract_case(client, case, java_url, request_data(case, headers, java_variables))
-                failures.extend(capture_response(case, "Java", java, java_variables))
-            except ValueError as exc:
-                failures.append(f"{case['label']}: Java {exc}")
-                continue
+            java: httpx.Response | None = None
+            if not case.get("javaKnownDefect"):
+                try:
+                    java_url = args.java_base_url.rstrip("/") + str(render_value(case["path"], java_variables))
+                    java = request_contract_case(client, case, java_url, request_data(case, headers, java_variables))
+                    failures.extend(capture_response(case, "Java", java, java_variables))
+                except ValueError as exc:
+                    failures.append(f"{case['label']}: Java {exc}")
+                    continue
             try:
                 python_url = args.python_base_url.rstrip("/") + str(render_value(case["path"], python_variables))
                 python = request_contract_case(client, case, python_url, request_data(case, headers, python_variables))

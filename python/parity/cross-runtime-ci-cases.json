@@ -529,7 +529,9 @@
     ],
     "captures": {
       "researchTaskId": "taskId"
-    }
+    },
+    "javaKnownDefect": true,
+    "javaDefectNote": "Java a373082 oracle defect: POST /ai/research/tasks fails with IllegalArgumentException 'conversationId cannot be null' because ResearchTaskRequest carries no chatId; Python falls back to the topic and serves 200."
   },
   {
     "label": "research task get",
@@ -542,14 +544,18 @@
       "status",
       "steps",
       "events"
-    ]
+    ],
+    "javaKnownDefect": true,
+    "javaDefectNote": "Java a373082 oracle defect: POST /ai/research/tasks fails with IllegalArgumentException 'conversationId cannot be null' because ResearchTaskRequest carries no chatId; Python falls back to the topic and serves 200."
   },
   {
     "label": "research task events",
     "method": "GET",
     "path": "/ai/research/tasks/{{researchTaskId}}/events",
     "expectStatus": 200,
-    "comparison": "status"
+    "comparison": "status",
+    "javaKnownDefect": true,
+    "javaDefectNote": "Java a373082 oracle defect: POST /ai/research/tasks fails with IllegalArgumentException 'conversationId cannot be null' because ResearchTaskRequest carries no chatId; Python falls back to the topic and serves 200."
   },
   {
     "label": "research report",
@@ -559,7 +565,9 @@
     "fields": [
       "taskId",
       "report"
-    ]
+    ],
+    "javaKnownDefect": true,
+    "javaDefectNote": "Java a373082 oracle defect: POST /ai/research/tasks fails with IllegalArgumentException 'conversationId cannot be null' because ResearchTaskRequest carries no chatId; Python falls back to the topic and serves 200."
   },
   {
     "label": "evaluation dataset create",
