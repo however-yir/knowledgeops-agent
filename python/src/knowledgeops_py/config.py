@@ -62,6 +62,16 @@ class Settings:
     def is_production(self) -> bool:
         return self.environment.lower() in {"production", "prod"}
 
+    @property
+    def seed_demo_credentials(self) -> bool:
+        """Whether the well-known local demo API key may be seeded at startup.
+
+        The demo key plaintext is committed to the repository, so production
+        never seeds it (Java parity: V15 revokes seeded credentials and the
+        startup validator forbids the development default).
+        """
+        return not self.is_production
+
     def validate_startup(self) -> None:
         """Reject the demo-only configuration before a production process starts."""
         if not self.is_production:

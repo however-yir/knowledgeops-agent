@@ -153,7 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        if isinstance(security_repository, SqlAlchemySecurityRepository):
+        if active_settings.seed_demo_credentials and isinstance(security_repository, SqlAlchemySecurityRepository):
             await security_repository.bootstrap_api_key(
                 active_settings.demo_api_key,
                 "local-demo",
@@ -1421,15 +1421,16 @@ def select_audit_fields(log: dict[str, Any]) -> dict[str, Any]:
 
 
 def seed_store(store: PlatformStore, settings: Settings) -> None:
-    store.api_keys[sha256_hex(settings.demo_api_key)] = {
-        "keyHash": sha256_hex(settings.demo_api_key),
-        "keyName": "local-demo",
-        "role": "ADMIN",
-        "tenantId": settings.demo_tenant_id,
-        "enabled": True,
-        "createdAt": now_iso(),
-        "updatedAt": now_iso(),
-    }
+    if settings.seed_demo_credentials:
+        store.api_keys[sha256_hex(settings.demo_api_key)] = {
+            "keyHash": sha256_hex(settings.demo_api_key),
+            "keyName": "local-demo",
+            "role": "ADMIN",
+            "tenantId": settings.demo_tenant_id,
+            "enabled": True,
+            "createdAt": now_iso(),
+            "updatedAt": now_iso(),
+        }
     store.eval_datasets["default"] = {
         "datasetId": "default",
         "tenantId": settings.demo_tenant_id,
