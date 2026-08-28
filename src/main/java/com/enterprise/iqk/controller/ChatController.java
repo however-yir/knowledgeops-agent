@@ -11,6 +11,7 @@ import org.springframework.ai.content.Media;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.util.MimeType;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -20,7 +21,6 @@ import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
-import java.util.Objects;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
@@ -69,7 +69,16 @@ public class ChatController {
                                         String modelProfile,
                                         String chatId) {
         List<Media> mediaList = files.stream().map(f -> {
-            return new Media(MimeType.valueOf(Objects.requireNonNull(f.getContentType())), f.getResource());
+            // A multipart upload without an explicit Content-Type header would
+            // make Spring's MultipartFile.getContentType() return null; passing
+            // that to MimeType.valueOf throws NPE. Fall back to application/
+            // octet-stream so the model receives a usable MimeType and the
+            // error stays a clean 4xx instead of a 500.
+            String contentType = f.getContentType();
+            MimeType mime = StringUtils.hasText(contentType)
+                    ? MimeType.valueOf(contentType)
+                    : MediaType.APPLICATION_OCTET_STREAM;
+            return new Media(mime, f.getResource());
         }).toList();
 
         return routedPrompt(modelProfile, "chat", chatId)
