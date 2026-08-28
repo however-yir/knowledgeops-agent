@@ -99,7 +99,7 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
   }
 
   async executeResearchAsync(tenantId: string | undefined, topic: string, modelProfile?: string): Promise<WorkflowTask> {
-    return this.runResearchTaskAsync(this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile));
+    return this.runResearchTaskAsync(this.createTask(tenantId, "DEEP_RESEARCH", topic, modelProfile), true);
   }
 
   enqueueResearch(tenantId: string | undefined, topic: string, modelProfile?: string): WorkflowTask {
@@ -134,7 +134,7 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async runResearchTaskAsync(task: WorkflowTask): Promise<WorkflowTask> {
+  private async runResearchTaskAsync(task: WorkflowTask, rethrow = false): Promise<WorkflowTask> {
     const started = Date.now();
     const topic = task.userInput;
     try {
@@ -165,6 +165,12 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.failTask(task.taskId, messageFrom(error));
       this.metrics.increment("agent_workflow_task_count", { type: task.type, status: "FAILED" });
+      // Synchronous research requests surface the failure to the caller
+      // instead of a 200 OK with a FAILED record (f112ce7 mirror); the
+      // background worker path keeps relying on the recorded task.
+      if (rethrow) {
+        throw error;
+      }
     }
     return this.store.workflowTasks.get(task.taskId) ?? task;
   }
@@ -317,6 +323,12 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const from = isWorkflowState(task.status) ? task.status : "FAILED";
+    // The state machine stays authoritative: refuse a transition that does
+    // not start from the expected state and skip its event, mirroring the
+    // Java AgentWorkflowEngine.transitionStatus hardening (f112ce7).
+    if (expectedFrom && from !== expectedFrom) {
+      return;
+    }
     task.status = to;
     task.updatedAt = nowIso();
     this.emitEvent(taskId, undefined, "STATE_CHANGED", { from: expectedFrom ?? from, to });

@@ -136,6 +136,31 @@ describe("WorkflowService", () => {
     expect(service.currentState(task.taskId)).toBe("FAILED");
     expect(service.currentState("missing")).toBeUndefined();
   });
+
+  it("refuses transitions that do not start from the expected state", () => {
+    const store = new PlatformStore();
+    const service = new WorkflowService(store, new RetrievalService(store), new MetricsService(store));
+    const task = service.createTask("public", "REACT", "question");
+    const internals = service as unknown as { transition(taskId: string, to: string, from: string): void };
+    const eventsBefore = (store.workflowEvents.get(task.taskId) ?? []).length;
+
+    internals.transition(task.taskId, "FAILED", "SEARCHING");
+    expect(task.status).toBe("PLANNING");
+    expect((store.workflowEvents.get(task.taskId) ?? []).length).toBe(eventsBefore);
+
+    internals.transition(task.taskId, "SEARCHING", "PLANNING");
+    expect(task.status).toBe("SEARCHING");
+    expect((store.workflowEvents.get(task.taskId) ?? []).length).toBe(eventsBefore + 1);
+  });
+
+  it("records estimated input tokens on the ReAct planner step", () => {
+    const store = new PlatformStore();
+    const service = new WorkflowService(store, new RetrievalService(store), new MetricsService(store));
+    const task = service.startReactTask("public", "estimate my prompt tokens please", undefined, "chat-tokens");
+    const detail = service.getTask("public", task.taskId);
+
+    expect(detail?.steps[0]?.inputTokens).toBeGreaterThan(0);
+  });
 });
 
 function session(): SessionState {

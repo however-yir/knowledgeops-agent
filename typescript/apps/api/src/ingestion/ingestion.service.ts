@@ -163,7 +163,15 @@ export class IngestionService {
       let processed = 0;
       for (const message of messages) {
         const outcome = await this.processOne(message.tenantId, message.jobId);
-        await this.queue.ack(message.streamId);
+        // Only ack deliveries whose job reached a terminal status; transient
+        // outcomes (RETRY/PENDING, lease lost, in flight elsewhere) stay
+        // pending so the idle-claimer redelivers them instead of silently
+        // losing the message (mirror of the Java f112ce7 loopConsume fix).
+        const job = this.getJob(message.tenantId, message.jobId);
+        const terminal = job?.status === "SUCCEEDED" || job?.status === "FAILED";
+        if (terminal || !job) {
+          await this.queue.ack(message.streamId);
+        }
         if (outcome === "processed") processed += 1;
       }
       return processed;
