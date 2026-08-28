@@ -107,7 +107,14 @@ export class WorkflowController {
           this.aiService.reactChatStream(body, tenantId, "workflow_react", undefined, signal),
           (value) => { doneData = value; }
         ));
-        this.completeStreamTask(tenantId, task.taskId, doneData, body);
+        if (doneData) {
+          this.completeStreamTask(tenantId, task.taskId, doneData, body);
+        } else {
+          // The stream ended without a done event (e.g. client disconnect):
+          // mark the task FAILED so it does not stay orphaned in a
+          // non-terminal state (mirror of the Java 60a69da fix).
+          this.workflowService.failReactTask(tenantId, task.taskId, "stream ended before completion");
+        }
         return;
       }
       const stream = await this.aiService.reactChatStream(body, tenantId, "workflow_react");

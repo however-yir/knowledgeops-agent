@@ -1,7 +1,8 @@
-export interface Result<T> {
+export interface Result {
   ok: 0 | 1;
   msg: string;
-  data?: T;
+  /** Envelope payload; Java types it as Object, TypeScript as unknown. */
+  data?: unknown;
   code?: string;
   traceId?: string;
 }
@@ -94,6 +95,8 @@ export interface ReactChatResponse {
   model: string;
   usage: TokenUsage;
   traceId: string;
+  /** True when the answer was produced without the primary LLM path (Java `fallback`). */
+  fallback?: boolean;
   citations?: Citation[];
   evidence?: string[];
   retrievalStats?: unknown;
@@ -171,6 +174,8 @@ export interface SessionState {
   workspaceId: string;
   activeBranchId: string;
   branches: SessionBranch[];
+  /** Optimistic-lock version mirrored from agent_session_state.lock_version (V16). */
+  lockVersion?: number;
 }
 
 export interface EvalMetricSummary {
@@ -184,7 +189,7 @@ export interface EvalMetricSummary {
   failureRate: number;
 }
 
-export function ok<T>(data: T): Result<T> {
+export function ok(data: unknown): Result {
   return {
     ok: 1,
     msg: "ok",
@@ -192,7 +197,7 @@ export function ok<T>(data: T): Result<T> {
   };
 }
 
-export function fail(msg: string, code = "BAD_REQUEST", traceId?: string): Result<never> {
+export function fail(msg: string, code = "BAD_REQUEST", traceId?: string): Result {
   return {
     ok: 0,
     msg,

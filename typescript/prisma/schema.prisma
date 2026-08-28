@@ -200,6 +200,7 @@ model AgentSessionState {
   sessionPayload String   @map("session_payload") @db.LongText
   createdAt      DateTime @map("created_at")
   updatedAt      DateTime @map("updated_at")
+  lockVersion    BigInt   @default(0) @map("lock_version")
 
   @@unique([tenantId, sessionId], map: "uk_agent_session_tenant_session")
   @@index([tenantId, updatedAt], map: "idx_agent_session_tenant_updated")

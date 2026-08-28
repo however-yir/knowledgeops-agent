@@ -220,7 +220,10 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     }
     const task = this.createTask(tenantId, type, prompt, modelProfile, chatId, sessionId);
     const step = this.startStep(task.taskId, "planner", 1, { prompt });
-    this.completeStep(step.stepId, "COMPLETED", { action: "hybrid_retrieve" }, null, "Plan a RAG-backed ReAct response.", "hybrid_retrieve", { prompt });
+    // Persist the prompt's estimated input tokens on step completion (mirror of
+    // the Java 60a69da fix: the column existed but was never written).
+    const estimatedInputTokens = Math.max(1, Math.ceil([...prompt].length / env.APP_COST_TOKEN_ESTIMATE_DIVISOR));
+    this.completeStep(step.stepId, "COMPLETED", { action: "hybrid_retrieve" }, null, "Plan a RAG-backed ReAct response.", "hybrid_retrieve", { prompt }, estimatedInputTokens);
     return task;
   }
 
@@ -346,7 +349,8 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
     observation: unknown,
     thought?: string,
     action?: string,
-    actionInput?: Record<string, unknown>
+    actionInput?: Record<string, unknown>,
+    inputTokens?: number
   ): void {
     for (const [taskId, steps] of this.store.workflowSteps.entries()) {
       const step = steps.find((candidate) => candidate.stepId === stepId);
@@ -358,6 +362,7 @@ export class WorkflowService implements OnModuleInit, OnModuleDestroy {
       step.action = action;
       step.actionInput = actionInput ?? step.actionInput;
       step.observation = observation;
+      step.inputTokens = inputTokens ?? 0;
       step.outputTokens = 0;
       step.latencyMs = Math.max(0, Date.now() - Date.parse(step.startedAt));
       step.endedAt = nowIso();

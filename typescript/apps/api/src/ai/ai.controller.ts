@@ -30,23 +30,12 @@ export class AiController {
     return this.aiService.chat(body, tenantFrom(req), "chat", traceIdFrom(req));
   }
 
-  @Get("ai/chat")
-  async chat(
-    @Query("prompt") prompt: string | undefined,
-    @Query("chatId") chatId: string | undefined,
-    @Query("modelProfile") modelProfile: string | undefined,
-    @Req() req: FastifyRequest
-  ) {
-    const request = chatRequestFrom(prompt, chatId, modelProfile, undefined);
-    return this.aiService.chat(request, tenantFrom(req), "chat", traceIdFrom(req));
-  }
-
   @Post("ai/chat/stream")
   async chatStream(@Body() request: ReactChatRequest, @Req() req: FastifyRequest, @Res() reply: FastifyReply): Promise<void> {
     await sendSse(req, reply, (signal) => this.aiService.chatStream(request, tenantFrom(req), "chat", traceIdFrom(req), signal));
   }
 
-  @All("ai/service")
+  @Post("ai/service")
   async service(
     @Query("prompt") prompt: string | undefined,
     @Query("chatId") chatId: string | undefined,
@@ -61,17 +50,6 @@ export class AiController {
   @Post("ai/pdf/chat")
   async pdfChatPost(@Body() body: ReactChatRequest, @Req() req: FastifyRequest) {
     return this.aiService.ragChat(body, tenantFrom(req), "pdf", traceIdFrom(req));
-  }
-
-  @Get("ai/pdf/chat")
-  async pdfChat(
-    @Query("prompt") prompt: string | undefined,
-    @Query("chatId") chatId: string | undefined,
-    @Query("modelProfile") modelProfile: string | undefined,
-    @Req() req: FastifyRequest
-  ) {
-    const request = chatRequestFrom(prompt, chatId, modelProfile, undefined);
-    return this.aiService.ragChat(request, tenantFrom(req), "pdf", traceIdFrom(req));
   }
 
   @Post("ai/pdf/chat/stream")

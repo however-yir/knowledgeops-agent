@@ -56,7 +56,8 @@
       "javaBase": "@RequestMapping(\"/ai\")",
       "typescriptSource": "apps/api/src/ai/ai.controller.ts",
       "routes": [
-        { "java": "@RequestMapping(value = \"/chat\"", "typescript": ["Post(\"ai/chat\")", "Get(\"ai/chat\")"] }
+        { "java": "@PostMapping(value = \"/chat\"", "typescript": ["Post(\"ai/chat\")"] },
+        { "java": "@RequestMapping(value = \"/chat/stream\"", "typescript": ["Post(\"ai/chat/stream\")"] }
       ]
     },
     {
@@ -83,7 +84,7 @@
       "javaBase": "@RequestMapping(\"/ai\")",
       "typescriptSource": "apps/api/src/ai/ai.controller.ts",
       "routes": [
-        { "java": "@RequestMapping(value = \"/service\"", "typescript": ["All(\"ai/service\")"] }
+        { "java": "@PostMapping(value = \"/service\"", "typescript": ["Post(\"ai/service\")"] }
       ]
     },
     {
@@ -121,9 +122,9 @@
       "javaBase": "@RequestMapping(\"/ai/pdf\")",
       "typescriptSource": "apps/api/src/ingestion/ingestion.controller.ts",
       "routes": [
-        { "java": "@RequestMapping(\"/upload/{chatId}\")", "typescript": ["ai/pdf/upload/:chatId"] },
+        { "java": "@PostMapping(\"/upload/{chatId}\")", "typescript": ["ai/pdf/upload/:chatId"] },
         { "java": "@GetMapping(\"/file/{chatId}\")", "typescript": ["Get(\"ai/pdf/file/:chatId\")"] },
-        { "java": "@RequestMapping(value = \"/chat\"", "typescriptSource": "apps/api/src/ai/ai.controller.ts", "typescript": ["Post(\"ai/pdf/chat\")", "Get(\"ai/pdf/chat\")"] }
+        { "java": "@PostMapping(value = \"/chat\"", "typescriptSource": "apps/api/src/ai/ai.controller.ts", "typescript": ["Post(\"ai/pdf/chat\")"] }
       ]
     },
     {
@@ -184,7 +185,7 @@
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactChatRequestVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptFragment": "export interface ReactChatRequest" },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactChatResponseVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptFragment": "export interface ReactChatResponse" },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactTraceStepVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptFragment": "export interface ReactTraceStep" },
-    { "source": "src/main/java/com/enterprise/iqk/domain/vo/Result.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptFragment": "export interface Result<T>" },
+    { "source": "src/main/java/com/enterprise/iqk/domain/vo/Result.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptFragment": "export interface Result" },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/TenantBudgetUpdateVO.java", "typescriptSource": "apps/api/src/platform/tenant-cost.service.ts", "typescriptFragment": "export interface TenantBudgetUpdate" },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/TenantCostSummaryVO.java", "typescriptSource": "apps/api/src/platform/tenant-cost.service.ts", "typescriptFragment": "export interface TenantCostSummary" },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalCaseCreateVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptFragment": "export interface EvaluationCasePayload" },
@@ -258,6 +259,7 @@
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaFragment": "Set.of(\"pwd\", \"ls\", \"rg\", \"git\", \"mvn\")", "typescriptKey": "APP_WORKSPACE_ALLOWED_COMMANDS", "typescriptDefault": "\"pwd,ls,rg,git\"", "relationship": "intentional_difference", "note": "TypeScript omits Maven from the default shell allowlist." },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaFragment": "Set.of(\"status\", \"diff\", \"show\", \"log\", \"rev-parse\", \"branch\")", "typescriptKey": "APP_WORKSPACE_ALLOWED_GIT_SUBCOMMANDS", "typescriptDefault": "\"status,diff,show,log\"", "relationship": "intentional_difference", "note": "TypeScript keeps a narrower default Git subcommand allowlist." },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaFragment": "private Map<String, McpServer> servers = new LinkedHashMap<>();", "typescriptKey": "APP_MCP_SERVERS_JSON", "typescriptDefault": "\"{}\"", "relationship": "representation", "note": "Both defaults represent an empty MCP server registry." },
+    { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaFragment": "private java.util.List<String> allowedHosts = new java.util.ArrayList<>();", "typescriptKey": "APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS", "typescriptDefault": "\"\"", "relationship": "representation", "note": "Both defaults represent an empty SSRF allowlist; TypeScript stores the comma-separated host pattern list as a string." },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AuditProperties.java", "javaFragment": "private int retentionDays = 90;", "typescriptKey": "APP_AUDIT_RETENTION_DAYS", "typescriptDefault": "90", "relationship": "same" },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/CostGovernanceProperties.java", "javaFragment": "private boolean enabled = true;", "typescriptKey": "APP_COST_ENABLED", "typescriptDefault": "true", "relationship": "same" },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/CostGovernanceProperties.java", "javaFragment": "new BigDecimal(\"25.0000\")", "typescriptKey": "APP_COST_DEFAULT_MONTHLY_BUDGET_USD", "typescriptDefault": "25", "relationship": "representation", "note": "Both defaults represent 25 USD with different decimal formatting." },
@@ -317,6 +319,7 @@
     { "source": "src/main/java/com/enterprise/iqk/retrieval/web/WebSearchProperties.java", "javaFragment": "private int readTimeoutMs = 8000;", "typescriptKey": "APP_WEB_SEARCH_TIMEOUT_MS", "typescriptDefault": "8000", "relationship": "representation", "note": "TypeScript exposes one timeout matching Java's read timeout; Java's separate connect timeout is not represented." }
   ],
   "crossCuttingMappings": [
+    { "source": "src/main/java/com/enterprise/iqk/util/SqlLikeUtils.java", "typescriptSource": "apps/api/src/common/like-utils.ts", "typescriptFragments": ["export function escapeForLike"] },
     { "source": "src/main/java/com/enterprise/iqk/App.java", "typescriptSource": "apps/api/src/main.ts", "typescriptFragments": ["async function bootstrap"] },
     { "source": "src/main/java/com/enterprise/iqk/config/AppStartupValidator.java", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["export function validateRuntimeConfig"] },
     { "source": "src/main/java/com/enterprise/iqk/config/CommonConfiguration.java", "typescriptSource": "apps/api/src/app.module.ts", "typescriptFragments": ["export class AppModule"] },
@@ -327,7 +330,7 @@
     { "source": "src/main/java/com/enterprise/iqk/config/ResilienceConfiguration.java", "typescriptSource": "apps/api/src/ai/llm.client.ts", "typescriptFragments": ["async function retryingFetch", "AbortSignal.timeout"] },
     { "source": "src/main/java/com/enterprise/iqk/config/SecurityHeadersFilter.java", "typescriptSource": "apps/api/src/auth/security-headers.middleware.ts", "typescriptFragments": ["export class SecurityHeadersMiddleware"] },
     { "source": "src/main/java/com/enterprise/iqk/config/VectorStoreConfiguration.java", "typescriptSource": "apps/api/src/ai/vector.client.ts", "typescriptFragments": ["export class VectorClient", "APP_VECTOR_BACKEND"] },
-    { "source": "src/main/java/com/enterprise/iqk/constants/SystemConstants.java", "typescriptSource": "apps/api/src/ai/ai.controller.ts", "typescriptFragments": ["All(\"ai/service\")"] },
+    { "source": "src/main/java/com/enterprise/iqk/constants/SystemConstants.java", "typescriptSource": "apps/api/src/ai/ai.controller.ts", "typescriptFragments": ["Post(\"ai/service\")"] },
     { "source": "src/main/java/com/enterprise/iqk/controller/GlobalExceptionHandler.java", "typescriptSource": "apps/api/src/common/api-exception.filter.ts", "typescriptFragments": ["export class ApiExceptionFilter"] },
     { "source": "src/main/java/com/enterprise/iqk/tools/CourseTools.java", "typescriptSource": "apps/api/src/agent/harness.controller.ts", "typescriptFragments": ["action: \"query_course\""] },
     { "source": "src/main/java/com/enterprise/iqk/util/ConversationIdHelper.java", "typescriptSource": "apps/api/src/history/history.service.ts", "typescriptFragments": ["export function buildConversationId"] },
@@ -389,11 +392,13 @@
     { "source": "src/main/resources/db/migration/V11__knowledge_graph_tables.sql", "typescriptSource": "prisma/migrations/0010_java_v11/migration.sql" },
     { "source": "src/main/resources/db/migration/V12__memory_system_tables.sql", "typescriptSource": "prisma/migrations/0011_java_v12/migration.sql" },
     { "source": "src/main/resources/db/migration/V13__rag_evaluation_studio.sql", "typescriptSource": "prisma/migrations/0012_java_v13/migration.sql" },
-    { "source": "src/main/resources/db/migration/V14__agent_harness_permissions.sql", "typescriptSource": "prisma/migrations/0013_java_v14/migration.sql" }
+    { "source": "src/main/resources/db/migration/V14__agent_harness_permissions.sql", "typescriptSource": "prisma/migrations/0013_java_v14/migration.sql" },
+    { "source": "src/main/resources/db/migration/V15__revoke_seeded_demo_api_keys.sql", "typescriptSource": "scripts/bootstrap-demo-key.mjs" },
+    { "source": "src/main/resources/db/migration/V16__agent_session_state_lock_version.sql", "typescriptSource": "prisma/migrations/0016_java_v16/migration.sql" }
   ],
   "fieldMappings": [
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactChatRequestVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "ReactChatRequest", "sameFields": ["prompt", "chatId", "modelProfile"] },
-    { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactChatResponseVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "ReactChatResponse", "sameFields": ["ok", "msg", "chatId", "answer", "citations", "evidence", "routeProfile", "routeReason", "routeCostTier", "experimentKey", "experimentVariant", "experimentBucket", "trace"], "nestedTypeMappings": [{ "java": "citations", "typescript": "citations", "relationship": "intentional_difference", "note": "TypeScript returns citation metadata objects rather than Java citation ID strings." }] },
+    { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactChatResponseVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "ReactChatResponse", "sameFields": ["ok", "msg", "chatId", "answer", "fallback", "citations", "evidence", "routeProfile", "routeReason", "routeCostTier", "experimentKey", "experimentVariant", "experimentBucket", "trace"], "nestedTypeMappings": [{ "java": "citations", "typescript": "citations", "relationship": "intentional_difference", "note": "TypeScript returns citation metadata objects rather than Java citation ID strings." }] },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/ReactTraceStepVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "ReactTraceStep", "sameFields": ["step", "action", "actionInput", "observation"], "transforms": [{ "java": "thought", "typescript": "thoughtSummary", "note": "TypeScript exposes a summarized thought string." }] },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/AuthTokenVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "AuthTokenResponse", "sameFields": ["ok", "msg", "token", "refreshToken", "tenantId", "expiresInSeconds", "refreshExpiresAt", "refreshWillExpireSoon"], "representation": "Java LocalDateTime values are represented as ISO-8601 strings." },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/ApiKeyIssueVO.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "ApiKeyIssueResponse", "sameFields": ["ok", "msg", "keyName", "tenantId", "rawApiKey", "expiresAt"], "representation": "Java LocalDateTime values are represented as ISO-8601 strings." },
@@ -406,7 +411,7 @@
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/TenantBudgetUpdateVO.java", "typescriptSource": "apps/api/src/platform/tenant-cost.service.ts", "typescriptType": "TenantBudgetUpdate", "sameFields": ["tenantId", "monthlyBudgetUsd", "hardLimitEnabled"] },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/TenantCostSummaryVO.java", "typescriptSource": "apps/api/src/platform/tenant-cost.service.ts", "typescriptType": "TenantCostSummary", "sameFields": ["tenantId", "month", "monthlyBudgetUsd", "hardLimitEnabled", "monthCostUsd", "monthRequestCount", "monthInputTokens", "monthOutputTokens", "todayCostUsd", "todayRequestCount", "budgetRemainingUsd", "budgetExceeded"] },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalDatasetCreateVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationDatasetPayload", "sameFields": ["name", "description", "cases"] },
-    { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalRunRequestVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationRunRequest", "sameFields": ["modelProfile", "chatIdPrefix"] },
+    { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalRunRequestVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationRunRequest", "sameFields": ["datasetId", "modelProfile", "chatIdPrefix"] },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalDatasetVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationDatasetView", "sameFields": ["datasetId", "tenantId", "name", "description", "baselineRunId", "caseCount", "createdAt", "updatedAt"], "representation": "Java string time values remain ISO-8601 strings." },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalRunVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationRunView", "sameFields": ["runId", "datasetId", "tenantId", "status", "modelProfile", "metrics", "results", "errorMessage", "startedAt", "finishedAt", "createdAt"], "representation": "Java string time values remain ISO-8601 strings." },
     { "source": "src/main/java/com/enterprise/iqk/agent/workflow/WorkflowEventVO.java", "typescriptSource": "apps/api/src/platform/platform.store.ts", "typescriptType": "WorkflowEvent", "sameFields": ["eventId", "taskId", "stepId", "eventType", "payload", "createdAt"], "representation": "Java LocalDateTime values are represented as ISO-8601 strings." },
@@ -418,7 +423,7 @@
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/BranchMergeResultVO.java", "typescriptSource": "apps/api/src/sessions/sessions.service.ts", "typescriptType": "BranchMergeResult", "sameFields": ["session", "mergedBranch", "mergedMessageCount"] },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/MessageVO.java", "typescriptSource": "apps/api/src/history/history.service.ts", "typescriptType": "MessageVO", "sameFields": ["role", "content"] },
     { "source": "src/main/java/com/enterprise/iqk/domain/vo/PagedResult.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "PagedResult", "sameFields": ["items", "total", "page", "pageSize"] },
-    { "source": "src/main/java/com/enterprise/iqk/domain/vo/Result.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "Result", "sameFields": ["ok", "msg"] },
+    { "source": "src/main/java/com/enterprise/iqk/domain/vo/Result.java", "typescriptSource": "packages/shared/src/index.ts", "typescriptType": "Result", "sameFields": ["ok", "msg", "code", "traceId", "data"] },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalCaseCreateVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationCasePayload", "sameFields": ["caseId", "category", "chatId", "question", "expectedCitations", "expectedKeywords", "forbiddenKeywords"] },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalComparisonVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationComparisonView", "sameFields": ["dataset", "baseline", "current"] },
     { "source": "src/main/java/com/enterprise/iqk/evaluation/vo/EvalMetricSummaryVO.java", "typescriptSource": "apps/api/src/evaluation/evaluation.service.ts", "typescriptType": "EvaluationMetrics", "sameFields": ["totalCases", "passedCases", "runScore", "retrievalHitRate", "citationCoverageRate", "answerFaithfulnessScore", "avgLatencyMs", "failureRate"] },

@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 
+import type { SessionState } from "@knowledgeops/shared";
 import { tokenize } from "../common/text.js";
 import { env } from "../config/env.js";
 import {
@@ -194,7 +195,8 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
         archived: row.archived,
         activeBranchId: row.activeBranchId ?? String(payload.activeBranchId ?? ""),
         branches: Array.isArray(payload.branches) ? payload.branches : [],
-        updatedAt: row.updatedAt.getTime()
+        updatedAt: row.updatedAt.getTime(),
+        lockVersion: Number(row.lockVersion ?? 0)
       } as any;
       this.store.sessions.set(sessionKey(row.tenantId, row.sessionId), session);
     }
@@ -724,34 +726,55 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
   }
 
   private sessionActions(prisma: PrismaClientLike): Array<Promise<unknown>> {
-    return [...this.store.sessions.values()].map((session) => prisma.agentSessionState.upsert({
-      where: { tenantId_sessionId: { tenantId: session.tenantId ?? "public", sessionId: session.id } },
-      update: {
-        title: session.title,
-        workspaceId: session.workspaceId,
-        modelProfile: session.modelProfile,
-        streaming: session.streaming,
-        pinned: session.pinned,
-        archived: session.archived,
-        activeBranchId: session.activeBranchId,
-        sessionPayload: JSON.stringify(session),
-        updatedAt: new Date(session.updatedAt)
-      },
-      create: {
-        sessionId: session.id,
-        tenantId: session.tenantId ?? "public",
-        title: session.title,
-        workspaceId: session.workspaceId,
-        modelProfile: session.modelProfile,
-        streaming: session.streaming,
-        pinned: session.pinned,
-        archived: session.archived,
-        activeBranchId: session.activeBranchId,
-        sessionPayload: JSON.stringify(session),
-        createdAt: new Date(session.updatedAt),
-        updatedAt: new Date(session.updatedAt)
-      }
-    }));
+    return [...this.store.sessions.values()].map((session) => this.upsertSessionState(prisma, session));
+  }
+
+  // Optimistic-locking mirror of the Java V16 remediation: the update is
+  // conditional on the lock_version the store last observed; on conflict the
+  // row is re-read and retried once instead of silently dropping either
+  // writer's payload.
+  private async upsertSessionState(prisma: PrismaClientLike, session: SessionState): Promise<unknown> {
+    const key = { tenantId: session.tenantId ?? "public", sessionId: session.id };
+    const payload = {
+      title: session.title,
+      workspaceId: session.workspaceId,
+      modelProfile: session.modelProfile,
+      streaming: session.streaming,
+      pinned: session.pinned,
+      archived: session.archived,
+      activeBranchId: session.activeBranchId,
+      sessionPayload: JSON.stringify(session),
+      updatedAt: new Date(session.updatedAt)
+    };
+    const expectedVersion = BigInt(session.lockVersion ?? 0);
+    const claimed = await prisma.agentSessionState.updateMany({
+      where: { ...key, lockVersion: expectedVersion },
+      data: { ...payload, lockVersion: { increment: 1 } }
+    });
+    if (claimed.count === 1) {
+      session.lockVersion = Number(expectedVersion) + 1;
+      return claimed;
+    }
+    const current = await prisma.agentSessionState.findUnique({ where: { tenantId_sessionId: key } });
+    if (!current) {
+      return prisma.agentSessionState.create({
+        data: {
+          ...key,
+          ...payload,
+          lockVersion: 0,
+          createdAt: new Date(session.updatedAt)
+        }
+      });
+    }
+    const retried = await prisma.agentSessionState.updateMany({
+      where: { ...key, lockVersion: current.lockVersion },
+      data: { ...payload, lockVersion: { increment: 1 } }
+    });
+    if (retried.count !== 1) {
+      throw new Error(`agent session state optimistic lock conflict: ${key.tenantId}/${key.sessionId}`);
+    }
+    session.lockVersion = Number(current.lockVersion) + 1;
+    return retried;
   }
 
   private taskActions(prisma: PrismaClientLike): Array<Promise<unknown>> {

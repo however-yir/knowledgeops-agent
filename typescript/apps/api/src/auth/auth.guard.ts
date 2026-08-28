@@ -92,9 +92,6 @@ function requiredAuthorities(method: string, path: string): string[] {
   if (method === "POST" && path.startsWith("/auth/api-keys")) {
     return ["PERM_AUTH_KEY_MANAGE", "ROLE_ADMIN"];
   }
-  if (method === "GET" && (path === "/ai/chat" || path === "/ai/service")) {
-    return ["PERM_CHAT_READ", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
-  }
   if (method === "POST" && (path === "/ai/chat" || path === "/ai/chat/stream" || path === "/ai/service")) {
     return ["PERM_CHAT_WRITE", "ROLE_ADMIN"];
   }
@@ -119,8 +116,8 @@ function requiredAuthorities(method: string, path: string): string[] {
   if (method === "POST" && path === "/ai/feedback") {
     return ["PERM_FEEDBACK_WRITE", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
   }
-  if ((method === "GET" || method === "POST") && path === "/ai/pdf/chat") {
-    return ["PERM_RAG_READ", "PERM_CHAT_WRITE", "ROLE_ADMIN"];
+  if (method === "POST" && path === "/ai/pdf/chat") {
+    return ["PERM_RAG_READ", "ROLE_ADMIN"];
   }
   if (method === "GET" && path.startsWith("/ai/pdf/file/")) {
     return ["PERM_RAG_READ", "ROLE_ADMIN"];

@@ -59,8 +59,9 @@
   },
   {
     "label": "service html",
-    "method": "GET",
-    "path": "/ai/service?prompt=contract%20service&chatId=contract-service",
+    "method": "POST",
+    "path": "/ai/service",
+    "body": { "prompt": "contract service", "chatId": "contract-service", "modelProfile": "balanced" },
     "expectStatus": 200,
     "tags": ["chat"]
   },

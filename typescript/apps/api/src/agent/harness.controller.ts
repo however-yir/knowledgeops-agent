@@ -641,7 +641,12 @@ async function runShell(commandText: string, timeoutSeconds: number): Promise<Re
       truncated: Buffer.byteLength(output) >= env.APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES
     };
   } catch (error) {
-    const failure = error as { code?: number | string; stdout?: string; stderr?: string; message?: string };
+    const failure = error as { code?: number | string; killed?: boolean; stdout?: string; stderr?: string; message?: string };
+    if (failure.killed) {
+      // execFileAsync reaps the child on timeout; surface the same explicit
+      // "command timed out" outcome the Java runtime reports.
+      return { status: "error", message: "command timed out" };
+    }
     return {
       status: "error",
       exitCode: typeof failure.code === "number" ? failure.code : undefined,

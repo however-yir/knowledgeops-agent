@@ -127,6 +127,7 @@ export function responseOf(
       costUsd: 0
     },
     traceId,
+    fallback: degraded,
     routeProfile: route.profile,
     routeReason: route.reason,
     routeCostTier: route.costTier,
