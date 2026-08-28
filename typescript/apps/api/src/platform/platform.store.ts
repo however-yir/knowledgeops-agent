@@ -349,16 +349,22 @@ export class PlatformStore {
 
   constructor() {
     this.load();
-    const demoHash = sha256Hex(env.APP_DEMO_API_KEY);
-    this.apiKeys.set(demoHash, {
-      keyHash: demoHash,
-      keyName: "ts-local-demo-admin-key",
-      roleName: "ADMIN",
-      tenantId: "public",
-      enabled: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
+    // Mirror the Java V15 remediation: a publicly committed default admin
+    // credential must not materialize in production. Dev/test keep the
+    // convenience seed; production gets keys from the database (hydrated by
+    // PrismaPersistenceService) or an explicit APP_BOOTSTRAP_DEMO_KEY run.
+    if (env.NODE_ENV !== "production" || env.APP_BOOTSTRAP_DEMO_KEY) {
+      const demoHash = sha256Hex(env.APP_DEMO_API_KEY);
+      this.apiKeys.set(demoHash, {
+        keyHash: demoHash,
+        keyName: "ts-local-demo-admin-key",
+        roleName: "ADMIN",
+        tenantId: "public",
+        enabled: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
     this.seedBusinessCatalog();
   }
 

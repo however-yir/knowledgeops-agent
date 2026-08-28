@@ -1,8 +1,9 @@
 x-app-environment: &app-environment
   NODE_ENV: production
   APP_SECURITY_ENABLED: "true"
-  APP_JWT_SECRET: 0123456789abcdef0123456789abcdef
-  APP_DEMO_API_KEY: local-demo-api-key
+  # APP_JWT_SECRET and APP_DEMO_API_KEY are intentionally NOT defaulted here:
+  # predictable values are rejected at startup, so operators must supply them
+  # (e.g. via .env or `docker compose run -e`), mirroring the helm chart.
   APP_CORS_ALLOWED_ORIGINS: http://localhost:8088,http://localhost:5173
   APP_PRISMA_ENABLED: "true"
   DATABASE_URL: mysql://root:root@mysql:3306/knowledgeops_agent

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { env } from "../config/env.js";
 import { PlatformStore } from "../platform/platform.store.js";
+import type { PrismaPersistenceService } from "../platform/prisma.persistence.service.js";
 import { AuthService } from "./auth.service.js";
 
 describe("AuthService", () => {
@@ -53,6 +55,26 @@ describe("AuthService", () => {
 
     expect(results.filter((result) => result.ok === 1)).toHaveLength(1);
     expect(results.filter((result) => result.ok === 0)).toHaveLength(1);
+  });
+
+  it("rejects concurrent replays when a persistence service is injected but Prisma is disabled", async () => {
+    const originalPrismaEnabled = env.APP_PRISMA_ENABLED;
+    env.APP_PRISMA_ENABLED = false;
+    const persistence = { rotateRefreshToken: async () => true } as unknown as PrismaPersistenceService;
+    const service = new AuthService(new PlatformStore(), persistence);
+    const issued = service.exchangeApiKey("local-demo-api-key", "public");
+
+    try {
+      const results = await Promise.all([
+        service.refresh(issued.refreshToken),
+        service.refresh(issued.refreshToken)
+      ]);
+
+      expect(results.filter((result) => result.ok === 1)).toHaveLength(1);
+      expect(results.filter((result) => result.ok === 0)).toHaveLength(1);
+    } finally {
+      env.APP_PRISMA_ENABLED = originalPrismaEnabled;
+    }
   });
 
   it("invalidates the old API key when rotating a named key", () => {

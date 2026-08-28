@@ -135,7 +135,11 @@ export class AuthService {
       return invalidTokenResponse("invalid refresh token");
     }
     const replacement = this.buildTokens(record.principal, record.roles, record.tenantId);
-    if (this.persistence) {
+    if (this.persistence && env.APP_PRISMA_ENABLED) {
+      // Only the database-atomic conditional revoke decides the winner; the
+      // in-memory delete below must not be skipped when Prisma is disabled,
+      // or concurrent refreshes could both pass the liveness check before
+      // either consumes the token (refresh token replay).
       const consumed = await this.persistence.rotateRefreshToken(tokenHash, replacement.record);
       if (!consumed) {
         return invalidTokenResponse("invalid refresh token");

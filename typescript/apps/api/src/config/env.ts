@@ -8,6 +8,7 @@ const envSchema = z.object({
   APP_JWT_EXPIRE_MINUTES: z.coerce.number().int().min(1).default(120),
   APP_REFRESH_EXPIRE_DAYS: z.coerce.number().int().min(1).default(14),
   APP_DEMO_API_KEY: z.string().min(1).default("local-demo-api-key"),
+  APP_BOOTSTRAP_DEMO_KEY: z.preprocess((value) => value === true || value === "true", z.boolean()).default(false),
   APP_CORS_ALLOWED_ORIGINS: z.string().default("http://localhost:8088,http://localhost:5173"),
   APP_INGESTION_STORAGE_DIR: z.string().default("./data/uploads"),
   APP_INGESTION_QUEUE_BACKEND: z.enum(["in-memory", "db_polling", "redis_stream", "rabbitmq"]).default("in-memory"),
@@ -135,8 +136,15 @@ const FORBIDDEN_JWT_SECRETS = new Set([
   "replace_with_32_bytes_min_secret",
   "replace-me-with-real-secret",
   "change-me",
-  "changeme"
+  "changeme",
+  // former docker-compose fallback; publicly known, must never pass validation
+  "0123456789abcdef0123456789abcdef"
 ]);
+
+// Publicly committed seed credentials (the Java V15 migration revoked the
+// latter two from databases; the first is the TypeScript default) must never
+// be accepted as production credentials.
+const FORBIDDEN_DEMO_API_KEYS = new Set(["local-demo-api-key", "dev-admin-key-2026", "dev-default-admin-key"]);
 
 export function validateRuntimeConfig(config: AppEnv = env): void {
   if (config.NODE_ENV !== "production") {
@@ -150,6 +158,9 @@ export function validateRuntimeConfig(config: AppEnv = env): void {
   }
   if (Buffer.byteLength(config.APP_JWT_SECRET, "utf8") < 32 || FORBIDDEN_JWT_SECRETS.has(config.APP_JWT_SECRET)) {
     throw new Error("APP_JWT_SECRET must be at least 32 bytes and must not use a placeholder in production");
+  }
+  if (FORBIDDEN_DEMO_API_KEYS.has(config.APP_DEMO_API_KEY)) {
+    throw new Error("APP_DEMO_API_KEY must not use a publicly committed placeholder in production");
   }
   if (config.APP_WORKSPACE_WRITE_ENABLED && !config.APP_AGENT_HARNESS_TRUSTED_ENABLED) {
     throw new Error("APP_WORKSPACE_WRITE_ENABLED requires APP_AGENT_HARNESS_TRUSTED_ENABLED");
