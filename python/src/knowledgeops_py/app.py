@@ -94,6 +94,7 @@ from .infrastructure.providers import (
 from .infrastructure.queue_factory import close_ingestion_queue, create_ingestion_queue
 from .infrastructure.security_repository import SecurityRepository, SqlAlchemySecurityRepository
 from .infrastructure.session_repository import SqlAlchemySessionRepository
+from .infrastructure.web_search import WebSearchUnavailable, create_web_search_backend
 from .infrastructure.workflow_repository import SqlAlchemyWorkflowRepository
 from .infrastructure.workspace_runtime import WorkspaceRuntime
 from .observability.metrics import metric_inc, prometheus_text
@@ -481,6 +482,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 active_settings.is_production,
                 vector_store,
                 HybridWeights.from_csv(active_settings.hybrid_weights),
+                create_web_search_backend(active_settings),
             )
             return {
                 "evidence": rag["evidence"],
@@ -864,6 +866,7 @@ async def rag_response_with_provider(
         settings.is_production,
         vector_store,
         HybridWeights.from_csv(settings.hybrid_weights),
+        create_web_search_backend(settings),
     )
     base = await chat_response_with_provider(
         store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session, memory_service
@@ -948,6 +951,7 @@ async def retrieve_hybrid(
     require_provider_success: bool = False,
     vector_store: VectorStore | None = None,
     weights: HybridWeights | None = None,
+    web_search: Any | None = None,
 ) -> dict[str, Any]:
     chunks = (
         await ingestion_repository.chunks(tenant_id, chat_id)
@@ -956,6 +960,14 @@ async def retrieve_hybrid(
     )
     if graph_repository is not None:
         chunks.extend(await graph_chunks(graph_repository, tenant_id, prompt))
+    if web_search is not None:
+        try:
+            chunks.extend(
+                await web_search.search(TenantContext("", tenant_id, "retrieval", (), (), "retrieval"), prompt, 5)
+            )
+        except WebSearchUnavailable as exc:
+            if require_provider_success:
+                raise HTTPException(status_code=502, detail="web search request failed") from exc
     return await retrieve_chunks_with_semantics(
         chunks,
         prompt,
@@ -1023,7 +1035,8 @@ async def retrieve_chunks_with_semantics(
     for score, chunk in semantic_hits:
         offer(chunk, score * effective.vector)
     for rank, (_, chunk) in enumerate(lexical_ranked(chunks, prompt)):
-        source_weight = effective.graph if chunk.get("_retrievalSource") == "graph" else effective.keyword
+        source = chunk.get("_retrievalSource")
+        source_weight = effective.graph if source == "graph" else effective.web if source == "web" else effective.keyword
         offer(chunk, (1.0 / (rank + 1)) * source_weight)
     ordered = [chunk for _, chunk in sorted(scored.values(), key=lambda item: item[0], reverse=True)]
     selected = ordered[:5]

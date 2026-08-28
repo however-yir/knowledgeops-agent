@@ -57,9 +57,13 @@ class Settings:
     workspace_max_search_files: int = 1_000
     workspace_allowed_commands: tuple[str, ...] = ("pwd", "ls", "rg", "git", "mvn")
     workspace_allowed_git_subcommands: tuple[str, ...] = ("status", "diff", "show", "log", "rev-parse", "branch")
-    hybrid_weights: str = "0.70,0.15,0.15,0.00"
+    hybrid_weights: str = "0.65,0.13,0.12,0.10"
     rag_answer_temperature: float = 0.2
     feedback_dataset_max_bytes: int = 50 * 1024 * 1024
+    web_search_backend: str = "none"
+    web_search_base_url: str | None = None
+    web_search_api_key: str | None = None
+    web_search_timeout_seconds: float = 3.0
 
     @property
     def is_production(self) -> bool:
@@ -110,6 +114,10 @@ class Settings:
             raise ValueError("APP_RERANKER_URL is required for the remote production reranker")
         if self.reranker_backend == "local" and not self.reranker_model:
             raise ValueError("APP_RERANKER_MODEL is required for the local production reranker")
+        if self.web_search_backend not in {"none", "searxng"}:
+            raise ValueError("APP_WEB_SEARCH_BACKEND must be none or searxng in production")
+        if self.web_search_backend == "searxng" and not self.web_search_base_url:
+            raise ValueError("APP_WEB_SEARCH_BASE_URL is required for the searxng web-search backend")
         if self.pgvector_dimensions <= 0:
             raise ValueError("APP_PGVECTOR_DIMENSIONS must be positive")
 
@@ -169,9 +177,13 @@ def load_settings() -> Settings:
         workspace_allowed_commands=_csv(os.getenv("APP_AGENT_HARNESS_ALLOWED_COMMANDS")) or ("pwd", "ls", "rg", "git", "mvn"),
         workspace_allowed_git_subcommands=_csv(os.getenv("APP_AGENT_HARNESS_ALLOWED_GIT_SUBCOMMANDS"))
         or ("status", "diff", "show", "log", "rev-parse", "branch"),
-        hybrid_weights=os.getenv("APP_HYBRID_WEIGHTS", "0.70,0.15,0.15,0.00"),
+        hybrid_weights=os.getenv("APP_HYBRID_WEIGHTS", "0.65,0.13,0.12,0.10"),
         rag_answer_temperature=float(os.getenv("APP_RAG_ANSWER_TEMPERATURE", "0.2")),
         feedback_dataset_max_bytes=int(os.getenv("APP_FEEDBACK_DATASET_MAX_BYTES", str(50 * 1024 * 1024))),
+        web_search_backend=os.getenv("APP_WEB_SEARCH_BACKEND", "none"),
+        web_search_base_url=os.getenv("APP_WEB_SEARCH_BASE_URL"),
+        web_search_api_key=os.getenv("APP_WEB_SEARCH_API_KEY"),
+        web_search_timeout_seconds=float(os.getenv("APP_WEB_SEARCH_TIMEOUT_SECONDS", "3.0")),
     )
     settings.validate_startup()
     return settings

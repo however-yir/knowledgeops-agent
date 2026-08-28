@@ -38,15 +38,14 @@ class HybridWeights:
 
     Python sources: ``vector`` (semantic/pgvector hits), ``keyword`` (lexical
     hits), ``graph`` (knowledge-graph expansions, scored on the lexical path)
-    and ``web`` (reserved for the SearXNG backend). DEFAULT reproduces the
-    pre-weights Python ordering exactly: every semantic hit outranks every
-    lexical hit, and lexical/graph hits keep their rank order.
+    and ``web`` (SearXNG results). DEFAULT keeps every semantic hit above the
+    lexical/graph block, which keeps its rank order.
     """
 
-    vector: float = 0.70
-    keyword: float = 0.15
-    graph: float = 0.15
-    web: float = 0.0
+    vector: float = 0.65
+    keyword: float = 0.13
+    graph: float = 0.12
+    web: float = 0.10
 
     def normalized(self) -> HybridWeights:
         total = self.vector + self.keyword + self.graph + self.web
