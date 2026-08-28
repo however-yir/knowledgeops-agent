@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -36,6 +36,13 @@ def register_knowledge_routes(
         content = str(payload.get("content", "")).strip()
         if not content:
             raise HTTPException(status_code=422, detail="memory content is required")
+        raw_expires_at = payload.get("expiresAt")
+        expires_at: datetime | None = None
+        if raw_expires_at:
+            try:
+                expires_at = datetime.fromisoformat(str(raw_expires_at))
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="expiresAt must be an ISO-8601 timestamp") from exc
         if memory_repository is not None:
             item = await memory_repository.create(
                 ctx.tenant_id,
@@ -43,6 +50,7 @@ def register_knowledge_routes(
                 content,
                 str(payload.get("type") or "fact"),
                 payload.get("sessionId"),
+                expires_at,
             )
             return ok(item, trace_id=ctx.trace_id)
         item = {
@@ -52,6 +60,7 @@ def register_knowledge_routes(
             "sessionId": payload.get("sessionId"),
             "type": str(payload.get("type") or "fact"),
             "content": content,
+            "expiresAt": expires_at.isoformat() if expires_at else None,
             "createdAt": now_iso(),
         }
         store.memories[item["memoryId"]] = item

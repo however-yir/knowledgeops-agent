@@ -113,6 +113,7 @@ class MemoryRecord(Base, TenantScopedRecord):
     type: Mapped[str] = mapped_column(String(64))
     content: Mapped[str] = mapped_column(Text)
     embedding: Mapped[list[float] | None] = mapped_column(JSON)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class GraphEntityRecord(Base, TenantScopedRecord):
