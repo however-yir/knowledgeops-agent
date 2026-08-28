@@ -27,6 +27,20 @@ jobs:
       - name: Run regression gate
         run: python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.generated.json --threshold 0.75
 
+      - name: Generate evaluator contract fixture
+        run: python3 scripts/generate_eval_contract_fixture.py --dataset evaluation/dataset.large.json --output evaluation/predictions.contract.json
+
+      - name: Validate evaluator contract
+        run: python3 scripts/run_regression.py --dataset evaluation/dataset.large.json --predictions evaluation/predictions.contract.json --report-dir reports/evaluation-contract --threshold 0.75
+
+      - name: Upload evaluator contract report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nightly-evaluation-contract-report
+          path: reports/evaluation-contract/
+          if-no-files-found: error
+
   owasp-full-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 120

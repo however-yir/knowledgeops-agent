@@ -1,0 +1,45 @@
+name: ragproof external quality gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_url:
+        description: HTTPS URL of a real prior ragproof run JSON for the same dataset/configuration
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    environment: ragproof-evaluation
+    env:
+      KNOWLEDGEOPS_EVAL_BASE_URL: ${{ secrets.KNOWLEDGEOPS_EVAL_BASE_URL }}
+      KNOWLEDGEOPS_EVAL_API_KEY: ${{ secrets.KNOWLEDGEOPS_EVAL_API_KEY }}
+      KNOWLEDGEOPS_EVAL_TENANT_ID: ${{ secrets.KNOWLEDGEOPS_EVAL_TENANT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Require external evaluation credentials
+        run: |
+          test -n "$KNOWLEDGEOPS_EVAL_BASE_URL"
+          test -n "$KNOWLEDGEOPS_EVAL_API_KEY"
+          test -n "$KNOWLEDGEOPS_EVAL_TENANT_ID"
+
+      - name: Download compatible real baseline
+        run: curl --fail --location --proto '=https' --tlsv1.2 '${{ inputs.baseline_url }}' -o evaluation/ragproof/baseline.json
+
+      - name: Run ragproof regression gate
+        uses: however-yir/ragproof/.github/actions/evaluate@082ae88e09b1b529711919db9104bc42969dac83
+        with:
+          config: evaluation/ragproof/knowledgeops-react.json
+          baseline: evaluation/ragproof/baseline.json
+          output: reports/ragproof/current.json
+          policy: evaluation/ragproof/policy.json
+          required-fields: |
+            successful_requests
+            answers
+            contexts
+            citations

@@ -1,0 +1,35 @@
+{
+  "name": "knowledgeops-react-quality",
+  "dataset": "dataset.jsonl",
+  "adapter": {
+    "type": "http",
+    "base_url": "${KNOWLEDGEOPS_EVAL_BASE_URL}",
+    "endpoint": "/ai/react/chat",
+    "method": "POST",
+    "headers": {
+      "X-API-Key": "${KNOWLEDGEOPS_EVAL_API_KEY}",
+      "X-Tenant-Id": "${KNOWLEDGEOPS_EVAL_TENANT_ID}",
+      "Content-Type": "application/json"
+    },
+    "json_field": "prompt",
+    "extra_json": {
+      "chatId": "ragproof-eval",
+      "modelProfile": "quality"
+    },
+    "answer_path": "answer",
+    "contexts_path": "evidence",
+    "citations_path": "citations",
+    "fallback_path": "fallback",
+    "expected_fallback": false,
+    "timeout": 60.0
+  },
+  "judge": {
+    "enabled": false
+  },
+  "concurrency": 1,
+  "retries": 0,
+  "top_k": 5,
+  "group_by": ["tags", "difficulty"],
+  "min_sample_count": 3,
+  "required_fields": ["successful_requests", "answers", "contexts", "citations"]
+}

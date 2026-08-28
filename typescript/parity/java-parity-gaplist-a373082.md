@@ -27,12 +27,12 @@
 | 7 | web search backend init hardening | `f841958` | ✅ verified structurally absent in TS (per-call fetch with `AbortSignal.timeout`, no shared lazily-initialized client); frontend DOMPurify/noopener fixes live on the Java tree's frontend, no TS frontend to patch |
 | 8 | per-source hybrid retrieval weights (#115) | `69f9141` | ✅ mirrored (`ai/hybrid-weights.ts` presets + normalize; `hybridRetrieve`/`hybridRetrieveAsync` accept weights, DEFAULT preset equals the previous hardcoded 0.4/0.25/0.2/0.15) |
 | 9 | hybrid retrieval flow fix (#137) | `d17ab9d` | ✅ verified N/A — the removed Java block was a conflict-artifact duplicate; TS fusion is single-path |
-| 10 | workspace lifecycle + orphaned streams + step input tokens (#135) | `60a69da` | ⬜ pending (V16 → Prisma optimistic lock) |
-| 11 | multi-tenant SQL LIKE escape + ingestion claim | `0c64312` | ✅ verified equivalent — TS builds no SQL LIKE patterns (in-memory scoring, no raw SQL) and `claim` is strictly tenant-scoped with lease tokens |
+| 10 | workspace lifecycle + orphaned streams + step input tokens (#135) | `60a69da` | ✅ mirrored (V16 → Prisma `lockVersion` schema/migration + conditional optimistic upsert with re-read-and-retry; `completeStep` persists input tokens; streams ending without `done` mark the task FAILED; `runShell` reports explicit timeout) |
+| 11 | multi-tenant SQL LIKE escape + ingestion claim | `0c64312` | ✅ verified equivalent — TS builds no SQL LIKE patterns (in-memory scoring, parameterized pgvector SQL) and `claim` is strictly tenant-scoped with lease tokens |
 | 12 | memory `expires_at` query filter | `d91405b` | ✅ verified already filtered — both memory read endpoints (items list, context) exclude expired items; no RAG memory-injection path exists |
 | 13 | feedback dataset rotation (#144) | `06c7cb0` | ✅ mirrored (`APP_FEEDBACK_MAX_DATASET_BYTES` 50 MiB cap + timestamped sibling rotation before append) |
 | 14 | /ai/chat multipart Content-Type fallback (#143) | `a4dc1f1` | ✅ verified N/A — the only TS multipart consumer (ingestion upload) never parses mimetype; a missing Content-Type degrades gracefully |
-| 15 | reliability/tenant-isolation batch | `f112ce7` | ◑ rate-limit eviction mirrored in #2; remainder pending |
+| 15 | reliability/tenant-isolation batch | `f112ce7` | ✅ mirrored (state-machine transition guard + event skip, terminal-only queue acks, rethrown synchronous research failures, bucket ceiling from #2); remaining items verified N/A — vector retrievers use real similarity scores, pgvector filters are parameterized, no duplicated citation-footer rendering, no dead Java code paths |
 
 Verified N/A:
 
