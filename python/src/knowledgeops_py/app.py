@@ -78,6 +78,7 @@ from .dto import (
 )
 from .infrastructure.database import create_engine, create_session_factory
 from .infrastructure.evaluation_repository import SqlAlchemyEvaluationRepository
+from .infrastructure.feedback_dataset import FeedbackDatasetWriter
 from .infrastructure.file_store import LocalFileStore
 from .infrastructure.graph_repository import SqlAlchemyGraphRepository
 from .infrastructure.ingestion_repository import PersistedIngestionJob, SqlAlchemyIngestionRepository
@@ -455,6 +456,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_permissions=require_permissions,
         ok=ok,
         now_iso=now_iso,
+        dataset_writer=FeedbackDatasetWriter(
+            Path(active_settings.storage_path) / "feedback-dataset.jsonl",
+            active_settings.feedback_dataset_max_bytes,
+        ),
     )
 
     def research_callbacks(

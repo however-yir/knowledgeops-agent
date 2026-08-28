@@ -17,6 +17,7 @@ def register_feedback_routes(
     require_permissions: Callable[..., Callable[..., Any]],
     ok: Callable[..., dict[str, Any]],
     now_iso: Callable[[], str],
+    dataset_writer: Any = None,
 ) -> None:
     """Register the Java-compatible tenant-scoped feedback endpoint."""
 
@@ -31,4 +32,6 @@ def register_feedback_routes(
             "createdAt": now_iso(),
         }
         store.feedback.append(record)
+        if dataset_writer is not None:
+            dataset_writer.append(record)
         return ok(record, msg="saved", trace_id=ctx.trace_id)

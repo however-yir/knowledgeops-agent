@@ -59,6 +59,7 @@ class Settings:
     workspace_allowed_git_subcommands: tuple[str, ...] = ("status", "diff", "show", "log", "rev-parse", "branch")
     hybrid_weights: str = "0.70,0.15,0.15,0.00"
     rag_answer_temperature: float = 0.2
+    feedback_dataset_max_bytes: int = 50 * 1024 * 1024
 
     @property
     def is_production(self) -> bool:
@@ -170,6 +171,7 @@ def load_settings() -> Settings:
         or ("status", "diff", "show", "log", "rev-parse", "branch"),
         hybrid_weights=os.getenv("APP_HYBRID_WEIGHTS", "0.70,0.15,0.15,0.00"),
         rag_answer_temperature=float(os.getenv("APP_RAG_ANSWER_TEMPERATURE", "0.2")),
+        feedback_dataset_max_bytes=int(os.getenv("APP_FEEDBACK_DATASET_MAX_BYTES", str(50 * 1024 * 1024))),
     )
     settings.validate_startup()
     return settings
