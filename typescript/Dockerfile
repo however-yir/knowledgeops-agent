@@ -16,6 +16,9 @@ RUN pnpm db:generate && pnpm build
 FROM node:24-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# The pinned base snapshot still carries libcrypto3/libssl3 3.5.7-r0
+# (CVE-2026-14456); pull the patched OpenSSL from the Alpine 3.22 repo.
+RUN apk upgrade --no-cache libcrypto3 libssl3
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
