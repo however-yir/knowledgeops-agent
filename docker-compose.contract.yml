@@ -66,10 +66,10 @@ services:
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      # Java a373082 registers its own vectorStore bean while Spring AI's
-      # pgvector auto-configuration also contributes one on this classpath;
-      # let the application bean win so the contract stack can boot.
-      SPRING_MAIN_ALLOW_BEAN_DEFINITION_OVERRIDING: "true"
+      # Java a373082 registers its own vectorStore bean; Spring AI's pgvector
+      # auto-configuration must not contribute a second (embedding-model
+      # hungry) definition on this classpath, so exclude it outright.
+      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
       DB_URL: jdbc:mysql://java-mysql:3306/knowledgeops_java?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root
       DB_PASSWORD: contract-mysql-pass
