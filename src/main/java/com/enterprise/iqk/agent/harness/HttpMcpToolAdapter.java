@@ -48,7 +48,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
         return serverConfig != null
                 && serverConfig.isEnabled()
                 && StringUtils.hasText(serverConfig.getBaseUrl())
-                && isSafeBaseUrl(serverConfig.getBaseUrl())
+                && isSafeBaseUrl(serverConfig.getBaseUrl(), harnessProperties.getMcp().getAllowedHosts())
                 && serverConfig.getTools().containsKey(tool)
                 && serverConfig.getTools().get(tool).isEnabled();
     }
@@ -86,7 +86,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
     }
 
     private URI resolveUri(String baseUrl, String path) {
-        if (!isSafeBaseUrl(baseUrl)) {
+        if (!isSafeBaseUrl(baseUrl, harnessProperties.getMcp().getAllowedHosts())) {
             throw new IllegalArgumentException("MCP baseUrl is not a permitted public endpoint: " + baseUrl);
         }
         String safeBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
@@ -100,8 +100,14 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
      * an operator (or an LLM-driven agent invocation of mcp_call) could
      * point the MCP HTTP adapter at e.g. http://169.254.169.254/latest/meta-data/
      * to harvest cloud instance credentials.
+     *
+     * <p>Operators can opt in to a curated list of host patterns (exact
+     * host or suffix match like ".internal.example.com") via
+     * {@code app.agent-harness.mcp.allowed-hosts}. Tests and dev
+     * environments typically need to set it to {@code ["localhost",
+     * "127.0.0.1", "::1"]}.
      */
-    static boolean isSafeBaseUrl(String baseUrl) {
+    static boolean isSafeBaseUrl(String baseUrl, java.util.List<String> allowedHosts) {
         if (!StringUtils.hasText(baseUrl)) {
             return false;
         }
@@ -119,6 +125,9 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
         if (!StringUtils.hasText(host)) {
             return false;
         }
+        if (hostMatchesAllowList(host, allowedHosts)) {
+            return true;
+        }
         try {
             InetAddress[] addresses = InetAddress.getAllByName(host);
             for (InetAddress addr : addresses) {
@@ -132,5 +141,27 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
             return false;
         }
         return true;
+    }
+
+    private static boolean hostMatchesAllowList(String host, java.util.List<String> allowedHosts) {
+        if (allowedHosts == null || allowedHosts.isEmpty()) {
+            return false;
+        }
+        String normalized = host.toLowerCase();
+        for (String pattern : allowedHosts) {
+            if (!StringUtils.hasText(pattern)) {
+                continue;
+            }
+            String p = pattern.trim().toLowerCase();
+            if (p.startsWith(".")) {
+                // suffix match: ".internal.example.com" matches "a.internal.example.com"
+                if (normalized.endsWith(p)) {
+                    return true;
+                }
+            } else if (p.equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

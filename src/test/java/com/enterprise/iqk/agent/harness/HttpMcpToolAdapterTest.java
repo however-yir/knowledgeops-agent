@@ -33,6 +33,10 @@ class HttpMcpToolAdapterTest {
             mcpServer.setBaseUrl("http://localhost:" + server.getAddress().getPort());
             mcpServer.getTools().put("echo", new AgentHarnessProperties.McpTool());
             properties.getMcp().getServers().put("demo", mcpServer);
+            // Loopback hosts (localhost / 127.0.0.1) are refused by the SSRF
+            // guard by default; tests must opt in explicitly so the production
+            // guard stays fail-closed.
+            properties.getMcp().setAllowedHosts(java.util.List.of("localhost", "127.0.0.1", "::1"));
             HttpMcpToolAdapter adapter = new HttpMcpToolAdapter(properties, new ObjectMapper());
 
             Object result = adapter.execute("demo", "echo", Map.of("text", "hello"));
