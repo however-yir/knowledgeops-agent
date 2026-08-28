@@ -237,6 +237,10 @@ jobs:
           docker compose -f docker-compose.contract.yml up --build -d python-migrate
           docker compose -f docker-compose.contract.yml wait python-migrate
           docker compose -f docker-compose.contract.yml up -d --wait --wait-timeout 180 python-api
+          # The contract container starts with --no-deps, so the one-shot seed
+          # (restores the Java-side contract key after Flyway V15 revokes it)
+          # must be invoked explicitly before the comparison runs.
+          docker compose -f docker-compose.contract.yml up --abort-on-container-exit --exit-code-from java-seed java-seed
           docker compose -f docker-compose.contract.yml up --no-deps --abort-on-container-exit --exit-code-from contract contract
 
       - name: Collect cross-runtime logs
