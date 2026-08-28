@@ -33,7 +33,6 @@ from .api.operations_routes import register_operations_routes
 from .api.payloads import chat_request_payload, error_payload, fail, ok
 from .api.rag_routes import register_rag_routes
 from .api.request_runtime import (
-    TENANT_HEADER,
     enforce_rate_limit,
     ensure_trace_id,
     resolve_context,
@@ -230,11 +229,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             ctx = await resolve_context(request, auth_service, allow_anonymous=True)
         except HTTPException:
-            ctx = RequestContext(trace_id, normalize_tenant(request.headers.get(TENANT_HEADER)), "anonymous", ["ANONYMOUS"], [], "anonymous")
+            # Never launder a rejected context into an attacker-chosen tenant:
+            # the anonymous fallback always buckets and audits under the fixed
+            # public tenant, and the route-level dependency still rejects the
+            # request (401/403) with the canonical envelope.
+            ctx = RequestContext(trace_id, "public", "anonymous", ["ANONYMOUS"], [], "anonymous")
         request.state.context = ctx
         if should_rate_limit(request.url.path):
             try:
-                await enforce_rate_limit(store, active_settings, ctx)
+                await enforce_rate_limit(store, active_settings, ctx, request)
             except HTTPException as exc:
                 code = "RATE_LIMIT_UNAVAILABLE" if exc.status_code == 503 else "RATE_LIMIT_EXCEEDED"
                 return await canonicalize_response(
