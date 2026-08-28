@@ -20,12 +20,25 @@ class OpenAICompatibleChatProvider:
     model: str
     timeout_seconds: float = 30.0
 
-    async def complete(self, context: TenantContext, prompt: str, model_profile: str) -> dict[str, Any]:
-        payload = {
+    async def complete(
+        self,
+        context: TenantContext,
+        prompt: str,
+        model_profile: str,
+        system: str | None = None,
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "metadata": {"tenantId": context.tenant_id, "modelProfile": model_profile},
         }
+        if temperature is not None:
+            payload["temperature"] = temperature
         headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout_seconds) as client:
             response = await client.post("/chat/completions", json=payload, headers=headers)
@@ -56,12 +69,23 @@ class OllamaChatProvider:
     model: str
     timeout_seconds: float = 30.0
 
-    async def complete(self, context: TenantContext, prompt: str, model_profile: str) -> dict[str, Any]:
+    async def complete(
+        self,
+        context: TenantContext,
+        prompt: str,
+        model_profile: str,
+        system: str | None = None,
+        temperature: float | None = None,
+    ) -> dict[str, Any]:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "stream": False,
-            "options": {"temperature": ollama_temperature(model_profile)},
+            "options": {"temperature": temperature if temperature is not None else ollama_temperature(model_profile)},
         }
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout_seconds) as client:
             response = await client.post("/api/chat", json=payload)

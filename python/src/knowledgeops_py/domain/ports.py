@@ -7,7 +7,14 @@ from .context import TenantContext
 
 
 class ChatProvider(Protocol):
-    async def complete(self, context: TenantContext, prompt: str, model_profile: str) -> dict[str, Any]: ...
+    async def complete(
+        self,
+        context: TenantContext,
+        prompt: str,
+        model_profile: str,
+        system: str | None = None,
+        temperature: float | None = None,
+    ) -> dict[str, Any]: ...
 
 
 class EmbeddingProvider(Protocol):

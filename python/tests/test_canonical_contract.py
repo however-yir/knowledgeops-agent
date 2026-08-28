@@ -452,7 +452,7 @@ def test_production_react_provider_failure_uses_java_planner_fallback(
     monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
     class FailingProvider:
-        async def complete(self, *args: object) -> dict[str, object]:
+        async def complete(self, *args: object, **kwargs: object) -> dict[str, object]:
             request = httpx.Request("POST", "https://provider.example.test/chat/completions")
             raise httpx.HTTPStatusError("provider unavailable", request=request, response=httpx.Response(503, request=request))
 
@@ -473,7 +473,7 @@ def test_production_react_provider_failure_uses_java_planner_fallback(
 
 def test_production_standard_chat_still_reports_provider_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailingProvider:
-        async def complete(self, *args: object) -> dict[str, object]:
+        async def complete(self, *args: object, **kwargs: object) -> dict[str, object]:
             request = httpx.Request("POST", "https://provider.example.test/chat/completions")
             raise httpx.HTTPStatusError("provider unavailable", request=request, response=httpx.Response(503, request=request))
 

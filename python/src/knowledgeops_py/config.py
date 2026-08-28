@@ -58,6 +58,7 @@ class Settings:
     workspace_allowed_commands: tuple[str, ...] = ("pwd", "ls", "rg", "git", "mvn")
     workspace_allowed_git_subcommands: tuple[str, ...] = ("status", "diff", "show", "log", "rev-parse", "branch")
     hybrid_weights: str = "0.70,0.15,0.15,0.00"
+    rag_answer_temperature: float = 0.2
 
     @property
     def is_production(self) -> bool:
@@ -168,6 +169,7 @@ def load_settings() -> Settings:
         workspace_allowed_git_subcommands=_csv(os.getenv("APP_AGENT_HARNESS_ALLOWED_GIT_SUBCOMMANDS"))
         or ("status", "diff", "show", "log", "rev-parse", "branch"),
         hybrid_weights=os.getenv("APP_HYBRID_WEIGHTS", "0.70,0.15,0.15,0.00"),
+        rag_answer_temperature=float(os.getenv("APP_RAG_ANSWER_TEMPERATURE", "0.2")),
     )
     settings.validate_startup()
     return settings

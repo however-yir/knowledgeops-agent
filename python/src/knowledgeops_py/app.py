@@ -59,6 +59,7 @@ from .application.research import (
     research_evidence_text,
 )
 from .application.retrieval_math import HybridWeights, cosine_like, tokenize, vector_cosine
+from .application.system_prompts import HYBRID_RAG_ANSWER_SYSTEM
 from .application.workflow import ReactWorkflowApplicationService
 from .config import Settings, load_settings
 from .domain.context import TenantContext
@@ -770,7 +771,17 @@ async def chat_response_with_provider(
                 await memory_service.recall(tenant_context(ctx), request.chatId, request.prompt)
             )
         try:
-            completion = await provider.complete(tenant_context(ctx), grounded_prompt, request.modelProfile)
+            # Java parity (a373082): RAG answers run with the externalized
+            # enterprise system prompt and their own temperature (default 0.2)
+            # instead of inheriting the chat profile temperature.
+            rag_mode = mode == "rag"
+            completion = await provider.complete(
+                tenant_context(ctx),
+                grounded_prompt,
+                request.modelProfile,
+                system=HYBRID_RAG_ANSWER_SYSTEM if rag_mode else None,
+                temperature=settings.rag_answer_temperature if rag_mode else None,
+            )
         except (httpx.HTTPError, ValueError) as exc:
             if settings.is_production and mode not in {"react", "workflow"}:
                 raise HTTPException(status_code=502, detail="model provider request failed") from exc
