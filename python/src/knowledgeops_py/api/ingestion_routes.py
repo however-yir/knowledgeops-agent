@@ -114,7 +114,7 @@ def register_ingestion_routes(
             job = await ingestion_service.repository.get(ctx.tenant_id, jobId)
             if job is None:
                 raise HTTPException(status_code=404, detail="job not found")
-            processed_job = await ingestion_service.process(job.job_id)
+            processed_job = await ingestion_service.process(job.job_id, ctx.tenant_id)
             return ok(None, msg="processed" if processed_job is not None else "empty", trace_id=ctx.trace_id)
         job = store.jobs.get(jobId)
         if not job or job["tenantId"] != ctx.tenant_id:

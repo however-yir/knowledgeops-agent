@@ -103,18 +103,22 @@ class SqlAlchemyIngestionRepository:
                 statement = statement.where(IngestionJobRecord.tenant_id == tenant_id)
             return [job for record in (await session.scalars(statement)).all() if (job := to_job(record)) is not None]
 
-    async def claim(self, job_id: str) -> PersistedIngestionJob | None:
+    async def claim(self, job_id: str, tenant_id: str | None = None) -> PersistedIngestionJob | None:
         now = utc_now()
         async with self.sessions() as session:
+            statement = update(IngestionJobRecord).where(
+                IngestionJobRecord.job_id == job_id,
+                IngestionJobRecord.status.in_(("QUEUED", "RETRY")),
+                (IngestionJobRecord.next_retry_at.is_(None)) | (IngestionJobRecord.next_retry_at <= now),
+            )
+            if tenant_id is not None:
+                # Defense in depth (Java parity 0c64312): a worker claim must
+                # never cross tenant boundaries even if a job id leaks.
+                statement = statement.where(IngestionJobRecord.tenant_id == tenant_id)
             result = await session.execute(
-                update(IngestionJobRecord)
-                .where(
-                    IngestionJobRecord.job_id == job_id,
-                    IngestionJobRecord.status.in_(("QUEUED", "RETRY")),
-                    (IngestionJobRecord.next_retry_at.is_(None)) | (IngestionJobRecord.next_retry_at <= now),
-                )
-                .values(status="RUNNING", attempt_count=IngestionJobRecord.attempt_count + 1, started_at=now, updated_at=now)
-                .execution_options(synchronize_session=False)
+                statement.values(
+                    status="RUNNING", attempt_count=IngestionJobRecord.attempt_count + 1, started_at=now, updated_at=now
+                ).execution_options(synchronize_session=False)
             )
             if changed_rows(result) != 1:
                 await session.rollback()
@@ -122,6 +126,12 @@ class SqlAlchemyIngestionRepository:
             record = await session.scalar(select(IngestionJobRecord).where(IngestionJobRecord.job_id == job_id))
             await session.commit()
             return to_job(record)
+
+    async def tenant_of(self, job_id: str) -> str | None:
+        """Resolve the owning tenant of a job id for worker-side scoping."""
+        async with self.sessions() as session:
+            record = await session.scalar(select(IngestionJobRecord).where(IngestionJobRecord.job_id == job_id))
+            return record.tenant_id if record is not None else None
 
     async def claim_next(self, tenant_id: str | None = None) -> PersistedIngestionJob | None:
         """Claim one ready job using the database's row lock as the worker lease."""

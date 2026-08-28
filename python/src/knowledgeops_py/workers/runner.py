@@ -59,7 +59,8 @@ async def run_worker(once: bool = False) -> None:
 
                 async def consume_messages() -> None:
                     async for job_id in queue.consume():
-                        await service.process_message(job_id)
+                        tenant = await service.repository.tenant_of(job_id)
+                        await service.process_message(job_id, tenant)
                         if stopping.is_set():
                             return
 

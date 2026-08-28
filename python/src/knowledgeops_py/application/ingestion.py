@@ -67,8 +67,8 @@ class IngestionApplicationService:
             await self.files.delete(context.tenant_id, file_path)
             raise
 
-    async def process(self, job_id: str) -> PersistedIngestionJob | None:
-        job = await self.repository.claim(job_id)
+    async def process(self, job_id: str, tenant_id: str | None = None) -> PersistedIngestionJob | None:
+        job = await self.repository.claim(job_id, tenant_id)
         if job is None:
             return None
         return await self.process_claimed(job)
@@ -110,8 +110,8 @@ class IngestionApplicationService:
     async def recover_abandoned(self, lease_seconds: int = 300) -> int:
         return await self.repository.recover_abandoned(lease_seconds)
 
-    async def process_message(self, job_id: str) -> PersistedIngestionJob | None:
-        job = await self.process(job_id)
+    async def process_message(self, job_id: str, tenant_id: str | None = None) -> PersistedIngestionJob | None:
+        job = await self.process(job_id, tenant_id)
         if job is not None and job.status == "FAILED" and self.queue is not None:
             context = TenantContext(job.trace_id or "", job.tenant_id, "worker", (), (), "worker")
             await self.queue.publish_dead_letter(context, job.job_id, job.error_message or "ingestion failed")
