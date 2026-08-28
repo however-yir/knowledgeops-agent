@@ -118,6 +118,15 @@
       "location": "src/main/java/com/enterprise/iqk/service/AnswerFeedbackService.java (appendToDataset) + config/properties/FeedbackProperties.java",
       "description": "POST /ai/feedback 接受带 PERM_FEEDBACK_WRITE / PERM_CHAT_WRITE / ROLE_ADMIN 任意一个的用户提交反馈。AnswerFeedbackService.appendToDataset 用 Files.writeString + StandardOpenOption.APPEND 不断往 feedback_dataset.jsonl 追加，没有大小或行数上限。单个 comment 1024 + answer 1500 + question 100 ≈ 2600 bytes/行，每行可被 1024-1500 字符的 comment 撑大到 3-4KB。攻击者拿到任意上述凭证后可以快速耗尽磁盘（每 MB 大约 300-400 次请求）。",
       "handling": "1) FeedbackProperties 新增 maxDatasetBytes 字段（默认 50 MiB）可配；2) appendToDataset 在写入前检查目标文件大小，达到阈值则 rename 到带时间戳的兄弟文件（feedback_dataset-20260827-141500.jsonl）后再继续追加；3) Files.move 原子完成轮转，下游训练 pipeline 仍可读取 active 文件。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 14,
+      "title": "Memory 查询遗漏 expires_at 过滤（PR #137 修复不完整）",
+      "discovered_at": "2026-08-27T14:30:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/memory/MemoryItemMapper.java (findByUser / findByTenantAndTaskId / findByTenantAndMemoryId)",
+      "description": "PR #137 给 findByUserAndType / findByTypeAndConfidence 加了 expires_at 过滤，但漏了其他 3 个 query：findByUser（行 28-37）/ findByTenantAndTaskId（行 39）/ findByTenantAndMemoryId（行 57）。MemoryService.buildContext 调 queryShortMemory / queryLongMemory / queryFactMemory（底层走 findByUser / findByUserAndType / findByTypeAndConfidence），其中 findByUser 仍可能返回过期 memory，被注入到 RAG prompt——过期事实污染 LLM 上下文。",
+      "handling": "为这 3 个 query 统一补上 (expires_at IS NULL OR expires_at > NOW()) 谓词，与 PR #137 风格一致。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
