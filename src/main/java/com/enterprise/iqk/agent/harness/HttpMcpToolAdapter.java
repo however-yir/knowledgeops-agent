@@ -3,20 +3,31 @@ package com.enterprise.iqk.agent.harness;
 import com.enterprise.iqk.config.properties.AgentHarnessProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class HttpMcpToolAdapter implements McpToolAdapter {
+    // Allow only public HTTP(S) endpoints for outbound MCP calls. Any
+    // RFC1918 / loopback / link-local / cloud-metadata address is refused
+    // to prevent an agent invocation of mcp_call from being turned into
+    // an SSRF probe against internal services or the host metadata API.
+    private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
+
     private final AgentHarnessProperties harnessProperties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -37,6 +48,7 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
         return serverConfig != null
                 && serverConfig.isEnabled()
                 && StringUtils.hasText(serverConfig.getBaseUrl())
+                && isSafeBaseUrl(serverConfig.getBaseUrl())
                 && serverConfig.getTools().containsKey(tool)
                 && serverConfig.getTools().get(tool).isEnabled();
     }
@@ -74,8 +86,51 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
     }
 
     private URI resolveUri(String baseUrl, String path) {
+        if (!isSafeBaseUrl(baseUrl)) {
+            throw new IllegalArgumentException("MCP baseUrl is not a permitted public endpoint: " + baseUrl);
+        }
         String safeBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         String safePath = path.startsWith("/") ? path : "/" + path;
         return URI.create(safeBase + safePath);
+    }
+
+    /**
+     * Reject baseUrls whose scheme is not http(s) or whose host resolves to a
+     * private, loopback, link-local, or cloud-metadata address. Without this,
+     * an operator (or an LLM-driven agent invocation of mcp_call) could
+     * point the MCP HTTP adapter at e.g. http://169.254.169.254/latest/meta-data/
+     * to harvest cloud instance credentials.
+     */
+    static boolean isSafeBaseUrl(String baseUrl) {
+        if (!StringUtils.hasText(baseUrl)) {
+            return false;
+        }
+        URI uri;
+        try {
+            uri = URI.create(baseUrl);
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null || !ALLOWED_SCHEMES.contains(scheme.toLowerCase())) {
+            return false;
+        }
+        String host = uri.getHost();
+        if (!StringUtils.hasText(host)) {
+            return false;
+        }
+        try {
+            InetAddress[] addresses = InetAddress.getAllByName(host);
+            for (InetAddress addr : addresses) {
+                if (addr.isLoopbackAddress() || addr.isAnyLocalAddress()
+                        || addr.isLinkLocalAddress() || addr.isSiteLocalAddress()
+                        || addr.isMulticastAddress()) {
+                    return false;
+                }
+            }
+        } catch (UnknownHostException ex) {
+            return false;
+        }
+        return true;
     }
 }

@@ -127,6 +127,15 @@
       "location": "src/main/java/com/enterprise/iqk/memory/MemoryItemMapper.java (findByUser / findByTenantAndTaskId / findByTenantAndMemoryId)",
       "description": "PR #137 给 findByUserAndType / findByTypeAndConfidence 加了 expires_at 过滤，但漏了其他 3 个 query：findByUser（行 28-37）/ findByTenantAndTaskId（行 39）/ findByTenantAndMemoryId（行 57）。MemoryService.buildContext 调 queryShortMemory / queryLongMemory / queryFactMemory（底层走 findByUser / findByUserAndType / findByTypeAndConfidence），其中 findByUser 仍可能返回过期 memory，被注入到 RAG prompt——过期事实污染 LLM 上下文。",
       "handling": "为这 3 个 query 统一补上 (expires_at IS NULL OR expires_at > NOW()) 谓词，与 PR #137 风格一致。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 15,
+      "title": "MCP HTTP 适配器无 baseUrl 校验（SSRF 漏洞）",
+      "discovered_at": "2026-08-28T18:30:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/HttpMcpToolAdapter.java",
+      "description": "HttpMcpToolAdapter.resolveUri 直接用 URI.create(baseUrl + path) 拼 URL，supports 也不校验 baseUrl 协议/主机。攻击者可以通过两个路径触发 SSRF：(1) 运营者把 app.agent-harness.mcp.servers.<x>.base-url 误配置为内部地址（如 http://169.254.169.254/latest/meta-data/ AWS metadata / http://127.0.0.1:8500 内网服务）；(2) LLM 通过 mcp_call action 间接利用。HttpClient.newHttpClient() 不会自动拒绝私网或 loopback 地址。",
+      "handling": "1) 新增 isSafeBaseUrl 静态方法：要求 scheme 是 http/https，URI 解析成功，host 非空；(2) 用 InetAddress.getAllByName 解析 host 后逐个检查 isLoopbackAddress / isAnyLocalAddress / isLinkLocalAddress / isSiteLocalAddress / isMulticastAddress，任一为真则拒绝；(3) supports 与 resolveUri 都调 isSafeBaseUrl，确保 baseUrl 在 MCP 工具被发现与执行时都被校验。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
