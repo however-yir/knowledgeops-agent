@@ -29,6 +29,7 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
             SELECT * FROM memory_item
             WHERE tenant_id = #{tenantId}
               AND user_id = #{userId}
+              AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)
@@ -36,7 +37,12 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                                        @Param("userId") String userId,
                                        @Param("limit") int limit);
 
-    @Select("SELECT * FROM memory_item WHERE tenant_id = #{tenantId} AND source_task_id = #{taskId}")
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND source_task_id = #{taskId}
+              AND (expires_at IS NULL OR expires_at > NOW())
+            """)
     List<MemoryItemRecord> findByTenantAndTaskId(@Param("tenantId") String tenantId,
                                                  @Param("taskId") String taskId);
 
@@ -54,7 +60,13 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                                                     @Param("minConfidence") double minConfidence,
                                                     @Param("limit") int limit);
 
-    @Select("SELECT * FROM memory_item WHERE tenant_id = #{tenantId} AND memory_id = #{memoryId}")
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND memory_id = #{memoryId}
+              AND (expires_at IS NULL OR expires_at > NOW())
+            LIMIT 1
+            """)
     MemoryItemRecord findByTenantAndMemoryId(@Param("tenantId") String tenantId,
                                              @Param("memoryId") String memoryId);
 
