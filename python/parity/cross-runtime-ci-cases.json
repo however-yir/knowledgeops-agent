@@ -4,88 +4,171 @@
     "method": "GET",
     "path": "/actuator/health",
     "expectStatus": 200,
-    "fields": ["status"]
+    "fields": [
+      "status"
+    ]
   },
   {
     "label": "invalid api key",
     "method": "POST",
     "path": "/auth/token",
-    "headers": {"X-API-Key": "contract-invalid-key"},
+    "headers": {
+      "X-API-Key": "contract-invalid-key"
+    },
     "expectStatus": 200,
-    "fields": ["ok", "msg"]
+    "fields": [
+      "ok",
+      "msg"
+    ]
   },
   {
     "label": "token issue",
     "method": "POST",
     "path": "/auth/token",
     "expectStatus": 200,
-    "fields": ["ok", "msg", "token", "refreshToken", "tenantId", "expiresInSeconds"],
-    "captures": {"refreshToken": "refreshToken"}
+    "fields": [
+      "ok",
+      "msg",
+      "token",
+      "refreshToken",
+      "tenantId",
+      "expiresInSeconds"
+    ],
+    "captures": {
+      "refreshToken": "refreshToken"
+    }
   },
   {
     "label": "refresh rotation",
     "method": "POST",
     "path": "/auth/refresh",
-    "headers": {"X-Refresh-Token": "{{refreshToken}}"},
+    "headers": {
+      "X-Refresh-Token": "{{refreshToken}}"
+    },
     "expectStatus": 200,
-    "fields": ["ok", "token", "refreshToken", "tenantId"]
+    "fields": [
+      "ok",
+      "token",
+      "refreshToken",
+      "tenantId"
+    ]
   },
   {
     "label": "admin api key issue",
     "method": "POST",
     "path": "/auth/api-keys?keyName=contract-user&role=USER",
     "expectStatus": 200,
-    "fields": ["ok", "msg", "keyName", "tenantId", "rawApiKey", "expiresAt"]
+    "fields": [
+      "ok",
+      "msg",
+      "keyName",
+      "tenantId",
+      "rawApiKey",
+      "expiresAt"
+    ]
   },
   {
     "label": "admin api key rotate",
     "method": "POST",
     "path": "/auth/api-keys/rotate?keyName=contract-user&reason=contract",
     "expectStatus": 200,
-    "fields": ["ok", "msg", "keyName", "tenantId", "rawApiKey", "expiresAt"]
+    "fields": [
+      "ok",
+      "msg",
+      "keyName",
+      "tenantId",
+      "rawApiKey",
+      "expiresAt"
+    ]
   },
   {
     "label": "admin api key revoke",
     "method": "POST",
     "path": "/auth/api-keys/revoke?keyName=contract-user&reason=contract",
     "expectStatus": 200,
-    "fields": ["ok", "msg", "keyName", "tenantId"]
+    "fields": [
+      "ok",
+      "msg",
+      "keyName",
+      "tenantId"
+    ]
   },
   {
     "label": "cost budget update",
     "method": "POST",
     "path": "/cost/budget",
-    "body": {"monthlyBudgetUsd": 30.0, "hardLimitEnabled": false},
+    "body": {
+      "monthlyBudgetUsd": 30.0,
+      "hardLimitEnabled": false
+    },
     "expectStatus": 200,
-    "fields": ["tenantId", "monthlyBudgetUsd", "monthCostUsd", "budgetRemainingUsd"]
+    "fields": [
+      "tenantId",
+      "monthlyBudgetUsd",
+      "monthCostUsd",
+      "budgetRemainingUsd"
+    ]
   },
   {
     "label": "react chat",
     "method": "POST",
     "path": "/ai/react/chat",
-    "body": {"prompt": "contract smoke", "chatId": "contract-react", "modelProfile": "balanced"},
+    "body": {
+      "prompt": "contract smoke",
+      "chatId": "contract-react",
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
-    "fields": ["ok", "msg", "chatId", "answer", "routeProfile", "trace"]
+    "fields": [
+      "ok",
+      "msg",
+      "chatId",
+      "answer",
+      "routeProfile",
+      "trace"
+    ]
   },
   {
     "label": "react stream",
     "method": "POST",
     "path": "/ai/react/chat/stream",
-    "headers": {"Accept": "text/event-stream", "Connection": "close"},
-    "body": {"prompt": "contract stream smoke", "chatId": "contract-stream", "modelProfile": "balanced"},
+    "headers": {
+      "Accept": "text/event-stream",
+      "Connection": "close"
+    },
+    "body": {
+      "prompt": "contract stream smoke",
+      "chatId": "contract-stream",
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
     "sse": true,
-    "sseEvents": ["trace", "token", "done"]
+    "sseEvents": [
+      "trace",
+      "token",
+      "done"
+    ]
   },
   {
     "label": "react stream planner fallback",
     "method": "POST",
     "path": "/ai/react/chat/stream",
-    "headers": {"Accept": "text/event-stream", "Connection": "close"},
-    "body": {"prompt": "contract provider failure", "chatId": "contract-stream-error", "modelProfile": "balanced"},
+    "headers": {
+      "Accept": "text/event-stream",
+      "Connection": "close"
+    },
+    "body": {
+      "prompt": "contract provider failure",
+      "chatId": "contract-stream-error",
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
     "sse": true,
-    "sseEvents": ["trace", "token", "done"]
+    "sseEvents": [
+      "trace",
+      "token",
+      "done"
+    ]
   },
   {
     "label": "feedback submit",
@@ -99,21 +182,71 @@
       "answer": "The contract test verifies the canonical API behavior."
     },
     "expectStatus": 200,
-    "fields": ["ok", "msg"]
+    "fields": [
+      "ok",
+      "msg"
+    ]
+  },
+  {
+    "label": "ai chat query params",
+    "method": "POST",
+    "path": "/ai/chat?prompt=contract-query-chat&chatId=contract-query-chat&modelProfile=balanced",
+    "expectStatus": 200,
+    "comparison": "status"
+  },
+  {
+    "label": "customer service chat",
+    "method": "POST",
+    "path": "/ai/service?prompt=contract-service&chatId=contract-service",
+    "expectStatus": 200,
+    "comparison": "status"
+  },
+  {
+    "label": "pdf upload for rag chat",
+    "method": "POST",
+    "path": "/ai/pdf/upload/contract-pdf-chat",
+    "headers": {
+      "X-Idempotency-Key": "contract-pdf-key"
+    },
+    "multipart": {
+      "field": "file",
+      "filename": "contract.pdf",
+      "content": "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n",
+      "contentType": "application/pdf"
+    },
+    "expectStatus": 200,
+    "comparison": "status"
+  },
+  {
+    "label": "pdf rag chat",
+    "method": "POST",
+    "path": "/ai/pdf/chat?prompt=contract-pdf-rag&chatId=contract-pdf-chat&modelProfile=balanced",
+    "expectStatus": 200,
+    "comparison": "status"
   },
   {
     "label": "history pagination",
     "method": "GET",
     "path": "/ai/history/react?page=1&pageSize=20",
     "expectStatus": 200,
-    "fields": ["items", "total", "page", "pageSize"]
+    "fields": [
+      "items",
+      "total",
+      "page",
+      "pageSize"
+    ]
   },
   {
     "label": "history messages pagination",
     "method": "GET",
     "path": "/ai/history/react/contract-react?page=1&pageSize=50",
     "expectStatus": 200,
-    "fields": ["items", "total", "page", "pageSize"]
+    "fields": [
+      "items",
+      "total",
+      "page",
+      "pageSize"
+    ]
   },
   {
     "label": "missing file",
@@ -142,8 +275,20 @@
           "title": "Source branch",
           "updatedAt": 1700000000000,
           "messages": [
-            {"id": "source-shared", "role": "user", "content": "shared contract message", "createdAt": 1700000000000, "state": "done"},
-            {"id": "source-only", "role": "user", "content": "source only message", "createdAt": 1700000000001, "state": "done"}
+            {
+              "id": "source-shared",
+              "role": "user",
+              "content": "shared contract message",
+              "createdAt": 1700000000000,
+              "state": "done"
+            },
+            {
+              "id": "source-only",
+              "role": "user",
+              "content": "source only message",
+              "createdAt": 1700000000001,
+              "state": "done"
+            }
           ],
           "traceSteps": []
         },
@@ -152,59 +297,110 @@
           "title": "Target branch",
           "updatedAt": 1700000000000,
           "messages": [
-            {"id": "target-shared", "role": "user", "content": "shared contract message", "createdAt": 1700000000000, "state": "done"},
-            {"id": "target-only", "role": "assistant", "content": "target only message", "createdAt": 1700000000001, "state": "done"}
+            {
+              "id": "target-shared",
+              "role": "user",
+              "content": "shared contract message",
+              "createdAt": 1700000000000,
+              "state": "done"
+            },
+            {
+              "id": "target-only",
+              "role": "assistant",
+              "content": "target only message",
+              "createdAt": 1700000000001,
+              "state": "done"
+            }
           ],
           "traceSteps": []
         }
       ]
     },
     "expectStatus": 200,
-    "fields": ["id", "title", "workspaceId", "activeBranchId", "branches"]
+    "fields": [
+      "id",
+      "title",
+      "workspaceId",
+      "activeBranchId",
+      "branches"
+    ]
   },
   {
     "label": "session pagination",
     "method": "GET",
     "path": "/ai/sessions?page=1&pageSize=20",
     "expectStatus": 200,
-    "fields": ["items", "total", "page", "pageSize"]
+    "fields": [
+      "items",
+      "total",
+      "page",
+      "pageSize"
+    ]
   },
   {
     "label": "session get",
     "method": "GET",
     "path": "/ai/sessions/contract-session",
     "expectStatus": 200,
-    "fields": ["id", "title", "workspaceId", "branches"]
+    "fields": [
+      "id",
+      "title",
+      "workspaceId",
+      "branches"
+    ]
   },
   {
     "label": "session branch compare",
     "method": "POST",
     "path": "/ai/sessions/contract-session/branches/compare",
-    "body": {"sourceBranchId": "contract-source", "targetBranchId": "contract-target"},
+    "body": {
+      "sourceBranchId": "contract-source",
+      "targetBranchId": "contract-target"
+    },
     "expectStatus": 200,
-    "fields": ["sourceBranchId", "targetBranchId", "sourceMessageCount", "targetMessageCount", "commonMessageCount"]
+    "fields": [
+      "sourceBranchId",
+      "targetBranchId",
+      "sourceMessageCount",
+      "targetMessageCount",
+      "commonMessageCount"
+    ]
   },
   {
     "label": "session branch merge",
     "method": "POST",
     "path": "/ai/sessions/contract-session/branches/merge",
-    "body": {"sourceBranchId": "contract-source", "targetBranchId": "contract-target", "title": "Merged contract branch"},
+    "body": {
+      "sourceBranchId": "contract-source",
+      "targetBranchId": "contract-target",
+      "title": "Merged contract branch"
+    },
     "expectStatus": 200,
-    "fields": ["session.id", "mergedBranch.id", "mergedMessageCount"]
+    "fields": [
+      "session.id",
+      "mergedBranch.id",
+      "mergedMessageCount"
+    ]
   },
   {
     "label": "session pin",
     "method": "POST",
     "path": "/ai/sessions/contract-session/pin?value=true",
     "expectStatus": 200,
-    "fields": ["id", "pinned"]
+    "fields": [
+      "id",
+      "pinned"
+    ]
   },
   {
     "label": "session archive",
     "method": "POST",
     "path": "/ai/sessions/contract-session/archive?value=true",
     "expectStatus": 200,
-    "fields": ["id", "archived"]
+    "fields": [
+      "id",
+      "archived"
+    ]
   },
   {
     "label": "harness permissions",
@@ -217,10 +413,24 @@
     "label": "harness preview",
     "method": "POST",
     "path": "/ai/harness/actions/preview",
-    "body": {"action": "workspace_list_files", "actionInput": {"path": ".", "maxDepth": 1}},
+    "body": {
+      "action": "workspace_list_files",
+      "actionInput": {
+        "path": ".",
+        "maxDepth": 1
+      }
+    },
     "expectStatus": 200,
-    "fields": ["ok", "token", "action", "expiresAt", "preview"],
-    "captures": {"harnessToken": "token"}
+    "fields": [
+      "ok",
+      "token",
+      "action",
+      "expiresAt",
+      "preview"
+    ],
+    "captures": {
+      "harnessToken": "token"
+    }
   },
   {
     "label": "harness execute",
@@ -233,34 +443,66 @@
     "label": "workflow react chat",
     "method": "POST",
     "path": "/ai/workflow/react/chat",
-    "body": {"prompt": "workflow contract smoke", "chatId": "contract-workflow", "modelProfile": "balanced"},
+    "body": {
+      "prompt": "workflow contract smoke",
+      "chatId": "contract-workflow",
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
-    "fields": ["ok", "chatId", "answer", "routeProfile", "trace"]
+    "fields": [
+      "ok",
+      "chatId",
+      "answer",
+      "routeProfile",
+      "trace"
+    ]
   },
   {
     "label": "workflow react stream",
     "method": "POST",
     "path": "/ai/workflow/react/chat/stream",
-    "headers": {"Accept": "text/event-stream", "Connection": "close"},
-    "body": {"prompt": "workflow stream contract smoke", "chatId": "contract-workflow-stream", "modelProfile": "balanced"},
+    "headers": {
+      "Accept": "text/event-stream",
+      "Connection": "close"
+    },
+    "body": {
+      "prompt": "workflow stream contract smoke",
+      "chatId": "contract-workflow-stream",
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
     "sse": true,
-    "sseEvents": ["trace", "token", "done"]
+    "sseEvents": [
+      "trace",
+      "token",
+      "done"
+    ]
   },
   {
     "label": "workflow task list",
     "method": "GET",
     "path": "/ai/workflow/tasks?page=1&pageSize=20",
     "expectStatus": 200,
-    "fields": ["0.taskId", "0.status"],
-    "captures": {"workflowTaskId": "0.taskId"}
+    "fields": [
+      "0.taskId",
+      "0.status"
+    ],
+    "captures": {
+      "workflowTaskId": "0.taskId"
+    }
   },
   {
     "label": "workflow task get",
     "method": "GET",
     "path": "/ai/workflow/tasks/{{workflowTaskId}}",
     "expectStatus": 200,
-    "fields": ["taskId", "type", "status", "steps", "events"]
+    "fields": [
+      "taskId",
+      "type",
+      "status",
+      "steps",
+      "events"
+    ]
   },
   {
     "label": "workflow task events",
@@ -273,17 +515,34 @@
     "label": "research create",
     "method": "POST",
     "path": "/ai/research/tasks",
-    "body": {"topic": "contract research", "modelProfile": "balanced", "maxSearchRounds": 1},
+    "body": {
+      "topic": "contract research",
+      "modelProfile": "balanced",
+      "maxSearchRounds": 1
+    },
     "expectStatus": 200,
-    "fields": ["taskId", "topic", "report", "status"],
-    "captures": {"researchTaskId": "taskId"}
+    "fields": [
+      "taskId",
+      "topic",
+      "report",
+      "status"
+    ],
+    "captures": {
+      "researchTaskId": "taskId"
+    }
   },
   {
     "label": "research task get",
     "method": "GET",
     "path": "/ai/research/tasks/{{researchTaskId}}",
     "expectStatus": 200,
-    "fields": ["taskId", "type", "status", "steps", "events"]
+    "fields": [
+      "taskId",
+      "type",
+      "status",
+      "steps",
+      "events"
+    ]
   },
   {
     "label": "research task events",
@@ -297,7 +556,10 @@
     "method": "GET",
     "path": "/ai/research/tasks/{{researchTaskId}}/report",
     "expectStatus": 200,
-    "fields": ["taskId", "report"]
+    "fields": [
+      "taskId",
+      "report"
+    ]
   },
   {
     "label": "evaluation dataset create",
@@ -306,11 +568,26 @@
     "body": {
       "name": "contract evaluation",
       "description": "cross runtime contract dataset",
-      "cases": [{"caseId": "contract-case", "question": "What is the contract test?", "expectedKeywords": ["contract"]}]
+      "cases": [
+        {
+          "caseId": "contract-case",
+          "question": "What is the contract test?",
+          "expectedKeywords": [
+            "contract"
+          ]
+        }
+      ]
     },
     "expectStatus": 200,
-    "fields": ["datasetId", "tenantId", "name", "caseCount"],
-    "captures": {"evaluationDatasetId": "datasetId"}
+    "fields": [
+      "datasetId",
+      "tenantId",
+      "name",
+      "caseCount"
+    ],
+    "captures": {
+      "evaluationDatasetId": "datasetId"
+    }
   },
   {
     "label": "evaluation dataset list",
@@ -323,32 +600,60 @@
     "label": "evaluation dataset run",
     "method": "POST",
     "path": "/ai/evaluation/datasets/{{evaluationDatasetId}}/runs",
-    "body": {"modelProfile": "balanced"},
+    "body": {
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
-    "fields": ["runId", "datasetId", "status", "metrics.totalCases"],
-    "captures": {"evaluationRunId": "runId"}
+    "fields": [
+      "runId",
+      "datasetId",
+      "status",
+      "metrics.totalCases"
+    ],
+    "captures": {
+      "evaluationRunId": "runId"
+    }
   },
   {
     "label": "evaluation contract run",
     "method": "POST",
     "path": "/ai/evaluation/runs",
-    "body": {"datasetId": "{{evaluationDatasetId}}", "modelProfile": "balanced"},
+    "body": {
+      "datasetId": "{{evaluationDatasetId}}",
+      "modelProfile": "balanced"
+    },
     "expectStatus": 200,
-    "fields": ["runId", "datasetId", "status", "metrics.totalCases"]
+    "fields": [
+      "runId",
+      "datasetId",
+      "status",
+      "metrics.totalCases"
+    ]
   },
   {
     "label": "evaluation run get",
     "method": "GET",
     "path": "/ai/evaluation/runs/{{evaluationRunId}}",
     "expectStatus": 200,
-    "fields": ["runId", "datasetId", "status", "metrics", "results"]
+    "fields": [
+      "runId",
+      "datasetId",
+      "status",
+      "metrics",
+      "results"
+    ]
   },
   {
     "label": "evaluation baseline",
     "method": "POST",
     "path": "/ai/evaluation/runs/{{evaluationRunId}}/baseline",
     "expectStatus": 200,
-    "fields": ["runId", "datasetId", "status", "metrics"]
+    "fields": [
+      "runId",
+      "datasetId",
+      "status",
+      "metrics"
+    ]
   },
   {
     "label": "evaluation report",
@@ -362,13 +667,18 @@
     "method": "GET",
     "path": "/ai/evaluation/datasets/{{evaluationDatasetId}}/comparison",
     "expectStatus": 200,
-    "fields": ["dataset.datasetId", "current.runId"]
+    "fields": [
+      "dataset.datasetId",
+      "current.runId"
+    ]
   },
   {
     "label": "ingestion upload",
     "method": "POST",
     "path": "/ingestion/upload/contract-ingestion",
-    "headers": {"X-Idempotency-Key": "contract-ingestion-key"},
+    "headers": {
+      "X-Idempotency-Key": "contract-ingestion-key"
+    },
     "multipart": {
       "field": "file",
       "filename": "contract.pdf",
@@ -376,8 +686,16 @@
       "contentType": "application/pdf"
     },
     "expectStatus": 200,
-    "fields": ["ok", "msg", "job.jobId", "job.chatId", "job.status"],
-    "captures": {"ingestionJobId": "job.jobId"}
+    "fields": [
+      "ok",
+      "msg",
+      "job.jobId",
+      "job.chatId",
+      "job.status"
+    ],
+    "captures": {
+      "ingestionJobId": "job.jobId"
+    }
   },
   {
     "label": "ingestion jobs",
@@ -391,14 +709,22 @@
     "method": "GET",
     "path": "/ingestion/jobs/{{ingestionJobId}}",
     "expectStatus": 200,
-    "fields": ["jobId", "chatId", "status", "queueBackend"]
+    "fields": [
+      "jobId",
+      "chatId",
+      "status",
+      "queueBackend"
+    ]
   },
   {
     "label": "ingestion job process",
     "method": "POST",
     "path": "/ingestion/jobs/process?jobId={{ingestionJobId}}",
     "expectStatus": 200,
-    "fields": ["ok", "msg"]
+    "fields": [
+      "ok",
+      "msg"
+    ]
   },
   {
     "label": "audit logs",
@@ -412,6 +738,12 @@
     "method": "GET",
     "path": "/cost/summary",
     "expectStatus": 200,
-    "fields": ["tenantId", "monthlyBudgetUsd", "monthCostUsd", "monthRequestCount", "budgetRemainingUsd"]
+    "fields": [
+      "tenantId",
+      "monthlyBudgetUsd",
+      "monthCostUsd",
+      "monthRequestCount",
+      "budgetRemainingUsd"
+    ]
   }
 ]

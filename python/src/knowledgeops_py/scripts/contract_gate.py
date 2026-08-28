@@ -34,7 +34,6 @@ REQUIRED_OPENAPI_ENDPOINTS = [
     ("GET", "/ingestion/jobs/{jobId}"),
     ("POST", "/ingestion/jobs/process"),
     ("POST", "/ai/pdf/chat"),
-    ("GET", "/ai/pdf/chat"),
     ("GET", "/ai/pdf/file/{chatId}"),
     ("GET", "/ai/history/{kind}"),
     ("GET", "/ai/history/{kind}/{chatId}"),

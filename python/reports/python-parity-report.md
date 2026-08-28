@@ -37,7 +37,6 @@ Python target: FastAPI enterprise service edition.
 | GET | `/ingestion/jobs/{jobId}` | implemented |
 | POST | `/ingestion/jobs/process` | implemented |
 | POST | `/ai/pdf/chat` | implemented |
-| GET | `/ai/pdf/chat` | implemented |
 | GET | `/ai/pdf/file/{chatId}` | implemented |
 | GET | `/ai/history/{kind}` | implemented |
 | GET | `/ai/history/{kind}/{chatId}` | implemented |

@@ -52,25 +52,8 @@ def register_rag_routes(
         )
         return ok(data, trace_id=ctx.trace_id)
 
-    @app.get("/ai/pdf/chat")
-    async def pdf_chat_get(
-        prompt: str = Query(..., min_length=1),
-        chatId: str = Query(..., min_length=1),
-        ctx: Any = Depends(require_permissions("PERM_RAG_READ")),
-    ) -> dict[str, Any]:
-        data = await rag_response_with_provider(
-            store,
-            ctx,
-            ChatRequestDto(chatId=chatId, prompt=prompt),
-            require_evidence=True,
-            settings=settings,
-            ingestion_repository=ingestion_service.repository if ingestion_service is not None else None,
-            graph_repository=graph_repository,
-            session_repository=session_repository,
-            vector_store=vector_store,
-            memory_service=memory_service,
-        )
-        return ok(data, trace_id=ctx.trace_id)
+    # Java parity (a4f2565): the GET /ai/pdf/chat variant was removed and the
+    # POST route is the single RAG answer surface gated by PERM_RAG_READ.
 
     @app.get("/ai/pdf/file/{chatId}")
     async def pdf_file(

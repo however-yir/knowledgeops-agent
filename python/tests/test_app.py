@@ -471,7 +471,11 @@ def test_harness_workflow_research_memory_graph_and_evaluations_are_tenant_scope
 def test_extended_java_routes_file_safety_and_production_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     test_client = client()
     headers = AUTH_HEADERS
-    assert test_client.get("/ai/chat?prompt=hello&chatId=html", headers=headers).headers["content-type"].startswith("text/html")
+    # Java parity (a4f2565): the GET /ai/chat and GET /ai/service variants are
+    # gone; POST /ai/service is the text/html customer-service surface.
+    assert test_client.get("/ai/chat?prompt=hello&chatId=html", headers=headers).status_code == 405
+    service = test_client.post("/ai/service?prompt=hello&chatId=html", headers=headers)
+    assert service.status_code == 200 and service.headers["content-type"].startswith("text/html")
     assert test_client.get("/ai/pdf/file/missing", headers=headers).status_code == 404
     assert test_client.post("/ai/pdf/upload/doc", headers=headers, files={"file": ("bad.exe", b"no", "application/octet-stream")}).status_code == 415
     assert test_client.post("/ai/pdf/upload/doc", headers=headers, files={"file": ("bad.pdf", b"not-pdf", "application/pdf")}).status_code == 415

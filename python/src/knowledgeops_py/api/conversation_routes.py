@@ -115,17 +115,20 @@ def register_conversation_routes(
             to_sse(data, ctx.trace_id, legacy=legacy, react=True), media_type="text/event-stream"
         )
 
-    @app.get("/ai/chat")
-    @app.get("/ai/service")
-    async def html_chat(
+    # Java parity (a4f2565): the GET /ai/chat and GET /ai/service variants were
+    # removed — prompts travelled in query strings and leaked into access logs.
+
+    @app.post("/ai/service")
+    async def customer_service(
         prompt: str = Query(..., min_length=1),
         chatId: str = Query(default="default"),
+        modelProfile: str | None = Query(default=None),
         ctx: Any = Depends(require_permissions("PERM_CHAT_WRITE")),
     ) -> PlainTextResponse:
         response = await chat_response_with_provider(
             store,
             ctx,
-            ChatRequestDto(chatId=chatId, prompt=prompt),
+            chat_request_payload(None, prompt, chatId, modelProfile),
             mode="chat",
             require_evidence=False,
             settings=settings,

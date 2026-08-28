@@ -1,11 +1,13 @@
 {
-  "baselineSha": "ac62bb3a83239b1b3a8701fcdcad7d337c2c400a",
+  "baselineSha": "a373082",
   "migrations": [
     "src/main/resources/db/migration/V10__agent_workflow_tables.sql",
     "src/main/resources/db/migration/V11__knowledge_graph_tables.sql",
     "src/main/resources/db/migration/V12__memory_system_tables.sql",
     "src/main/resources/db/migration/V13__rag_evaluation_studio.sql",
     "src/main/resources/db/migration/V14__agent_harness_permissions.sql",
+    "src/main/resources/db/migration/V15__revoke_seeded_demo_api_keys.sql",
+    "src/main/resources/db/migration/V16__agent_session_state_lock_version.sql",
     "src/main/resources/db/migration/V1__init_core_and_platform_tables.sql",
     "src/main/resources/db/migration/V2__security_lifecycle_and_audit_retention.sql",
     "src/main/resources/db/migration/V4__expand_permission_matrix.sql",
@@ -48,6 +50,10 @@
     "users"
   ],
   "routes": [
+    {
+      "method": "POST",
+      "path": "/ai/chat"
+    },
     {
       "method": "GET",
       "path": "/ai/evaluation/datasets"
@@ -105,8 +111,16 @@
       "path": "/ai/history/{type}/{chatId}"
     },
     {
+      "method": "POST",
+      "path": "/ai/pdf/chat"
+    },
+    {
       "method": "GET",
       "path": "/ai/pdf/file/{chatId}"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/pdf/upload/{chatId}"
     },
     {
       "method": "POST",
@@ -131,6 +145,10 @@
     {
       "method": "GET",
       "path": "/ai/research/tasks/{taskId}/report"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/service"
     },
     {
       "method": "GET",

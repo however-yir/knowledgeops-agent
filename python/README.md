@@ -55,3 +55,47 @@ local-demo-api-key
 ```
 
 Read [MIGRATION.md](MIGRATION.md) for production prerequisites, baseline generation, shadow validation and rollback.
+
+## Java Alignment (baseline `a373082`, 2026-08-28)
+
+This Python track is aligned against the Java `main` tree at commit
+`a373082` ("fix(security): derive rate-limit IP from X-Forwarded-For behind
+proxies"). The pinned manifest (`parity/java-baseline-manifest.json`) and the
+generated report (`reports/python-parity-report.md`) are the evidence of
+record.
+
+Security parity in this alignment:
+
+- SSRF guard (`infrastructure/url_guard.py`) for outbound tool base URLs —
+  SearXNG web search is validated at construction; the harness `mcp_call`
+  action stays fail-closed (no MCP HTTP adapter ships in Python).
+- Rate limiting keys anonymous traffic by the proxy-safe client IP
+  (`X-Forwarded-For` rightmost non-private hop behind trusted proxies only),
+  so the client-controlled tenant header can no longer steer buckets.
+- The committed demo ADMIN key is never seeded in production, Alembic `0007`
+  revokes already-seeded rows, and e2e credentials are env-configured.
+- Trusted-workspace `ls`/`rg` arguments must resolve inside the workspace root.
+- Tenant headers are only honoured when they echo the authenticated tenant;
+  rejected contexts fall back to the fixed `public` tenant for limiting/audit.
+
+Feature parity in this alignment:
+
+- Configurable per-source hybrid retrieval weights (`APP_HYBRID_WEIGHTS`),
+  with a SearXNG web-search backend (`APP_WEB_SEARCH_BACKEND=searxng`).
+- Externalized RAG system prompts and `APP_RAG_ANSWER_TEMPERATURE` (default 0.2).
+- Durable workflow steps persist input/output token usage; abandoned
+  non-terminal tasks are failed on startup; checkpoints row-lock transitions.
+- Ingestion claims are tenant-scoped and workers pass the owner explicitly.
+- Memories expire (`expiresAt`) and never surface in list/recall/RAG context.
+- The feedback dataset is appended on disk with a size cap and rotation
+  (`APP_FEEDBACK_DATASET_MAX_BYTES`, default 50 MiB).
+
+Intentional differences (documented in the parity manifest/report):
+
+- The removed Java GET variants (`GET /ai/chat`, `GET /ai/service`,
+  `GET /ai/pdf/chat`) are absent here as well; `POST /ai/service` returns the
+  text/html customer-service surface.
+- Java's `agent_session_state.lock_version` optimistic locking is replaced by
+  pessimistic row locks (`SELECT ... FOR UPDATE`) with equivalent semantics.
+- The in-process simple vector store keeps no snapshot file (the pgvector
+  projection is the durable path).
