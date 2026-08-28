@@ -2,6 +2,7 @@ package com.enterprise.iqk.retrieval;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -27,24 +30,71 @@ public class HybridRetrievalService {
     private final WebRetriever webRetriever;
     private final MeterRegistry meterRegistry;
 
+    // Retrieval sources perform blocking IO; running them on ForkJoinPool.commonPool()
+    // could starve parallel streams elsewhere in the JVM, so use a dedicated pool.
+    private final ExecutorService retrievalExecutor = Executors.newFixedThreadPool(8, runnable -> {
+        Thread thread = new Thread(runnable, "hybrid-retrieval");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    @PreDestroy
+    void shutdownRetrievalExecutor() {
+        retrievalExecutor.shutdownNow();
+    }
+
     private static final double VECTOR_WEIGHT = 0.40;
     private static final double KEYWORD_WEIGHT = 0.25;
     private static final double GRAPH_WEIGHT = 0.20;
     private static final double WEB_WEIGHT = 0.15;
     private static final long SOURCE_TIMEOUT_SECONDS = 3;
 
+    /**
+     * Retrieve documents using hybrid search with default source weights.
+     * Equivalent to calling {@link #retrieve(String, String, String, int, HybridWeights)}
+     * with default weights (vector=0.40, keyword=0.25, graph=0.20, web=0.15).
+     *
+     * @param query    search query
+     * @param tenantId tenant identifier for filtering
+     * @param chatId   chat/conversation identifier for filtering
+     * @param topK     number of top results to return
+     * @return hybrid retrieval result with deduplicated, scored documents
+     */
     public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK) {
+        return retrieve(query, tenantId, chatId, topK, HybridWeights.DEFAULT);
+    }
+
+    /**
+     * Retrieve documents using hybrid search with configurable per-source weights.
+     * Each source runs in parallel via {@link CompletableFuture} and results are
+     * merged, deduplicated by content fingerprint, and sorted by final weighted score.
+     *
+     * Tuning tip: factual/definitional queries benefit from higher vector weight;
+     * exact-match/lookup queries benefit from higher keyword weight.
+     *
+     * @param query    search query
+     * @param tenantId tenant identifier for filtering
+     * @param chatId   chat/conversation identifier for filtering
+     * @param topK     number of top results to return
+     * @param weights  per-source weight configuration; weights are normalized to sum to 1.0
+     * @return hybrid retrieval result with deduplicated, scored documents
+     */
+    public HybridRetrievalResult retrieve(String query, String tenantId, String chatId, int topK, HybridWeights weights) {
+
+        // Normalize weights to sum to 1.0
+        HybridWeights normalized = weights.normalize();
+
         Timer.Sample sample = Timer.start(meterRegistry);
         String outcome = "error";
         try {
             CompletableFuture<List<ScoredDocument>> vectorFuture = retrieveAsync("vector",
-                    () -> vectorRetriever.retrieve(query, tenantId, chatId), VECTOR_WEIGHT);
+                    () -> vectorRetriever.retrieve(query, tenantId, chatId), normalized.vectorWeight());
             CompletableFuture<List<ScoredDocument>> keywordFuture = retrieveAsync("keyword",
-                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), KEYWORD_WEIGHT);
+                    () -> keywordRetriever.retrieve(query, tenantId, chatId, topK), normalized.keywordWeight());
             CompletableFuture<List<ScoredDocument>> graphFuture = retrieveAsync("graph",
-                    () -> graphRetriever.retrieve(query, tenantId, topK), GRAPH_WEIGHT);
+                    () -> graphRetriever.retrieve(query, tenantId, topK), normalized.graphWeight());
             CompletableFuture<List<ScoredDocument>> webFuture = retrieveAsync("web",
-                    () -> webRetriever.retrieve(query, topK), WEB_WEIGHT);
+                    () -> webRetriever.retrieve(query, topK), normalized.webWeight());
 
             List<ScoredDocument> allDocs = Stream.of(vectorFuture, keywordFuture, graphFuture, webFuture)
                     .flatMap(future -> future.join().stream())
@@ -85,7 +135,7 @@ public class HybridRetrievalService {
                 log.warn("hybrid retrieval source failed: source={}, reason={}", source, ex.toString());
                 return List.<ScoredDocument>of();
             }
-        }).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }, retrievalExecutor).completeOnTimeout(List.of(), SOURCE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     private List<ScoredDocument> deduplicate(List<ScoredDocument> docs) {

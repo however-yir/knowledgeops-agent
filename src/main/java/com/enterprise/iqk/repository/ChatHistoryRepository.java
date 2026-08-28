@@ -3,7 +3,6 @@ package com.enterprise.iqk.repository;
 import com.enterprise.iqk.domain.vo.MessageVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 
-import java.util.List;
 
 public interface ChatHistoryRepository {
     /**

@@ -15,6 +15,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.ExtractedTextFormatter;
 import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
@@ -30,8 +31,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +54,9 @@ public class IngestionService {
     private final MeterRegistry meterRegistry;
     private final IngestionQueue ingestionQueue;
     private final FileSafetyScanner fileSafetyScanner;
+    // Serializes SimpleVectorStore snapshot writes across the worker pool so that
+    // concurrent jobs cannot interleave writes to the same snapshot file.
+    private final Object snapshotLock = new Object();
 
     public IngestionJob submitPdf(String tenantId, String chatId, MultipartFile file, String idempotencyKey, String traceId) {
         String normalizedTenantId = TenantContext.normalize(tenantId);
@@ -116,6 +122,10 @@ public class IngestionService {
     }
 
     public IngestionProcessResult processQueuedJob(String jobId, String traceId) {
+        return processQueuedJob(jobId, null, traceId);
+    }
+
+    public IngestionProcessResult processQueuedJob(String jobId, String tenantId, String traceId) {
         if (!StringUtils.hasText(jobId)) {
             return IngestionProcessResult.builder()
                     .picked(false)
@@ -125,8 +135,17 @@ public class IngestionService {
                     .errorMessage("jobId missing")
                     .build();
         }
+        // Tenant scoping is required for both call paths:
+        //  - HTTP controllers reach here through the MDC-scoped TenantContext filter.
+        //  - Background workers (Redis / RabbitMQ / db_polling) run on threads without
+        //    an MDC, so they must pass the job's tenantId explicitly.
+        // Falling back to MDC keeps existing call sites working while the SQL now
+        // refuses to claim a job owned by another tenant.
+        String claimTenantId = StringUtils.hasText(tenantId)
+                ? TenantContext.normalize(tenantId)
+                : TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
         LocalDateTime now = LocalDateTime.now();
-        int claimed = ingestionJobMapper.claimForRun(jobId, IngestionJobStatus.RUNNING, now, now);
+        int claimed = ingestionJobMapper.claimForRun(jobId, claimTenantId, IngestionJobStatus.RUNNING, now, now);
         if (claimed == 0) {
             return IngestionProcessResult.builder()
                     .picked(false)
@@ -253,13 +272,13 @@ public class IngestionService {
     }
 
     private List<Document> splitDocuments(List<Document> pages, IngestionJob job) {
-        TokenTextSplitter splitter = new TokenTextSplitter(
-                ragProperties.getSplit().getChunkSize(),
-                ragProperties.getSplit().getMinChunkSize(),
-                5,
-                ragProperties.getSplit().getMaxNumChunks(),
-                true
-        );
+        TokenTextSplitter splitter = TokenTextSplitter.builder()
+                .withChunkSize(ragProperties.getSplit().getChunkSize())
+                .withMinChunkSizeChars(ragProperties.getSplit().getMinChunkSize())
+                .withMinChunkLengthToEmbed(5)
+                .withMaxNumChunks(ragProperties.getSplit().getMaxNumChunks())
+                .withKeepSeparator(true)
+                .build();
         List<Document> chunks = splitter.apply(pages);
         for (int i = 0; i < chunks.size(); i++) {
             Document chunk = chunks.get(i);
@@ -292,7 +311,17 @@ public class IngestionService {
             if (path.getParent() != null) {
                 Files.createDirectories(path.getParent());
             }
-            simpleVectorStore.save(path.toFile());
+            Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+            synchronized (snapshotLock) {
+                // Write to a temp file and atomically replace the snapshot so a crash
+                // or concurrent reader never observes a half-written file.
+                simpleVectorStore.save(tmp.toFile());
+                try {
+                    Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException atomicMoveNotSupported) {
+                    Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
         } catch (Exception e) {
             log.warn("Failed to persist SimpleVectorStore snapshot", e);
         }

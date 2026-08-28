@@ -8,6 +8,9 @@ import lombok.NoArgsConstructor;
 public class Result {
     private Integer ok;
     private String msg;
+    private String code;
+    private String traceId;
+    private Object data;
 
     private Result(Integer ok, String msg) {
         this.ok = ok;
@@ -19,6 +22,8 @@ public class Result {
     }
 
     public static Result fail(String msg) {
-        return new Result(0, msg);
+        Result result = new Result(0, msg);
+        result.setCode("REQUEST_FAILED");
+        return result;
     }
 }

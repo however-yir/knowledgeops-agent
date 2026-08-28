@@ -7,9 +7,6 @@ import com.enterprise.iqk.domain.vo.ReactChatResponseVO;
 import com.enterprise.iqk.domain.vo.ReactTraceStepVO;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.security.TenantContext;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -22,16 +19,14 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+
+import com.enterprise.iqk.service.ReactDecisionParser.ReasonDecision;
 
 @Service
 @RequiredArgsConstructor
@@ -42,8 +37,9 @@ public class ReactAgentService {
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
-    private final ObjectMapper objectMapper;
     private final MeterRegistry meterRegistry;
+    private final ReactDecisionParser decisionParser;
+    private final ReactResponseFormatter responseFormatter;
 
     public ReactChatResponseVO chat(ReactChatRequestVO request) {
         validateRequest(request);
@@ -57,16 +53,20 @@ public class ReactAgentService {
 
         List<ReactTraceStepVO> trace = new ArrayList<>();
         String rollingContext = "";
+        boolean usedFallback = false;
 
         for (int step = 1; step <= MAX_STEPS; step++) {
             ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
+            usedFallback = usedFallback || decision.fallback();
 
             if ("finish".equals(decision.action())) {
-                String answer = StringUtils.hasText(decision.answer())
-                        ? decision.answer()
+                AnswerResult answer = StringUtils.hasText(decision.answer())
+                        ? new AnswerResult(decision.answer(), false)
                         : summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
+                usedFallback = usedFallback || answer.fallback();
                 Map<String, Object> observation = new LinkedHashMap<>();
                 observation.put("status", "completed");
+                observation.put("fallback", usedFallback);
                 if (decision.citations() != null && !decision.citations().isEmpty()) {
                     observation.put("citations", decision.citations());
                 }
@@ -80,7 +80,7 @@ public class ReactAgentService {
                         .actionInput(decision.actionInput())
                         .observation(observation)
                         .build());
-                return success(request.getChatId(), answer, trace, routeDecision);
+                return responseFormatter.success(request.getChatId(), answer.answer(), trace, routeDecision, usedFallback);
             }
 
             Object observation = executeAction(request, decision.action(), decision.actionInput(), tenantId);
@@ -92,11 +92,11 @@ public class ReactAgentService {
                     .observation(observation)
                     .build());
 
-            rollingContext = appendContext(rollingContext, decision.action(), observation);
+            rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
         }
 
-        String answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
-        return success(request.getChatId(), answer, trace, routeDecision);
+        AnswerResult answer = summarizeAnswer(request, trace, rollingContext, routeDecision, tenantId);
+        return responseFormatter.success(request.getChatId(), answer.answer(), trace, routeDecision, usedFallback || answer.fallback());
     }
 
     public Flux<String> stream(ReactChatRequestVO request) {
@@ -117,12 +117,15 @@ public class ReactAgentService {
                     List<ReactTraceStepVO> trace = new ArrayList<>();
                     String rollingContext = "";
                     String directAnswer = "";
+                    boolean usedFallback = false;
 
                     for (int step = 1; step <= MAX_STEPS; step++) {
                         ReasonDecision decision = reason(request, rollingContext, trace, routeDecision, tenantId);
+                        usedFallback = usedFallback || decision.fallback();
                         if ("finish".equals(decision.action())) {
                             Map<String, Object> observation = new LinkedHashMap<>();
                             observation.put("status", "completed");
+                            observation.put("fallback", usedFallback);
                             if (decision.citations() != null && !decision.citations().isEmpty()) {
                                 observation.put("citations", decision.citations());
                             }
@@ -148,11 +151,13 @@ public class ReactAgentService {
                                 .actionInput(decision.actionInput())
                                 .observation(observation)
                                 .build());
-                        rollingContext = appendContext(rollingContext, decision.action(), observation);
+                        rollingContext = responseFormatter.appendContext(rollingContext, decision.action(), observation);
                     }
 
+                    boolean responseUsedFallback = usedFallback;
+
                     Flux<String> traceFlux = Flux.fromIterable(trace)
-                            .map(step -> formatSse("trace", toJson(step)));
+                            .map(step -> responseFormatter.formatSse("trace", responseFormatter.toJson(step)));
                     StringBuilder answerBuilder = new StringBuilder();
 
                     Flux<String> answerSourceFlux = StringUtils.hasText(directAnswer)
@@ -171,7 +176,7 @@ public class ReactAgentService {
                                     firstTokenLatencyMsRef.set(elapsedMs(startedNs));
                                 }
                                 answerBuilder.append(token);
-                                return formatSse("token", toJson(Map.of("token", token)));
+                                return responseFormatter.formatSse("token", responseFormatter.toJson(Map.of("token", token)));
                             });
 
                     return Flux.concat(traceFlux, tokenFlux)
@@ -179,14 +184,15 @@ public class ReactAgentService {
                                 if (firstTokenLatencyMsRef.get() == null) {
                                     firstTokenLatencyMsRef.set(elapsedMs(startedNs));
                                 }
-                                ReactChatResponseVO response = success(request.getChatId(), answerBuilder.toString(), trace, routeDecision);
+                                ReactChatResponseVO response = responseFormatter.success(
+                                        request.getChatId(), answerBuilder.toString(), trace, routeDecision, responseUsedFallback);
                                 outcomeRef.set("success");
-                                return Flux.just(formatSse("done", toJson(response)));
+                                return Flux.just(responseFormatter.formatSse("done", responseFormatter.toJson(response)));
                             }));
                 })
                 .onErrorResume(ex -> {
                     String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : "stream failed";
-                    return Flux.just(formatSse("error", toJson(Map.of("message", message))));
+                    return Flux.just(responseFormatter.formatSse("error", responseFormatter.toJson(Map.of("message", message))));
                 })
                 .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenLatencyMsRef.get(), outcomeRef.get()));
     }
@@ -254,7 +260,7 @@ public class ReactAgentService {
                 %s%n""".formatted(
                 request.getPrompt(),
                 emptyIfBlank(rollingContext),
-                toJson(trace)
+                responseFormatter.toJson(trace)
         );
 
         try {
@@ -265,9 +271,9 @@ public class ReactAgentService {
                     tenantId,
                     "react_planner"
             );
-            return parseDecision(raw);
+            return decisionParser.parse(raw);
         } catch (RuntimeException ex) {
-            return fallbackDecision(request.getPrompt());
+            return decisionParser.fallback(request.getPrompt());
         }
     }
 
@@ -287,11 +293,11 @@ public class ReactAgentService {
         )).toMap();
     }
 
-    private String summarizeAnswer(ReactChatRequestVO request,
-                                   List<ReactTraceStepVO> trace,
-                                   String rollingContext,
-                                   ModelRouter.ModelRouteDecision routeDecision,
-                                   String tenantId) {
+    private AnswerResult summarizeAnswer(ReactChatRequestVO request,
+                                         List<ReactTraceStepVO> trace,
+                                         String rollingContext,
+                                         ModelRouter.ModelRouteDecision routeDecision,
+                                         String tenantId) {
         String finalPrompt = buildFinalPrompt(request, trace, rollingContext);
         try {
             String answer = callModel(
@@ -302,12 +308,12 @@ public class ReactAgentService {
                     "react_final"
             );
             if (StringUtils.hasText(answer)) {
-                return answer;
+                return new AnswerResult(answer, false);
             }
         } catch (RuntimeException ignored) {
             // fallback below
         }
-        return "当前未能生成最终答案，请稍后重试。";
+        return new AnswerResult("当前未能生成最终答案，请稍后重试。", true);
     }
 
     private String buildFinalPrompt(ReactChatRequestVO request,
@@ -324,7 +330,7 @@ public class ReactAgentService {
                 %s
                 %n
                 请输出最终中文答案，要求简洁、可执行、结构清晰。
-                %n""".formatted(request.getPrompt(), toJson(trace), emptyIfBlank(rollingContext));
+                %n""".formatted(request.getPrompt(), responseFormatter.toJson(trace), emptyIfBlank(rollingContext));
     }
 
     private ModelRouter.ModelRouteDecision resolveRouteDecision(String requestedProfile,
@@ -381,265 +387,8 @@ public class ReactAgentService {
                 });
     }
 
-    private ReasonDecision parseDecision(String rawModelOutput) {
-        String json = extractJson(rawModelOutput);
-        if (!StringUtils.hasText(json)) {
-            return new ReasonDecision(
-                    "Model output is not JSON, fallback to finish.",
-                    "finish",
-                    Collections.emptyMap(),
-                    emptyIfBlank(rawModelOutput),
-                    List.of(),
-                    List.of()
-            );
-        }
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            String action = normalizeAction(node.path("action").asText("finish"));
-            String thought = node.path("thought").asText("");
-            String answer = node.path("answer").asText("");
-
-            Map<String, Object> actionInput = objectMapper.convertValue(
-                    node.path("action_input"),
-                    new TypeReference<Map<String, Object>>() {
-                    }
-            );
-            if (actionInput == null) {
-                actionInput = Collections.emptyMap();
-            }
-
-            if (!List.of("query_school", "query_course", "add_course_reservation", "rag_search", "finish")
-                    .contains(action)) {
-                action = "finish";
-            }
-
-            return new ReasonDecision(thought, action, actionInput, answer, List.of(), List.of());
-        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            return new ReasonDecision(
-                    "JSON parse failed, fallback to finish.",
-                    "finish",
-                    Collections.emptyMap(),
-                    emptyIfBlank(rawModelOutput),
-                    List.of(),
-                    List.of()
-            );
-        }
-    }
-
-    private ReasonDecision fallbackDecision(String prompt) {
-        String safePrompt = emptyIfBlank(prompt).toLowerCase(Locale.ROOT);
-        if (!StringUtils.hasText(safePrompt)) {
-            return new ReasonDecision(
-                    "Planner failed and prompt is empty. Fallback to safe finish.",
-                    "finish",
-                    Collections.emptyMap(),
-                    "当前请求内容为空，请补充问题后重试。",
-                    List.of("source=fallback://input_validation, chunk=1"),
-                    List.of("规则兜底：空问题时引导用户补充输入。")
-            );
-        }
-
-        if (containsAny(safePrompt, "校区", "campus")) {
-            String answer = """
-                    已识别为校区查询请求：可以返回校区列表，并按城市或课程类型做进一步筛选。
-                    如需精确结果，请补充目标城市、课程方向或价格区间。
-                    """;
-            return new ReasonDecision(
-                    "Planner unavailable; fallback to deterministic school-query answer.",
-                    "finish",
-                    Collections.emptyMap(),
-                    answer.trim(),
-                    List.of("source=fallback://school_query_flow, chunk=1"),
-                    List.of("校区查询流程：先列出校区，再按城市/课程类型筛选。")
-            );
-        }
-
-        if (containsAny(safePrompt, "课程预约", "预约字段", "预约需要", "联系方式", "姓名", "校区")) {
-            String answer = """
-                    课程预约建议至少包含这些字段：课程、姓名、联系方式、校区。
-                    如果业务需要，还可以补充备注、预约时间和渠道来源。
-                    """;
-            return new ReasonDecision(
-                    "Planner unavailable; fallback to deterministic reservation schema answer.",
-                    "finish",
-                    Collections.emptyMap(),
-                    answer.trim(),
-                    List.of("source=fallback://course_reservation_schema, chunk=1"),
-                    List.of("预约字段模板：课程、姓名、联系方式、校区、备注(可选)。")
-            );
-        }
-
-        if (containsAny(safePrompt, "高温", "健康风险", "heat")) {
-            String answer = """
-                    高温健康风险通常包括中暑、脱水、慢病加重和户外暴露相关风险。
-                    建议重点关注补水、避开高温时段、室内降温与高风险人群预警。
-                    """;
-            return new ReasonDecision(
-                    "Planner unavailable; fallback to deterministic heat-risk answer.",
-                    "finish",
-                    Collections.emptyMap(),
-                    answer.trim(),
-                    List.of("source=fallback://heat_risk_guide, chunk=1"),
-                    List.of("高温风险要点：中暑、脱水、慢病加重、暴露风险。")
-            );
-        }
-
-        if (containsAny(safePrompt, "没有答案", "没有的内容", "知识库里没有", "上下文不足")) {
-            String answer = """
-                    当知识库没有匹配上下文时，我会明确说明“当前没有匹配内容”，并给出下一步建议（如补充资料、调整检索关键词）。
-                    我不会虚构不存在的结论。
-                    """;
-            return new ReasonDecision(
-                    "Planner unavailable; fallback to hallucination-safe answer.",
-                    "finish",
-                    Collections.emptyMap(),
-                    answer.trim(),
-                    List.of("source=fallback://no_context_policy, chunk=1"),
-                    List.of("无上下文策略：明确告知无匹配，不编造结论。")
-            );
-        }
-
-        if (containsAny(safePrompt, "知识库", "引用", "来源", "pdf", "文档", "source")) {
-            return new ReasonDecision(
-                    "Planner unavailable; fallback route to rag_search.",
-                    "rag_search",
-                    Map.of("query", prompt),
-                    "",
-                    List.of(),
-                    List.of()
-            );
-        }
-
-        return new ReasonDecision(
-                "Planner unavailable; fallback to generic safe answer.",
-                "finish",
-                Collections.emptyMap(),
-                "当前规划器暂不可用，建议稍后重试或细化问题关键词。",
-                List.of("source=fallback://planner_unavailable, chunk=1"),
-                List.of("系统兜底：规划器异常时返回可执行提示。")
-        );
-    }
-
-    private String extractJson(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return "";
-        }
-        int start = raw.indexOf('{');
-        int end = raw.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            return "";
-        }
-        return raw.substring(start, end + 1);
-    }
-
-    private ReactChatResponseVO success(String chatId,
-                                        String answer,
-                                        List<ReactTraceStepVO> trace,
-                                        ModelRouter.ModelRouteDecision routeDecision) {
-        List<String> citations = extractTraceStrings(trace, "citations");
-        List<String> evidence = extractTraceStrings(trace, "evidence");
-        String finalAnswer = attachCitationFooter(answer, citations);
-        return ReactChatResponseVO.builder()
-                .ok(1)
-                .msg("ok")
-                .chatId(chatId)
-                .answer(finalAnswer)
-                .citations(citations)
-                .evidence(evidence)
-                .routeProfile(routeDecision == null ? "" : routeDecision.profile())
-                .routeReason(routeDecision == null ? "" : routeDecision.reason())
-                .routeCostTier(routeDecision == null ? "" : routeDecision.costTier())
-                .experimentKey(routeDecision == null ? "" : routeDecision.experimentKey())
-                .experimentVariant(routeDecision == null ? "" : routeDecision.experimentVariant())
-                .experimentBucket(routeDecision == null ? null : routeDecision.experimentBucket())
-                .trace(trace)
-                .build();
-    }
-
-    private String formatSse(String event, String data) {
-        return "event: " + event + "\ndata: " + data + "\n\n";
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception ex) {
-            return "{\"message\":\"serialization_failed\"}";
-        }
-    }
-
-    private String normalizeAction(String action) {
-        if (!StringUtils.hasText(action)) {
-            return "finish";
-        }
-        return action.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private String appendContext(String origin, String action, Object observation) {
-        StringBuilder builder = new StringBuilder(emptyIfBlank(origin));
-        if (builder.length() > 0) {
-            builder.append("\n");
-        }
-        builder.append("action=").append(action).append(", observation=").append(toJson(observation));
-        return builder.toString();
-    }
-
-    private List<String> extractTraceStrings(List<ReactTraceStepVO> trace, String key) {
-        if (trace == null || trace.isEmpty()) {
-            return List.of();
-        }
-        Set<String> values = new LinkedHashSet<>();
-        for (ReactTraceStepVO step : trace) {
-            if (step == null || !(step.getObservation() instanceof Map<?, ?> observation)) {
-                continue;
-            }
-            Object raw = observation.get(key);
-            if (raw instanceof List<?> list) {
-                for (Object item : list) {
-                    String normalized = emptyIfBlank(String.valueOf(item));
-                    if (StringUtils.hasText(normalized)) {
-                        values.add(normalized);
-                    }
-                }
-            }
-        }
-        return List.copyOf(values);
-    }
-
-    private String attachCitationFooter(String answer, List<String> citations) {
-        String safeAnswer = emptyIfBlank(answer);
-        if (citations == null || citations.isEmpty()) {
-            return safeAnswer;
-        }
-        if (safeAnswer.contains("引用来源")) {
-            return safeAnswer;
-        }
-
-        StringBuilder builder = new StringBuilder(safeAnswer.trim());
-        if (builder.length() > 0) {
-            builder.append("\n\n");
-        }
-        builder.append("引用来源:\n");
-        for (int i = 0; i < citations.size(); i++) {
-            builder.append("[").append(i + 1).append("] ").append(citations.get(i)).append("\n");
-        }
-        return builder.toString().trim();
-    }
-
     private String emptyIfBlank(String value) {
         return StringUtils.hasText(value) ? value : "";
-    }
-
-    private boolean containsAny(String text, String... keywords) {
-        if (!StringUtils.hasText(text) || keywords == null || keywords.length == 0) {
-            return false;
-        }
-        for (String keyword : keywords) {
-            if (StringUtils.hasText(keyword) && text.contains(keyword.toLowerCase(Locale.ROOT))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private String currentTenantId() {
@@ -655,11 +404,6 @@ public class ReactAgentService {
         }
     }
 
-    private record ReasonDecision(String thought,
-                                  String action,
-                                  Map<String, Object> actionInput,
-                                  String answer,
-                                  List<String> citations,
-                                  List<String> evidence) {
+    private record AnswerResult(String answer, boolean fallback) {
     }
 }

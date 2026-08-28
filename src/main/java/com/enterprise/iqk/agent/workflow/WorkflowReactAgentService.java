@@ -121,6 +121,7 @@ public class WorkflowReactAgentService {
         long startedNs = System.nanoTime();
         AtomicReference<Long> firstTokenMs = new AtomicReference<>(null);
         AtomicReference<String> outcomeRef = new AtomicReference<>("error");
+        AtomicReference<String> taskIdRef = new AtomicReference<>("");
 
         return Flux.defer(() -> {
             validateRequest(request);
@@ -129,6 +130,7 @@ public class WorkflowReactAgentService {
             AgentTaskRecord task = workflowEngine.startTask(
                     tenantId, "REACT_STREAM", request.getPrompt(),
                     request.getModelProfile(), request.getChatId(), null);
+            taskIdRef.set(task.getTaskId());
 
             ModelRouter.ModelRouteDecision routeDecision = resolveRouteDecision(
                     request.getModelProfile(), "react", request.getChatId(), tenantId);
@@ -204,6 +206,13 @@ public class WorkflowReactAgentService {
                 .onErrorResume(ex -> {
                     String message = StringUtils.hasText(ex.getMessage())
                             ? ex.getMessage() : "stream failed";
+                    // Mark the task FAILED so a failed stream does not leave the
+                    // workflow record orphaned in a non-terminal state.
+                    String failedTaskId = taskIdRef.get();
+                    if (StringUtils.hasText(failedTaskId)) {
+                        workflowEngine.failTask(failedTaskId, message);
+                        workflowEngine.recordTaskMetrics("REACT_STREAM", "FAILED", elapsedMs(startedNs));
+                    }
                     return Flux.just(formatSse("error", toJson(Map.of("message", message))));
                 })
                 .doFinally(signal -> recordStreamMetrics(startedNs, firstTokenMs.get(), outcomeRef.get()));
@@ -252,8 +261,12 @@ public class WorkflowReactAgentService {
         try {
             String answer = callModel("你是企业级AI助手，请结合轨迹和观察信息给出最终答案。",
                     finalPrompt, routeDecision, tenantId, "react_final");
-            if (StringUtils.hasText(answer)) return answer;
-        } catch (RuntimeException ignored) {}
+            if (StringUtils.hasText(answer)) {
+                return answer;
+            }
+        } catch (RuntimeException ignored) {
+            // The deterministic fallback below keeps the workflow response usable.
+        }
         return "当前未能生成最终答案，请稍后重试。";
     }
 
@@ -350,9 +363,13 @@ public class WorkflowReactAgentService {
             String action = normalizeAction(node.path("action").asText("finish"));
             Map<String, Object> input = objectMapper.convertValue(
                     node.path("action_input"), new TypeReference<Map<String, Object>>() {});
-            if (input == null) input = Collections.emptyMap();
+            if (input == null) {
+                input = Collections.emptyMap();
+            }
             if (!List.of("query_school", "query_course", "add_course_reservation", "rag_search", "finish")
-                    .contains(action)) action = "finish";
+                    .contains(action)) {
+                action = "finish";
+            }
             return new ReasonDecision(node.path("thought").asText(""),
                     action, input, node.path("answer").asText(""), List.of(), List.of());
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {

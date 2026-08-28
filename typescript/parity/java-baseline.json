@@ -1,7 +1,7 @@
 {
   "javaOracle": {
-    "commit": "ac62bb3a83239b1b3a8701fcdcad7d337c2c400a",
-    "date": "2026-07-21"
+    "commit": "a3730820090b16548556102c2306a7d7610ec6b4",
+    "date": "2026-08-28"
   },
   "controllers": [
     {
@@ -237,7 +237,7 @@
     "typescriptFragments": ["consumer.apply(SecurityHeadersMiddleware, AuthContextMiddleware, HttpMetricsMiddleware, RateLimitMiddleware, AuditLogMiddleware)", "provide: APP_GUARD", "useClass: AuthGuard"]
   },
   "configurationMappings": [
-    { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaPrefix": "app.agent-harness", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_AGENT_HARNESS_TRUSTED_ENABLED", "APP_WORKSPACE_WRITE_ENABLED", "APP_WORKSPACE_SHELL_ENABLED", "APP_WORKSPACE_COMMAND_TIMEOUT_SECONDS", "APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES", "APP_WORKSPACE_ALLOWED_COMMANDS", "APP_WORKSPACE_ALLOWED_GIT_SUBCOMMANDS", "APP_MCP_SERVERS_JSON"] },
+    { "source": "src/main/java/com/enterprise/iqk/config/properties/AgentHarnessProperties.java", "javaPrefix": "app.agent-harness", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_AGENT_HARNESS_TRUSTED_ENABLED", "APP_WORKSPACE_WRITE_ENABLED", "APP_WORKSPACE_SHELL_ENABLED", "APP_WORKSPACE_COMMAND_TIMEOUT_SECONDS", "APP_WORKSPACE_MAX_COMMAND_OUTPUT_BYTES", "APP_WORKSPACE_ALLOWED_COMMANDS", "APP_WORKSPACE_ALLOWED_GIT_SUBCOMMANDS", "APP_MCP_SERVERS_JSON", "APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS"] },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/AuditProperties.java", "javaPrefix": "app.audit", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_AUDIT_RETENTION_DAYS"] },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/CostGovernanceProperties.java", "javaPrefix": "app.cost-governance", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_COST_ENABLED", "APP_COST_DEFAULT_MONTHLY_BUDGET_USD", "APP_COST_DEFAULT_HARD_LIMIT_ENABLED", "APP_COST_TOKEN_ESTIMATE_DIVISOR", "APP_COST_USD_PER_1K_LOW", "APP_COST_USD_PER_1K_BALANCED", "APP_COST_USD_PER_1K_HIGH"] },
     { "source": "src/main/java/com/enterprise/iqk/config/properties/FeedbackProperties.java", "javaPrefix": "app.feedback", "typescriptSource": "apps/api/src/config/env.ts", "typescriptFragments": ["APP_FEEDBACK_ENABLED", "APP_FEEDBACK_DATASET_PATH"] },

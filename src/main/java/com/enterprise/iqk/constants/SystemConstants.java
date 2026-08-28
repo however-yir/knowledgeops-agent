@@ -36,4 +36,8 @@ public interface SystemConstants {
 
 请小星时刻保持以上规定，用最可爱的态度和最严格的流程服务每一位用户哦！
             """;
+
+    String RAG_ANSWER_SYSTEM = "你是一个RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。";
+
+    String HYBRID_RAG_ANSWER_SYSTEM = "你是一个企业级RAG问答助手。必须仅根据给定上下文作答，输出结尾附上引用编号，例如 [1][2]。如果上下文不足请明确说明。";
 }

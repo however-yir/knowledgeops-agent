@@ -21,11 +21,11 @@ public final class HashUtils {
     }
 
     public static String sha256Hex(InputStream inputStream) {
-        try {
+        try (InputStream stream = inputStream) {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] buffer = new byte[8192];
             int read;
-            while ((read = inputStream.read(buffer)) != -1) {
+            while ((read = stream.read(buffer)) != -1) {
                 digest.update(buffer, 0, read);
             }
             return toHex(digest.digest());

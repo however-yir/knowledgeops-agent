@@ -9,6 +9,7 @@ public class RagProperties {
     private int retrieveTopK = 12;
     private int rerankTopK = 6;
     private double similarityThreshold = 0.45;
+    private double temperature = 0.2;
     private Split split = new Split();
 
     @Data

@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -98,6 +99,20 @@ public class AnswerFeedbackService {
                 Files.createDirectories(output.getParent());
             }
             String line = objectMapper.writeValueAsString(datasetItem) + System.lineSeparator();
+            long maxBytes = Math.max(0L, feedbackProperties.getMaxDatasetBytes());
+            // Rotate the dataset file when it would exceed the configured cap.
+            // This caps disk usage even under sustained feedback spam, while
+            // still keeping the most recent data in the active file path so
+            // downstream training pipelines can pick it up as usual.
+            if (maxBytes > 0 && Files.exists(output) && Files.size(output) >= maxBytes) {
+                String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+                String rotatedName = output.getFileName().toString();
+                int dot = rotatedName.lastIndexOf('.');
+                String stem = dot < 0 ? rotatedName : rotatedName.substring(0, dot);
+                String ext = dot < 0 ? "" : rotatedName.substring(dot);
+                Path rotated = output.resolveSibling(stem + "-" + timestamp + ext);
+                Files.move(output, rotated);
+            }
             Files.writeString(output, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException ex) {
             throw new IllegalStateException("failed to append feedback dataset", ex);

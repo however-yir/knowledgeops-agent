@@ -35,27 +35,26 @@ public class AuditLogFilter extends OncePerRequestFilter {
             try {
                 long duration = System.currentTimeMillis() - started;
                 String uri = request.getRequestURI();
-                if (uri.startsWith("/actuator")) {
-                    return;
+                if (!uri.startsWith("/actuator")) {
+                    Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+                    String principal = authentication == null ? "anonymous" : authentication.getName();
+                    String tenantId = resolveTenant(request);
+                    AuditLog logRecord = AuditLog.builder()
+                            .requestId(MDC.get("request_id"))
+                            .traceId(MDC.get("trace_id"))
+                            .tenantId(tenantId)
+                            .userIdentity(principal)
+                            .method(request.getMethod())
+                            .path(uri)
+                            .statusCode(response.getStatus())
+                            .durationMs(duration)
+                            .chatId(extractChatId(request))
+                            .jobId(request.getParameter("jobId"))
+                            .extraPayload(buildSafePayload(request))
+                            .createdAt(LocalDateTime.now())
+                            .build();
+                    auditLogMapper.insert(logRecord);
                 }
-                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-                String principal = authentication == null ? "anonymous" : authentication.getName();
-                String tenantId = resolveTenant(request);
-                AuditLog logRecord = AuditLog.builder()
-                        .requestId(MDC.get("request_id"))
-                        .traceId(MDC.get("trace_id"))
-                        .tenantId(tenantId)
-                        .userIdentity(principal)
-                        .method(request.getMethod())
-                        .path(uri)
-                        .statusCode(response.getStatus())
-                        .durationMs(duration)
-                        .chatId(extractChatId(request))
-                        .jobId(request.getParameter("jobId"))
-                        .extraPayload(buildSafePayload(request))
-                        .createdAt(LocalDateTime.now())
-                        .build();
-                auditLogMapper.insert(logRecord);
             } catch (Exception e) {
                 log.warn("Failed to persist audit log", e);
             }

@@ -18,13 +18,15 @@ public interface AgentStepMapper extends BaseMapper<AgentStepRecord> {
     AgentStepRecord findByStepId(@Param("stepId") String stepId);
 
     @Update("UPDATE agent_step SET status = #{status}, output_json = #{outputJson}, " +
-            "observation_json = #{observationJson}, output_tokens = #{outputTokens}, " +
+            "observation_json = #{observationJson}, input_tokens = #{inputTokens}, " +
+            "output_tokens = #{outputTokens}, " +
             "latency_ms = #{latencyMs}, error_message = #{errorMessage}, ended_at = NOW() " +
             "WHERE step_id = #{stepId}")
     int completeStep(@Param("stepId") String stepId,
                      @Param("status") String status,
                      @Param("outputJson") String outputJson,
                      @Param("observationJson") String observationJson,
+                     @Param("inputTokens") Long inputTokens,
                      @Param("outputTokens") Long outputTokens,
                      @Param("latencyMs") Long latencyMs,
                      @Param("errorMessage") String errorMessage);

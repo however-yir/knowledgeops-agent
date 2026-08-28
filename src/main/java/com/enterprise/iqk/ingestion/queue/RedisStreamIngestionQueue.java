@@ -4,13 +4,23 @@ import com.enterprise.iqk.config.properties.IngestionProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.redis.connection.stream.*;
+import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.stream.Consumer;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.PendingMessage;
+import org.springframework.data.redis.connection.stream.PendingMessages;
+import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
+import org.springframework.data.redis.connection.stream.ReadOffset;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.StreamReadOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -75,6 +85,43 @@ public class RedisStreamIngestionQueue implements IngestionQueue {
                 ingestionProperties.getRedis().getConsumerGroup(),
                 RecordId.of(recordId)
         );
+    }
+
+    @Override
+    public List<IngestionQueueMessage> claimIdle(String consumerName, Duration minIdle, int maxCount) {
+        if (!StringUtils.hasText(consumerName) || minIdle == null || minIdle.isZero() || minIdle.isNegative()) {
+            return Collections.emptyList();
+        }
+        String streamKey = ingestionProperties.getRedis().getStreamKey();
+        String group = ingestionProperties.getRedis().getConsumerGroup();
+        PendingMessagesSummary summary = redisTemplate.opsForStream().pending(streamKey, group);
+        if (summary == null || summary.getTotalPendingMessages() == 0) {
+            return Collections.emptyList();
+        }
+        PendingMessages pending = redisTemplate.opsForStream()
+                .pending(streamKey, group, Range.unbounded(), Math.max(1, maxCount));
+        if (pending == null || pending.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<RecordId> idleIds = new ArrayList<>();
+        for (PendingMessage message : pending) {
+            if (message.getElapsedTimeSinceLastDelivery().compareTo(minIdle) >= 0) {
+                idleIds.add(message.getId());
+            }
+        }
+        if (idleIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<MapRecord<String, Object, Object>> claimed = redisTemplate.opsForStream()
+                .claim(streamKey, group, consumerName, minIdle, idleIds.toArray(RecordId[]::new));
+        if (claimed == null || claimed.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return claimed.stream().map(record -> IngestionQueueMessage.builder()
+                .recordId(record.getId().getValue())
+                .jobId(valueAsString(record.getValue().get("jobId")))
+                .traceId(valueAsString(record.getValue().get("traceId")))
+                .build()).toList();
     }
 
     @Override

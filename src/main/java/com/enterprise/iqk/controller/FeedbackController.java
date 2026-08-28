@@ -7,7 +7,6 @@ import com.enterprise.iqk.service.AnswerFeedbackService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,9 +17,8 @@ public class FeedbackController {
     private final AnswerFeedbackService answerFeedbackService;
 
     @PostMapping
-    public Result submit(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                         @RequestBody AnswerFeedbackSubmitVO payload) {
-        answerFeedbackService.submit(tenantId, payload);
+    public Result submit(@RequestBody AnswerFeedbackSubmitVO payload) {
+        answerFeedbackService.submit(TenantContext.currentTenantId(), payload);
         return Result.ok();
     }
 }

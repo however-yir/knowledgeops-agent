@@ -8,7 +8,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.messages.*;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -20,6 +24,8 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class MysqlChatMemory implements ChatMemory {
+    private static final int DEFAULT_HISTORY_SIZE = 100;
+
     private final ConversationMapper conversationMapper;
 
 
@@ -39,15 +45,19 @@ public class MysqlChatMemory implements ChatMemory {
     }
 
     @Override
+    public List<Message> get(String conversationId) {
+        return get(conversationId, DEFAULT_HISTORY_SIZE);
+    }
+
     public List<Message> get(String conversationId, int lastN) {
         if (lastN <= 0) {
             return List.of();
         }
         List<Conversation> records = conversationMapper.findLatestMessages(currentTenantId(), conversationId, lastN);
-        if(records==null||records.size()==0){
+        if (records == null || records.isEmpty()) {
             //没查到
             return new ArrayList<>();
-        }else{
+        } else {
             //说明有数据
 
             List<Message> messageList = new ArrayList<>();
@@ -58,7 +68,7 @@ public class MysqlChatMemory implements ChatMemory {
                 } else if (MessageType.ASSISTANT.getValue().equals(r.getType())) {
                     message = new AssistantMessage(r.getMessage());
                 } else if (MessageType.SYSTEM.getValue().equals(r.getType())) {
-                    message =  new SystemMessage(r.getMessage());
+                    message = new SystemMessage(r.getMessage());
                 }
                 if (message == null) {
                     log.warn("skip unsupported chat memory message type: conversationId={}, type={}",

@@ -7,19 +7,22 @@ import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
-import org.springframework.ai.model.Media;
+import org.springframework.ai.content.Media;
 import org.slf4j.MDC;
+import org.springframework.http.MediaType;
 import org.springframework.util.MimeType;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
-import java.util.Objects;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 @RestController
 @RequestMapping("/ai")
@@ -31,22 +34,7 @@ public class ChatController {
 
     private final ChatHistoryRepository chatHistoryRepository;
 
-//    @RequestMapping(value = "/chat", produces = "text/html;charset=UTF-8")
-//    @SneakyThrows
-//    public Flux<String> chat(String prompt,String chatId){
-//        //        String content = chatClient
-////                .prompt(prompt)
-////                .call()//同步调用，就是等他全部执行完，才返回结果
-////                .content();
-////        return content;
-//        chatHistoryRepository.save("chat",chatId);
-//        return chatClient
-//                .prompt(prompt)
-//                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId))
-//                .stream()
-//                .content();
-//    }
-    @RequestMapping(value = "/chat", produces = "text/html;charset=utf-8")
+    @PostMapping(value = "/chat", produces = "text/html;charset=utf-8")
     public Flux<String> chat(
             @RequestParam("prompt") String prompt,
             @RequestParam("chatId") String chatId,
@@ -66,18 +54,36 @@ public class ChatController {
 
     }
 
+    @RequestMapping(value = "/chat/stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> chatStream(
+            @RequestParam("prompt") String prompt,
+            @RequestParam("chatId") String chatId,
+            @RequestParam(value = "modelProfile", required = false) String modelProfile,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files) {
+        return chat(prompt, chatId, modelProfile, files);
+    }
+
     private Flux<String> multiModalChat(String prompt,
                                         String conversationId,
                                         List<MultipartFile> files,
                                         String modelProfile,
                                         String chatId) {
         List<Media> mediaList = files.stream().map(f -> {
-            return new Media(MimeType.valueOf(Objects.requireNonNull(f.getContentType())), f.getResource());
+            // A multipart upload without an explicit Content-Type header would
+            // make Spring's MultipartFile.getContentType() return null; passing
+            // that to MimeType.valueOf throws NPE. Fall back to application/
+            // octet-stream so the model receives a usable MimeType and the
+            // error stays a clean 4xx instead of a 500.
+            String contentType = f.getContentType();
+            MimeType mime = StringUtils.hasText(contentType)
+                    ? MimeType.valueOf(contentType)
+                    : MediaType.APPLICATION_OCTET_STREAM;
+            return new Media(mime, f.getResource());
         }).toList();
 
         return routedPrompt(modelProfile, "chat", chatId)
-                .user(t->t.text(prompt).media(mediaList.toArray(Media[]::new)))
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new)))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
     }
@@ -85,7 +91,7 @@ public class ChatController {
     private Flux<String> textChat(String prompt, String conversationId, String modelProfile, String chatId) {
         return routedPrompt(modelProfile, "chat", chatId)
                 .user(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .stream()
                 .content();
     }

@@ -2,12 +2,12 @@ package com.enterprise.iqk.retrieval.web;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -23,18 +23,37 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class BingSearchBackend implements WebSearchBackend {
 
     private final WebSearchProperties properties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+    // volatile + double-checked initialization: concurrent first-callers
+    // would otherwise see partially constructed factories with mismatched
+    // timeouts, or one of the two RestTemplate instances would be silently
+    // dropped while both threads raced through the `if (restTemplate == null)`
+    // branch.
+    private volatile RestTemplate restTemplate;
+
+    public BingSearchBackend(WebSearchProperties properties, ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+    }
 
     private RestTemplate getRestTemplate() {
-        if (restTemplate == null) {
-            restTemplate = new RestTemplate();
+        RestTemplate local = restTemplate;
+        if (local == null) {
+            synchronized (this) {
+                local = restTemplate;
+                if (local == null) {
+                    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+                    factory.setConnectTimeout(properties.getConnectTimeoutMs());
+                    factory.setReadTimeout(properties.getReadTimeoutMs());
+                    local = new RestTemplate(factory);
+                    restTemplate = local;
+                }
+            }
         }
-        return restTemplate;
+        return local;
     }
 
     @Override
@@ -85,3 +104,4 @@ public class BingSearchBackend implements WebSearchBackend {
                 && !properties.getBingApiKey().isBlank();
     }
 }
+

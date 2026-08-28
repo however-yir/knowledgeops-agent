@@ -16,6 +16,7 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
             WHERE tenant_id = #{tenantId}
               AND user_id = #{userId}
               AND type = #{type}
+              AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)
@@ -28,6 +29,7 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
             SELECT * FROM memory_item
             WHERE tenant_id = #{tenantId}
               AND user_id = #{userId}
+              AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)
@@ -35,14 +37,21 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                                        @Param("userId") String userId,
                                        @Param("limit") int limit);
 
-    @Select("SELECT * FROM memory_item WHERE source_task_id = #{taskId}")
-    List<MemoryItemRecord> findByTaskId(@Param("taskId") String taskId);
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND source_task_id = #{taskId}
+              AND (expires_at IS NULL OR expires_at > NOW())
+            """)
+    List<MemoryItemRecord> findByTenantAndTaskId(@Param("tenantId") String tenantId,
+                                                 @Param("taskId") String taskId);
 
     @Select("""
             SELECT * FROM memory_item
             WHERE tenant_id = #{tenantId}
               AND type = #{type}
               AND confidence >= #{minConfidence}
+              AND (expires_at IS NULL OR expires_at > NOW())
             ORDER BY created_at DESC
             LIMIT #{limit}
             """)
@@ -51,8 +60,15 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemRecord> {
                                                     @Param("minConfidence") double minConfidence,
                                                     @Param("limit") int limit);
 
-    @Select("SELECT * FROM memory_item WHERE memory_id = #{memoryId}")
-    MemoryItemRecord findByMemoryId(@Param("memoryId") String memoryId);
+    @Select("""
+            SELECT * FROM memory_item
+            WHERE tenant_id = #{tenantId}
+              AND memory_id = #{memoryId}
+              AND (expires_at IS NULL OR expires_at > NOW())
+            LIMIT 1
+            """)
+    MemoryItemRecord findByTenantAndMemoryId(@Param("tenantId") String tenantId,
+                                             @Param("memoryId") String memoryId);
 
     @Delete("DELETE FROM memory_item WHERE expires_at IS NOT NULL AND expires_at < NOW()")
     int deleteExpired();

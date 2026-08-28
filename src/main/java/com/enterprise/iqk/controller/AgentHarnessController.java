@@ -6,6 +6,7 @@ import com.enterprise.iqk.agent.harness.AgentObservation;
 import com.enterprise.iqk.agent.harness.TrustedActionPreviewResponse;
 import com.enterprise.iqk.agent.harness.TrustedActionRequest;
 import com.enterprise.iqk.agent.harness.TrustedActionService;
+import com.enterprise.iqk.security.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -39,14 +40,15 @@ public class AgentHarnessController {
     @PostMapping("/actions/preview")
     @PreAuthorize("hasAnyAuthority('PERM_AGENT_TRUSTED','ROLE_ADMIN')")
     public ResponseEntity<TrustedActionPreviewResponse> preview(@RequestBody TrustedActionRequest request) {
-        return ResponseEntity.ok(trustedActionService.preview(request));
+        return ResponseEntity.ok(trustedActionService.preview(
+                request.withTenantId(TenantContext.currentTenantId())));
     }
 
     @Operation(summary = "Execute a previously previewed trusted runtime action")
     @PostMapping("/actions/execute/{token}")
     @PreAuthorize("hasAnyAuthority('PERM_AGENT_TRUSTED','ROLE_ADMIN')")
     public ResponseEntity<?> execute(@PathVariable String token) {
-        AgentObservation observation = trustedActionService.execute(token);
+        AgentObservation observation = trustedActionService.execute(token, TenantContext.currentTenantId());
         return ResponseEntity.ok(observation.toMap());
     }
 }

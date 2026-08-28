@@ -30,10 +30,16 @@ public class RequestContextFilter extends OncePerRequestFilter {
         if (!StringUtils.hasText(requestId)) {
             requestId = UUID.randomUUID().toString();
         }
-        String tenantId = request.getHeader(TenantContext.TENANT_HEADER);
-        if (!StringUtils.hasText(tenantId)) {
-            Object tenantFromAttr = request.getAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE);
-            tenantId = tenantFromAttr == null ? "" : String.valueOf(tenantFromAttr);
+        // The tenant resolved from the authenticated identity (request attribute set by
+        // ApiKeyOrJwtAuthFilter) is authoritative. The X-Tenant-Id header is only honored
+        // when no authenticated identity provided a tenant, otherwise a caller could read
+        // and write another tenant's data by sending a forged header.
+        String tenantId;
+        Object tenantFromAttr = request.getAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE);
+        if (tenantFromAttr != null && StringUtils.hasText(String.valueOf(tenantFromAttr))) {
+            tenantId = String.valueOf(tenantFromAttr);
+        } else {
+            tenantId = request.getHeader(TenantContext.TENANT_HEADER);
         }
         String chatId = request.getParameter("chatId");
         String traceId = resolveTraceId();

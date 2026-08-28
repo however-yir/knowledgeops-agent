@@ -45,15 +45,30 @@ public class ResearchPlannerAgent {
         try {
             String json = extractJson(raw);
             Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-            @SuppressWarnings("unchecked")
-            List<String> subQuestions = (List<String>) parsed.getOrDefault("subQuestions", List.of());
-            @SuppressWarnings("unchecked")
-            List<String> keywords = (List<String>) parsed.getOrDefault("keywords", List.of());
-            String strategy = (String) parsed.getOrDefault("strategy", "breadth_first");
+            List<String> subQuestions = toStringList(parsed.get("subQuestions"));
+            if (subQuestions.isEmpty()) {
+                subQuestions = List.of(topic);
+            }
+            List<String> keywords = toStringList(parsed.get("keywords"));
+            String strategy = parsed.get("strategy") instanceof String s ? s : "breadth_first";
             return new ResearchPlan(subQuestions, keywords, strategy);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return new ResearchPlan(List.of(topic), List.of(), "direct");
         }
+    }
+
+    /**
+     * Defensive extraction: the model may return non-string list entries (numbers,
+     * nested objects), which would otherwise blow up with ClassCastException later.
+     */
+    private static List<String> toStringList(Object raw) {
+        if (!(raw instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .map(String::valueOf)
+                .filter(StringUtils::hasText)
+                .toList();
     }
 
     private String extractJson(String raw) {

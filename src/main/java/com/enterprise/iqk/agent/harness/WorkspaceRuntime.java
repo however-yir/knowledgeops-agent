@@ -212,26 +212,31 @@ public class WorkspaceRuntime implements AgentRuntime {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workspaceRoot.toFile());
         Process process = builder.start();
-        CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
-                () -> readProcessOutput(process.getInputStream()));
-        CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
-                () -> readProcessOutput(process.getErrorStream()));
-        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!finished) {
+        try {
+            CompletableFuture<ProcessOutput> stdout = CompletableFuture.supplyAsync(
+                    () -> readProcessOutput(process.getInputStream()));
+            CompletableFuture<ProcessOutput> stderr = CompletableFuture.supplyAsync(
+                    () -> readProcessOutput(process.getErrorStream()));
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                return Map.of("status", "error", "message", "command timed out");
+            }
+            ProcessOutput stdoutOutput = stdout.join();
+            ProcessOutput stderrOutput = stderr.join();
+            String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
+            String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
+            return Map.of(
+                    "exitCode", process.exitValue(),
+                    "stdout", stdoutText,
+                    "stderr", stderrText,
+                    "output", stdoutText + stderrText,
+                    "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
+            );
+        } finally {
+            // No-op for an already-exited process; guarantees the child is reaped even
+            // when waitFor is interrupted, so no handle is left behind.
             process.destroyForcibly();
-            return Map.of("status", "error", "message", "command timed out");
         }
-        ProcessOutput stdoutOutput = stdout.join();
-        ProcessOutput stderrOutput = stderr.join();
-        String stdoutText = new String(stdoutOutput.bytes(), StandardCharsets.UTF_8);
-        String stderrText = new String(stderrOutput.bytes(), StandardCharsets.UTF_8);
-        return Map.of(
-                "exitCode", process.exitValue(),
-                "stdout", stdoutText,
-                "stderr", stderrText,
-                "output", stdoutText + stderrText,
-                "truncated", stdoutOutput.truncated() || stderrOutput.truncated()
-        );
     }
 
     private Map<String, Object> fileSummary(Path path) {
@@ -305,7 +310,10 @@ public class WorkspaceRuntime implements AgentRuntime {
             return command.size() == 1;
         }
         if ("ls".equals(executable) || "rg".equals(executable)) {
-            return true;
+            // Non-flag arguments are filesystem paths (for rg the first non-flag token
+            // is the pattern, which can only fail closed); reject anything resolving
+            // outside the workspace root so the shell cannot be used to read host files.
+            return argsWithinWorkspace(command.subList(1, command.size()));
         }
         if ("git".equals(executable)) {
             return command.size() >= 2
@@ -319,6 +327,23 @@ public class WorkspaceRuntime implements AgentRuntime {
                     || token.startsWith("-D"));
         }
         return false;
+    }
+
+    private boolean argsWithinWorkspace(List<String> args) {
+        for (String arg : args) {
+            if (arg.startsWith("-")) {
+                continue;
+            }
+            try {
+                Path resolved = workspaceRoot.resolve(arg).normalize();
+                if (!resolved.startsWith(workspaceRoot)) {
+                    return false;
+                }
+            } catch (Exception ex) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private int maxCommandOutputBytes() {
@@ -352,6 +377,8 @@ public class WorkspaceRuntime implements AgentRuntime {
     private static AgentHarnessProperties defaultProperties(Path workspaceRoot) {
         AgentHarnessProperties properties = new AgentHarnessProperties();
         properties.getWorkspace().setRoot(workspaceRoot.toString());
+        properties.getWorkspace().setWriteEnabled(true);
+        properties.getWorkspace().setShellEnabled(true);
         return properties;
     }
 

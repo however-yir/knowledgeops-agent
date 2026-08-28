@@ -101,7 +101,7 @@ class IngestionServiceTest {
         org.springframework.ai.vectorstore.VectorStore vectorStore = mock(org.springframework.ai.vectorstore.VectorStore.class);
         IngestionQueue queue = mock(IngestionQueue.class);
         FileSafetyScanner scanner = mock(FileSafetyScanner.class);
-        when(mapper.claimForRun(any(), any(), any(), any())).thenReturn(0);
+        when(mapper.claimForRun(any(), any(), any(), any(), any())).thenReturn(0);
 
         IngestionService service = buildService(
                 mapper, vectorStore, new IngestionProperties(), new VectorStoreProperties(), queue, scanner

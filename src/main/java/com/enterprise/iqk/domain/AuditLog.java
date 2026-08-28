@@ -30,4 +30,12 @@ public class AuditLog {
     private String jobId;
     private String extraPayload;
     private LocalDateTime createdAt;
+
+    public String getPrincipal() {
+        return userIdentity;
+    }
+
+    public Integer getStatus() {
+        return statusCode;
+    }
 }

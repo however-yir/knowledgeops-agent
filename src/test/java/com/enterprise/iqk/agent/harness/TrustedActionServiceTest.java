@@ -33,8 +33,8 @@ class TrustedActionServiceTest {
                 "workspace_apply_patch",
                 Map.of("path", "README.md", "content", "next"),
                 "prompt", "tenant", "chat", "balanced", "task-1", "step-1"));
-        AgentObservation executed = service.execute(preview.token());
-        AgentObservation secondExecute = service.execute(preview.token());
+        AgentObservation executed = service.execute(preview.token(), "tenant");
+        AgentObservation secondExecute = service.execute(preview.token(), "tenant");
 
         assertThat(preview.ok()).isEqualTo(1);
         assertThat(preview.preview()).containsKey("patch");
@@ -46,6 +46,26 @@ class TrustedActionServiceTest {
         verify(harnessService, org.mockito.Mockito.times(2)).execute(actionCaptor.capture());
         assertThat(actionCaptor.getAllValues().get(0).action()).isEqualTo("workspace_propose_patch");
         assertThat(actionCaptor.getAllValues().get(1).trustedRuntimeAccess()).isTrue();
+    }
+
+    @Test
+    void trustedActionTokenCannotBeExecutedByAnotherTenant() {
+        AgentHarnessService harnessService = mock(AgentHarnessService.class);
+        TrustedActionService service = new TrustedActionService(
+                harnessService,
+                new ActionSchemaRegistry(),
+                new HarnessPayloadSanitizer()
+        );
+        TrustedActionPreviewResponse preview = service.preview(new TrustedActionRequest(
+                "workspace_read_file", Map.of("path", "README.md"),
+                "prompt", "tenant-a", "chat", "balanced", "task-1", "step-1"));
+
+        AgentObservation denied = service.execute(preview.token(), "tenant-b");
+
+        assertThat(denied.toMap())
+                .containsEntry("status", "error")
+                .containsEntry("message", "trusted action token not found");
+        verify(harnessService, org.mockito.Mockito.never()).execute(any());
     }
 
     @Test

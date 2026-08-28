@@ -9,11 +9,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.slf4j.MDC;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
 @RequiredArgsConstructor
 @RestController
@@ -25,7 +26,7 @@ public class CustomerServiceController {
 
     private final ChatHistoryRepository chatHistoryRepository;
 
-    @RequestMapping(value = "/service", produces = "text/html;charset=utf-8")
+    @PostMapping(value = "/service", produces = "text/html;charset=utf-8")
     public String service(String prompt,
                           String chatId,
                           @RequestParam(value = "modelProfile", required = false) String modelProfile) {
@@ -38,7 +39,7 @@ public class CustomerServiceController {
         return serviceChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .user(prompt)
-                .advisors(a -> a.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .call()
                 .content();
     }

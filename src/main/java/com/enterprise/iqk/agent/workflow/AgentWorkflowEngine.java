@@ -77,7 +77,7 @@ public class AgentWorkflowEngine {
                               String errorMessage) {
         stepMapper.completeStep(stepId, status,
                 toJson(output), toJson(observation),
-                outputTokens, latencyMs, errorMessage);
+                inputTokens, outputTokens, latencyMs, errorMessage);
 
         AgentStepRecord step = stepMapper.findByStepId(stepId);
         if (StringUtils.hasText(thought) && step != null) {
@@ -107,8 +107,13 @@ public class AgentWorkflowEngine {
     public void transitionStatus(String taskId, WorkflowState from, WorkflowState to) {
         if (!from.canTransitionTo(to)) {
             log.warn("Invalid state transition: {} -> {} for task {}", from, to, taskId);
+            return;
         }
-        taskMapper.updateStatus(taskId, to.name());
+        int updated = taskMapper.updateStatus(taskId, to.name());
+        if (updated == 0) {
+            log.warn("State transition had no effect: task {} already in terminal state", taskId);
+            return;
+        }
         emitEvent(taskId, null, "STATE_CHANGED",
                 Map.of("from", from.name(), "to", to.name()));
     }
@@ -181,8 +186,8 @@ public class AgentWorkflowEngine {
 
     // ── Query ────────────────────────────────────────────────────
 
-    public WorkflowTaskVO getTask(String taskId) {
-        AgentTaskRecord task = taskMapper.findByTaskId(taskId);
+    public WorkflowTaskVO getTask(String tenantId, String taskId) {
+        AgentTaskRecord task = taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
         if (task == null) {
             return null;
         }
@@ -200,7 +205,10 @@ public class AgentWorkflowEngine {
                 .toList();
     }
 
-    public List<WorkflowEventVO> getTaskEvents(String taskId) {
+    public List<WorkflowEventVO> getTaskEvents(String tenantId, String taskId) {
+        if (taskMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId) == null) {
+            return Collections.emptyList();
+        }
         return eventMapper.findByTaskId(taskId).stream()
                 .map(this::toEventVO)
                 .toList();

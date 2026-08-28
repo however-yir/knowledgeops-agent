@@ -19,4 +19,11 @@ public record TrustedActionRequest(
                 ? Collections.emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(actionInput));
     }
+
+    public TrustedActionRequest withTenantId(String authenticatedTenantId) {
+        return new TrustedActionRequest(
+                action, actionInput, prompt, authenticatedTenantId,
+                chatId, modelProfile, taskId, stepId
+        );
+    }
 }

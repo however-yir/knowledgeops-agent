@@ -20,8 +20,8 @@ public class AgentHarnessProperties {
     @Data
     public static class Workspace {
         private String root = ".";
-        private boolean writeEnabled = true;
-        private boolean shellEnabled = true;
+        private boolean writeEnabled = false;
+        private boolean shellEnabled = false;
         private int commandTimeoutSeconds = 10;
         private int maxCommandOutputBytes = 12_000;
         private int maxFileBytes = 20_000;
@@ -34,6 +34,13 @@ public class AgentHarnessProperties {
     @Data
     public static class Mcp {
         private Map<String, McpServer> servers = new LinkedHashMap<>();
+        // Optional operator-curated list of host patterns (exact host or
+        // suffix match like ".internal.example.com") that are allowed to be
+        // called even when they resolve to a loopback / private address.
+        // Default empty: all private/loopback hosts are refused. Tests and
+        // dev environments that need to point at a localhost mock can set
+        // e.g. ["localhost", "127.0.0.1", "::1"] here.
+        private java.util.List<String> allowedHosts = new java.util.ArrayList<>();
     }
 
     @Data

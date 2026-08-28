@@ -32,7 +32,8 @@ public class KeywordRetriever {
         String outcome = "error";
         try {
             // Use vector store as document source, then re-rank by keyword overlap
-            String filter = "tenant_id == '" + sanitize(tenantId) + "' && chat_id == '" + sanitize(chatId) + "'";
+            String filter = "tenant_id == \"" + escapeFilter(tenantId)
+                    + "\" && chat_id == \"" + escapeFilter(chatId) + "\"";
             List<Document> docs = vectorStore.similaritySearch(
                     org.springframework.ai.vectorstore.SearchRequest.builder()
                             .query(query)
@@ -98,7 +99,8 @@ public class KeywordRetriever {
         return v == null ? fallback : v.toString();
     }
 
-    private String sanitize(String v) {
-        return (v == null ? "" : v).replace("'", "");
+    private String escapeFilter(String v) {
+        if (v == null) return "";
+        return v.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

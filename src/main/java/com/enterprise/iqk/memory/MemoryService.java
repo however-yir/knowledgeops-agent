@@ -1,7 +1,6 @@
 package com.enterprise.iqk.memory;
 
 import com.enterprise.iqk.security.TenantContext;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +11,6 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -77,19 +75,20 @@ public class MemoryService {
     // ── Query ─────────────────────────────────────────────────────
 
     public List<MemoryItemRecord> queryShortMemory(String tenantId, String userId, int limit) {
-        return itemMapper.findByUserAndType(tenantId, userId, "short", limit);
+        return itemMapper.findByUserAndType(TenantContext.normalize(tenantId), userId, "short", limit);
     }
 
     public List<MemoryItemRecord> queryLongMemory(String tenantId, String userId, int limit) {
-        return itemMapper.findByUserAndType(tenantId, userId, "long", limit);
+        return itemMapper.findByUserAndType(TenantContext.normalize(tenantId), userId, "long", limit);
     }
 
     public List<MemoryItemRecord> queryTaskMemory(String tenantId, String taskId) {
-        return itemMapper.findByTaskId(taskId);
+        return itemMapper.findByTenantAndTaskId(TenantContext.normalize(tenantId), taskId);
     }
 
     public List<MemoryItemRecord> queryFactMemory(String tenantId, double minConfidence, int limit) {
-        return itemMapper.findByTypeAndConfidence(tenantId, "fact", minConfidence, limit);
+        return itemMapper.findByTypeAndConfidence(
+                TenantContext.normalize(tenantId), "fact", minConfidence, limit);
     }
 
     /**
@@ -130,8 +129,8 @@ public class MemoryService {
         }
     }
 
-    public void deleteMemory(String memoryId) {
-        MemoryItemRecord item = itemMapper.findByMemoryId(memoryId);
+    public void deleteMemory(String tenantId, String memoryId) {
+        MemoryItemRecord item = itemMapper.findByTenantAndMemoryId(TenantContext.normalize(tenantId), memoryId);
         if (item != null) {
             itemMapper.deleteById(item.getId());
             emitEvent(memoryId, "DELETE", "manual deletion");
@@ -155,8 +154,9 @@ public class MemoryService {
         }
     }
 
-    public List<MemoryEventRecord> getEvents(String memoryId) {
-        return eventMapper.findByMemoryId(memoryId);
+    public List<MemoryEventRecord> getEvents(String tenantId, String memoryId) {
+        MemoryItemRecord item = itemMapper.findByTenantAndMemoryId(TenantContext.normalize(tenantId), memoryId);
+        return item == null ? Collections.emptyList() : eventMapper.findByMemoryId(memoryId);
     }
 
     public record MemoryContextSnapshot(String contextText,

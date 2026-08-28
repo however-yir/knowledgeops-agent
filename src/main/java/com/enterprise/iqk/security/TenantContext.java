@@ -1,5 +1,6 @@
 package com.enterprise.iqk.security;
 
+import org.slf4j.MDC;
 import org.springframework.util.StringUtils;
 
 public final class TenantContext {
@@ -12,5 +13,9 @@ public final class TenantContext {
 
     public static String normalize(String tenantId) {
         return StringUtils.hasText(tenantId) ? tenantId.trim() : DEFAULT_TENANT;
+    }
+
+    public static String currentTenantId() {
+        return normalize(MDC.get(TENANT_REQUEST_ATTRIBUTE));
     }
 }

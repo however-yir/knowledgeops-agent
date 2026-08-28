@@ -59,7 +59,7 @@ class AgentHarnessControllerWebMvcTest {
                 Instant.parse("2026-05-25T00:00:00Z"),
                 Map.of("status", "pending_confirmation")
         ));
-        when(trustedActionService.execute("ta-1"))
+        when(trustedActionService.execute("ta-1", "public"))
                 .thenReturn(AgentObservation.success("workspace", Map.of("status", "written"), 1));
 
         mockMvc.perform(post("/ai/harness/actions/preview")

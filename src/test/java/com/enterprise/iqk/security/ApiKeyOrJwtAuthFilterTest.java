@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.util.List;
@@ -40,14 +41,20 @@ class ApiKeyOrJwtAuthFilterTest {
                 .principal("tester")
                 .roles(List.of("ADMIN"))
                 .permissions(List.of("chat:write"))
+                .tenantId("tenant-a")
                 .source("api_key")
                 .build());
         ApiKeyOrJwtAuthFilter filter = new ApiKeyOrJwtAuthFilter(props, apiKeyAuthService, jwtService);
 
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/ai/chat");
         req.addHeader("X-API-Key", "ak");
+        req.addHeader(TenantContext.TENANT_HEADER, "tenant-b");
         MockHttpServletResponse resp = new MockHttpServletResponse();
-        filter.doFilter(req, resp, new MockFilterChain());
+        filter.doFilter(req, resp, (request, response) -> {
+            assertEquals("tenant-a", request.getAttribute(TenantContext.TENANT_REQUEST_ATTRIBUTE));
+            assertEquals("tenant-a", MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
+        });
         assertEquals(200, resp.getStatus());
+        assertEquals("tenant-a", resp.getHeader(TenantContext.TENANT_HEADER));
     }
 }

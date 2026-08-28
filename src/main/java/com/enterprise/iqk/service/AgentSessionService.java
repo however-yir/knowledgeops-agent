@@ -9,15 +9,16 @@ import com.enterprise.iqk.domain.vo.BranchMergeResultVO;
 import com.enterprise.iqk.domain.vo.PagedResult;
 import com.enterprise.iqk.mapper.AgentSessionStateMapper;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.util.SqlLikeUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,9 @@ import java.util.concurrent.ThreadLocalRandom;
 @Service
 @RequiredArgsConstructor
 public class AgentSessionService {
+
+    private static final int UPSERT_MAX_ATTEMPTS = 3;
+
     private final AgentSessionStateMapper agentSessionStateMapper;
     private final ObjectMapper objectMapper;
 
@@ -40,12 +44,15 @@ public class AgentSessionService {
         String tenant = TenantContext.normalize(tenantId);
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, pageSize);
-        long total = agentSessionStateMapper.countByTenant(tenant, emptyToNull(keyword), workspaceId, includeArchived);
+        // Escape SQL LIKE wildcards in the user-supplied keyword so a search
+        // for "%" or "_" cannot widen the result set beyond the intended rows.
+        String safeKeyword = SqlLikeUtils.escapeForLike(emptyToNull(keyword));
+        long total = agentSessionStateMapper.countByTenant(tenant, safeKeyword, workspaceId, includeArchived);
         if (total == 0) {
             return new PagedResult<>(Collections.emptyList(), 0, safePage, safePageSize);
         }
         long offset = (long) (safePage - 1) * safePageSize;
-        List<AgentSessionStateVO> items = agentSessionStateMapper.findByTenant(tenant, emptyToNull(keyword), workspaceId, includeArchived, offset, safePageSize)
+        List<AgentSessionStateVO> items = agentSessionStateMapper.findByTenant(tenant, safeKeyword, workspaceId, includeArchived, offset, safePageSize)
                 .stream()
                 .map(this::toSessionState)
                 .toList();
@@ -66,41 +73,66 @@ public class AgentSessionService {
         }
         String tenant = TenantContext.normalize(tenantId);
         String normalizedSessionId = sessionId.trim();
-        LocalDateTime now = LocalDateTime.now();
 
         AgentSessionStateVO state = normalizeSessionPayload(normalizedSessionId, payload);
         String serialized = writeJson(state);
 
-        AgentSessionStateRecord existing = agentSessionStateMapper.findByTenantAndSessionId(tenant, normalizedSessionId);
-        if (existing == null) {
-            AgentSessionStateRecord inserted = AgentSessionStateRecord.builder()
-                    .sessionId(normalizedSessionId)
-                    .tenantId(tenant)
-                    .title(defaultText(state.getTitle(), "新会话"))
-                    .workspaceId(defaultText(state.getWorkspaceId(), "default"))
-                    .modelProfile(defaultText(state.getModelProfile(), "balanced"))
-                    .streaming(Boolean.TRUE.equals(state.getStreaming()) ? 1 : 0)
-                    .pinned(Boolean.TRUE.equals(state.getPinned()) ? 1 : 0)
-                    .archived(Boolean.TRUE.equals(state.getArchived()) ? 1 : 0)
-                    .activeBranchId(state.getActiveBranchId())
-                    .sessionPayload(serialized)
-                    .createdAt(now)
-                    .updatedAt(now)
-                    .build();
-            agentSessionStateMapper.insert(inserted);
-        } else {
-            existing.setTitle(defaultText(state.getTitle(), "新会话"));
-            existing.setWorkspaceId(defaultText(state.getWorkspaceId(), "default"));
-            existing.setModelProfile(defaultText(state.getModelProfile(), "balanced"));
-            existing.setStreaming(Boolean.TRUE.equals(state.getStreaming()) ? 1 : 0);
-            existing.setPinned(Boolean.TRUE.equals(state.getPinned()) ? 1 : 0);
-            existing.setArchived(Boolean.TRUE.equals(state.getArchived()) ? 1 : 0);
-            existing.setActiveBranchId(state.getActiveBranchId());
-            existing.setSessionPayload(serialized);
-            existing.setUpdatedAt(now);
-            agentSessionStateMapper.updateById(existing);
+        // Optimistic-lock loop: the previous read-modify-write silently lost concurrent
+        // updates (and duplicate inserts raced on uk_agent_session_tenant_session).
+        for (int attempt = 0; attempt < UPSERT_MAX_ATTEMPTS; attempt++) {
+            AgentSessionStateRecord existing = agentSessionStateMapper.findByTenantAndSessionId(tenant, normalizedSessionId);
+            if (existing == null) {
+                try {
+                    agentSessionStateMapper.insert(buildInsertRecord(tenant, normalizedSessionId, state, serialized));
+                    return get(tenant, normalizedSessionId);
+                } catch (DuplicateKeyException raced) {
+                    // another writer inserted first; retry via the update path
+                }
+            } else {
+                long expectedLockVersion = existing.getLockVersion() == null ? 0L : existing.getLockVersion();
+                applyUpsertFields(existing, state, serialized);
+                int updated = agentSessionStateMapper.updateSessionStateIfUnchanged(
+                        existing, tenant, normalizedSessionId, expectedLockVersion);
+                if (updated > 0) {
+                    return get(tenant, normalizedSessionId);
+                }
+                // lock_version moved on: re-read the latest state before writing again
+            }
         }
-        return get(tenant, normalizedSessionId);
+        throw new IllegalStateException("session update conflict, please retry: " + normalizedSessionId);
+    }
+
+    private AgentSessionStateRecord buildInsertRecord(String tenant, String sessionId,
+                                                      AgentSessionStateVO state, String serialized) {
+        LocalDateTime now = LocalDateTime.now();
+        return AgentSessionStateRecord.builder()
+                .sessionId(sessionId)
+                .tenantId(tenant)
+                .title(defaultText(state.getTitle(), "新会话"))
+                .workspaceId(defaultText(state.getWorkspaceId(), "default"))
+                .modelProfile(defaultText(state.getModelProfile(), "balanced"))
+                .streaming(Boolean.TRUE.equals(state.getStreaming()) ? 1 : 0)
+                .pinned(Boolean.TRUE.equals(state.getPinned()) ? 1 : 0)
+                .archived(Boolean.TRUE.equals(state.getArchived()) ? 1 : 0)
+                .activeBranchId(state.getActiveBranchId())
+                .sessionPayload(serialized)
+                .createdAt(now)
+                .updatedAt(now)
+                .lockVersion(0L)
+                .build();
+    }
+
+    private void applyUpsertFields(AgentSessionStateRecord existing,
+                                   AgentSessionStateVO state, String serialized) {
+        existing.setTitle(defaultText(state.getTitle(), "新会话"));
+        existing.setWorkspaceId(defaultText(state.getWorkspaceId(), "default"));
+        existing.setModelProfile(defaultText(state.getModelProfile(), "balanced"));
+        existing.setStreaming(Boolean.TRUE.equals(state.getStreaming()) ? 1 : 0);
+        existing.setPinned(Boolean.TRUE.equals(state.getPinned()) ? 1 : 0);
+        existing.setArchived(Boolean.TRUE.equals(state.getArchived()) ? 1 : 0);
+        existing.setActiveBranchId(state.getActiveBranchId());
+        existing.setSessionPayload(serialized);
+        existing.setUpdatedAt(LocalDateTime.now());
     }
 
     public AgentSessionStateVO setPinned(String tenantId, String sessionId, boolean pinned) {
@@ -170,7 +202,6 @@ public class AgentSessionService {
 
         Set<String> targetFingerprints = toMessageFingerprintSet(targetMessages);
         Set<String> existingIds = messageIdSet(targetMessages);
-        int added = 0;
         for (AgentSessionMessageVO message : sourceMessages) {
             String fingerprint = fingerprint(message);
             if (targetFingerprints.contains(fingerprint)) {
@@ -179,7 +210,6 @@ public class AgentSessionService {
             ensureUniqueMessageId(message, existingIds);
             targetMessages.add(message);
             targetFingerprints.add(fingerprint);
-            added++;
         }
 
         AgentSessionBranchVO mergedBranch = new AgentSessionBranchVO();
@@ -401,10 +431,10 @@ public class AgentSessionService {
         if (state.getBranches() == null) return state;
 
         for (AgentSessionBranchVO branch : state.getBranches()) {
-            if (!branch.getId().equals(branchId)) continue;
+            if (!Objects.equals(branchId, branch.getId())) continue;
             if (branch.getMessages() == null) continue;
             for (AgentSessionMessageVO msg : branch.getMessages()) {
-                if (!msg.getId().equals(messageId)) continue;
+                if (!Objects.equals(messageId, msg.getId())) continue;
                 msg.setTaskId(taskId);
                 msg.setTraceId(traceId);
                 msg.setMemorySnapshot(memorySnapshot);

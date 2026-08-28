@@ -3,11 +3,21 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.config.properties.SecurityProperties;
 import com.enterprise.iqk.domain.vo.ApiKeyIssueVO;
 import com.enterprise.iqk.domain.vo.AuthTokenVO;
-import com.enterprise.iqk.security.*;
+import com.enterprise.iqk.security.ApiKeyAuthService;
+import com.enterprise.iqk.security.ApiKeyLifecycleService;
+import com.enterprise.iqk.security.AuthIdentity;
+import com.enterprise.iqk.security.JwtService;
+import com.enterprise.iqk.security.PermissionService;
+import com.enterprise.iqk.security.RefreshTokenService;
+import com.enterprise.iqk.security.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -60,9 +70,9 @@ public class AuthController {
     @PostMapping("/api-keys")
     @PreAuthorize("hasAnyAuthority('PERM_AUTH_KEY_MANAGE','ROLE_ADMIN')")
     public ApiKeyIssueVO issueApiKey(@RequestParam("keyName") String keyName,
-                                     @RequestParam(value = "role", defaultValue = "USER") String roleName,
-                                     @RequestParam(value = "tenantId", required = false) String tenantId) {
-        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.issue(keyName, roleName, tenantId);
+                                     @RequestParam(value = "role", defaultValue = "USER") String roleName) {
+        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.issue(
+                keyName, roleName, TenantContext.currentTenantId());
         return ApiKeyIssueVO.builder()
                 .ok(1)
                 .msg("ok")
@@ -76,9 +86,9 @@ public class AuthController {
     @PostMapping("/api-keys/rotate")
     @PreAuthorize("hasAnyAuthority('PERM_AUTH_KEY_MANAGE','ROLE_ADMIN')")
     public ApiKeyIssueVO rotateApiKey(@RequestParam("keyName") String keyName,
-                                      @RequestParam(value = "reason", defaultValue = "rotation") String reason,
-                                      @RequestParam(value = "tenantId", required = false) String tenantId) {
-        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.rotate(keyName, reason, tenantId);
+                                      @RequestParam(value = "reason", defaultValue = "rotation") String reason) {
+        ApiKeyLifecycleService.ApiKeyIssueResult result = apiKeyLifecycleService.rotate(
+                keyName, reason, TenantContext.currentTenantId());
         return ApiKeyIssueVO.builder()
                 .ok(1)
                 .msg("rotated")
@@ -92,9 +102,8 @@ public class AuthController {
     @PostMapping("/api-keys/revoke")
     @PreAuthorize("hasAnyAuthority('PERM_AUTH_KEY_MANAGE','ROLE_ADMIN')")
     public ApiKeyIssueVO revokeApiKey(@RequestParam("keyName") String keyName,
-                                      @RequestParam(value = "reason", defaultValue = "manual revoke") String reason,
-                                      @RequestParam(value = "tenantId", required = false) String tenantId) {
-        String normalizedTenant = TenantContext.normalize(tenantId);
+                                      @RequestParam(value = "reason", defaultValue = "manual revoke") String reason) {
+        String normalizedTenant = TenantContext.currentTenantId();
         apiKeyLifecycleService.revoke(keyName, reason, normalizedTenant);
         return ApiKeyIssueVO.builder()
                 .ok(1)

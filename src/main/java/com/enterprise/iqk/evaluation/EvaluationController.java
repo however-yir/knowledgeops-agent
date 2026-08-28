@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -27,45 +26,47 @@ public class EvaluationController {
     private final EvaluationService evaluationService;
 
     @PostMapping("/datasets")
-    public EvalDatasetVO createDataset(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                                       @RequestBody EvalDatasetCreateVO request) {
-        return evaluationService.createDataset(tenantId, request);
+    public EvalDatasetVO createDataset(@RequestBody EvalDatasetCreateVO request) {
+        return evaluationService.createDataset(TenantContext.currentTenantId(), request);
     }
 
     @GetMapping("/datasets")
-    public List<EvalDatasetVO> listDatasets(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId) {
-        return evaluationService.listDatasets(tenantId);
+    public List<EvalDatasetVO> listDatasets() {
+        return evaluationService.listDatasets(TenantContext.currentTenantId());
     }
 
     @PostMapping("/datasets/{datasetId}/runs")
-    public EvalRunVO triggerRun(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                                @PathVariable("datasetId") String datasetId,
+    public EvalRunVO triggerRun(@PathVariable("datasetId") String datasetId,
                                 @RequestBody(required = false) EvalRunRequestVO request) {
-        return evaluationService.triggerRun(tenantId, datasetId, request);
+        return evaluationService.triggerRun(TenantContext.currentTenantId(), datasetId, request);
+    }
+
+    @PostMapping("/runs")
+    public EvalRunVO triggerRunByContract(@RequestBody EvalRunRequestVO request) {
+        if (request == null || !org.springframework.util.StringUtils.hasText(request.getDatasetId())) {
+            throw new IllegalArgumentException("datasetId is required");
+        }
+        return evaluationService.triggerRun(TenantContext.currentTenantId(), request.getDatasetId(), request);
     }
 
     @GetMapping("/datasets/{datasetId}/comparison")
-    public EvalComparisonVO compareLatest(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                                          @PathVariable("datasetId") String datasetId) {
-        return evaluationService.compareLatest(tenantId, datasetId);
+    public EvalComparisonVO compareLatest(@PathVariable("datasetId") String datasetId) {
+        return evaluationService.compareLatest(TenantContext.currentTenantId(), datasetId);
     }
 
     @GetMapping("/runs/{runId}")
-    public EvalRunVO getRun(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                            @PathVariable("runId") String runId) {
-        return evaluationService.getRun(tenantId, runId);
+    public EvalRunVO getRun(@PathVariable("runId") String runId) {
+        return evaluationService.getRun(TenantContext.currentTenantId(), runId);
     }
 
     @PostMapping("/runs/{runId}/baseline")
-    public EvalRunVO markBaseline(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                                  @PathVariable("runId") String runId) {
-        return evaluationService.markBaseline(tenantId, runId);
+    public EvalRunVO markBaseline(@PathVariable("runId") String runId) {
+        return evaluationService.markBaseline(TenantContext.currentTenantId(), runId);
     }
 
     @GetMapping(value = "/runs/{runId}/report", produces = "text/markdown;charset=UTF-8")
-    public ResponseEntity<String> exportReport(@RequestHeader(value = TenantContext.TENANT_HEADER, required = false) String tenantId,
-                                               @PathVariable("runId") String runId) {
-        String report = evaluationService.exportReport(tenantId, runId);
+    public ResponseEntity<String> exportReport(@PathVariable("runId") String runId) {
+        String report = evaluationService.exportReport(TenantContext.currentTenantId(), runId);
         return ResponseEntity.ok()
                 .contentType(MediaType.valueOf("text/markdown;charset=UTF-8"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"rag-evaluation-" + runId + ".md\"")
