@@ -58,7 +58,7 @@ from .application.research import (
     parse_research_questions,
     research_evidence_text,
 )
-from .application.retrieval_math import cosine_like, tokenize, vector_cosine
+from .application.retrieval_math import HybridWeights, cosine_like, tokenize, vector_cosine
 from .application.workflow import ReactWorkflowApplicationService
 from .config import Settings, load_settings
 from .domain.context import TenantContext
@@ -470,6 +470,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 create_reranker(active_settings),
                 active_settings.is_production,
                 vector_store,
+                HybridWeights.from_csv(active_settings.hybrid_weights),
             )
             return {
                 "evidence": rag["evidence"],
@@ -842,6 +843,7 @@ async def rag_response_with_provider(
         create_reranker(settings),
         settings.is_production,
         vector_store,
+        HybridWeights.from_csv(settings.hybrid_weights),
     )
     base = await chat_response_with_provider(
         store, ctx, request, "rag", require_evidence, settings, rag, session_repository, record_session, memory_service
@@ -925,6 +927,7 @@ async def retrieve_hybrid(
     reranker: Reranker | None = None,
     require_provider_success: bool = False,
     vector_store: VectorStore | None = None,
+    weights: HybridWeights | None = None,
 ) -> dict[str, Any]:
     chunks = (
         await ingestion_repository.chunks(tenant_id, chat_id)
@@ -942,6 +945,7 @@ async def retrieve_hybrid(
         require_provider_success,
         vector_store=vector_store,
         chat_id=chat_id,
+        weights=weights,
     )
 
 
@@ -954,7 +958,9 @@ async def retrieve_chunks_with_semantics(
     require_provider_success: bool,
     vector_store: VectorStore | None = None,
     chat_id: str = "",
+    weights: HybridWeights | None = None,
 ) -> dict[str, Any]:
+    effective = weights.normalized() if weights is not None else HybridWeights()
     lexical = retrieve_chunks(chunks, prompt)
     if embedding_provider is None:
         return lexical
@@ -980,14 +986,27 @@ async def retrieve_chunks_with_semantics(
             raise HTTPException(status_code=502, detail="embedding provider request failed") from exc
         return lexical
     semantic_hits = [(score, chunk) for score, chunk in semantic_hits if score >= 0.45]
-    semantic_hits.sort(key=lambda item: item[0], reverse=True)
-    chunk_by_id = {str(chunk["chunkId"]): chunk for chunk in chunks}
-    candidates = [chunk for _, chunk in semantic_hits]
-    candidates.extend(chunk_by_id[str(citation.chunkId)] for citation in lexical["citations"] if str(citation.chunkId) in chunk_by_id)
-    unique: dict[str, dict[str, Any]] = {}
-    for chunk in candidates:
-        unique.setdefault(str(chunk["chunkId"]), chunk)
-    selected = list(unique.values())[:5]
+
+    # Weighted per-source fusion (Java parity #115): each source contributes
+    # its score scaled by its normalized weight; a chunk seen in several
+    # sources keeps its strongest weighted score. With the DEFAULT weights this
+    # reproduces the previous ordering exactly (all semantic hits outrank all
+    # lexical/graph hits, which keep their rank order).
+    scored: dict[str, tuple[float, dict[str, Any]]] = {}
+
+    def offer(chunk: dict[str, Any], score: float) -> None:
+        key = str(chunk["chunkId"])
+        best = scored.get(key)
+        if best is None or score > best[0]:
+            scored[key] = (score, chunk)
+
+    for score, chunk in semantic_hits:
+        offer(chunk, score * effective.vector)
+    for rank, (_, chunk) in enumerate(lexical_ranked(chunks, prompt)):
+        source_weight = effective.graph if chunk.get("_retrievalSource") == "graph" else effective.keyword
+        offer(chunk, (1.0 / (rank + 1)) * source_weight)
+    ordered = [chunk for _, chunk in sorted(scored.values(), key=lambda item: item[0], reverse=True)]
+    selected = ordered[:5]
     if reranker is not None and selected:
         try:
             scores = await reranker.rank(context, prompt, [str(chunk["content"]) for chunk in selected])
@@ -1003,7 +1022,7 @@ async def retrieve_chunks_with_semantics(
         "retrievalStats": {
             **lexical["retrievalStats"],
             "vectorMatches": len({str(chunk["chunkId"]) for _, chunk in semantic_hits}),
-            "hybridMatches": len(unique),
+            "hybridMatches": len(scored),
             "evidenceAccepted": len(selected),
             "refused": len(selected) == 0,
         },
@@ -1043,6 +1062,7 @@ async def graph_chunks(repository: SqlAlchemyGraphRepository, tenant_id: str, pr
                 "sourceName": "graph",
                 "title": f"{entity['name']} ({entity['type']})",
                 "content": content,
+                "_retrievalSource": "graph",
                 "tokens": set(tokenize(content)),
             }
         )
@@ -1065,7 +1085,7 @@ def graph_keyword(prompt: str) -> str:
     return max(tokens, key=len) if tokens else prompt.strip()
 
 
-def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]:
+def lexical_ranked(chunks: list[dict[str, Any]], prompt: str) -> list[tuple[float, dict[str, Any]]]:
     tokens = set(tokenize(prompt))
     keyword_hits = []
     vector_hits = []
@@ -1081,7 +1101,11 @@ def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]
     for vector_score, chunk in vector_hits:
         current = candidates.get(chunk["chunkId"], (0.0, chunk))[0]
         candidates[chunk["chunkId"]] = (current + vector_score, chunk)
-    ranked = sorted(candidates.values(), key=lambda item: item[0], reverse=True)
+    return sorted(candidates.values(), key=lambda item: item[0], reverse=True)
+
+
+def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]:
+    ranked = lexical_ranked(chunks, prompt)
     accepted = [chunk for score, chunk in ranked if evidence_accepts(score)][:5]
     citations = [build_citation(index, chunk) for index, chunk in enumerate(accepted, start=1)]
     evidence = [chunk["content"] for chunk in accepted]
@@ -1089,8 +1113,10 @@ def retrieve_chunks(chunks: list[dict[str, Any]], prompt: str) -> dict[str, Any]
         "citations": citations,
         "evidence": evidence,
         "retrievalStats": {
-            "keywordMatches": len(keyword_hits),
-            "vectorMatches": len(vector_hits),
+            # lexical_ranked only keeps chunks with token overlap, so the
+            # keyword and vector match counts are identical by construction.
+            "keywordMatches": len(ranked),
+            "vectorMatches": len(ranked),
             "hybridMatches": len(ranked),
             "evidenceAccepted": len(accepted),
             "refused": len(accepted) == 0,
