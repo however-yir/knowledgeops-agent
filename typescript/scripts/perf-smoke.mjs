@@ -24,12 +24,17 @@ await Promise.all(Array.from({ length: concurrency }, async () => {
   while (cursor < iterations) {
     const index = cursor;
     cursor += 1;
-    const endpoint = index % 2 === 0
-      ? `/ai/chat?prompt=${encodeURIComponent("hello")}&chatId=${chatId}-${index}`
-      : `/ai/pdf/chat?prompt=${encodeURIComponent("heat safety requirements")}&chatId=${chatId}`;
+    const endpoint = index % 2 === 0 ? "/ai/chat" : "/ai/pdf/chat";
+    const payload = index % 2 === 0
+      ? { prompt: "hello", chatId: `${chatId}-${index}` }
+      : { prompt: "heat safety requirements", chatId };
     const started = performance.now();
     try {
-      const response = await fetch(`${baseUrl}${endpoint}`);
+      const response = await fetch(`${baseUrl}${endpoint}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
       await response.text();
       if (!response.ok) {
         failures += 1;

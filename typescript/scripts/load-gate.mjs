@@ -23,11 +23,18 @@ try {
       const started = performance.now();
       try {
         const path = index % 3 === 0
-          ? `/ai/chat?prompt=${encodeURIComponent(`load ${vu} ${index}`)}&chatId=load-${vu}`
+          ? "/ai/chat"
           : index % 3 === 1
-            ? `/ai/pdf/chat?prompt=${encodeURIComponent("heat safety")}&chatId=load-${vu}`
+            ? "/ai/pdf/chat"
             : "/actuator/health";
-        const response = await fetch(`${baseUrl}${path}`);
+        const payload = index % 3 === 0
+          ? { prompt: `load ${vu} ${index}`, chatId: `load-${vu}` }
+          : { prompt: "heat safety", chatId: `load-${vu}` };
+        const response = await fetch(`${baseUrl}${path}`, path === "/actuator/health" ? undefined : {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
         await response.text();
         if (!response.ok) {
           failures += 1;

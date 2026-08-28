@@ -583,11 +583,14 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
       const appendOnlySnapshot = this.appendOnlySnapshot();
       const budgetSnapshot = cloneBudgetMap(this.store.tenantBudgets);
       const usageSnapshot = cloneUsageMap(this.store.tenantUsageDaily);
+      // Session rows use conditional optimistic updates (V16), which require
+      // the interactive transaction form instead of the array form below;
+      // they flush in their own transaction ahead of the remaining entities.
+      await this.flushSessions(prisma);
       const actions = [
         ...this.apiKeyActions(prisma),
         ...this.refreshTokenActions(prisma),
         ...this.ingestionActions(prisma),
-        ...this.sessionActions(prisma),
         ...this.taskActions(prisma),
         ...this.graphActions(prisma),
         ...this.memoryActions(prisma, appendOnlySnapshot.deletedMemoryIds),
@@ -725,8 +728,16 @@ export class PrismaPersistenceService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
-  private sessionActions(prisma: PrismaClientLike): Array<Promise<unknown>> {
-    return [...this.store.sessions.values()].map((session) => this.upsertSessionState(prisma, session));
+  private async flushSessions(prisma: PrismaClientLike): Promise<void> {
+    const sessions = [...this.store.sessions.values()];
+    if (sessions.length === 0) {
+      return;
+    }
+    await prisma.$transaction(async (transaction: PrismaClientLike) => {
+      for (const session of sessions) {
+        await this.upsertSessionState(transaction, session);
+      }
+    });
   }
 
   // Optimistic-locking mirror of the Java V16 remediation: the update is
