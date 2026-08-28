@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -124,6 +124,8 @@ class SqlAlchemyWorkflowRepository:
         phase: str | None = None,
         state_patch: Mapping[str, Any] | None = None,
         extra_events: list[tuple[str, Mapping[str, Any]]] | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
     ) -> None:
         """Persist a step result and its task checkpoint atomically."""
         now = utc_now()
@@ -146,6 +148,10 @@ class SqlAlchemyWorkflowRepository:
             step.action_input = dict(action_input)
             step.observation = dict(observation)
             step.ended_at = now
+            if input_tokens is not None:
+                step.input_tokens = input_tokens
+            if output_tokens is not None:
+                step.output_tokens = output_tokens
             session.add(
                 workflow_event(
                     task_id,
@@ -318,6 +324,42 @@ class SqlAlchemyWorkflowRepository:
             await session.commit()
         return await self.require(tenant_id, task_id)
 
+    async def recover_abandoned(self, max_age_minutes: int = 30) -> int:
+        """Fail durable tasks stuck mid-run by a crashed worker (Java 60a69da).
+
+        Mirrors the ingestion repository's recover_abandoned: any non-terminal
+        task untouched for longer than the grace period is marked FAILED so it
+        cannot stay RUNNING forever.
+        """
+        cutoff = datetime.now(UTC) - timedelta(minutes=max_age_minutes)
+        recovered = 0
+        async with self.sessions() as session:
+            records = (
+                await session.scalars(
+                    select(WorkflowTaskRecord).where(
+                        WorkflowTaskRecord.status.in_(["PLANNING", "WRITING"]),
+                        WorkflowTaskRecord.updated_at < cutoff,
+                    )
+                )
+            ).all()
+            for record in records:
+                previous_status = record.status
+                state = dict(record.state or {})
+                state["phase"] = "failed"
+                state["finalOutput"] = "workflow task abandoned by a crashed worker"
+                record.status = "FAILED"
+                record.state = state
+                record.updated_at = utc_now()
+                session.add(
+                    workflow_event(record.task_id, record.tenant_id, None, "STATE_CHANGED", {"from": previous_status, "to": "FAILED"})
+                )
+                session.add(
+                    workflow_event(record.task_id, record.tenant_id, None, "TASK_FAILED", {"error": "abandoned"})
+                )
+                recovered += 1
+            await session.commit()
+        return recovered
+
     async def list_tasks(self, tenant_id: str, limit: int) -> list[dict[str, Any]]:
         async with self.sessions() as session:
             records = (
@@ -418,6 +460,8 @@ def to_step(record: WorkflowStepRecord) -> dict[str, Any]:
         "modelProfile": record.model_profile,
         "startedAt": as_utc(record.started_at).isoformat(),
         "endedAt": as_utc(record.ended_at).isoformat() if record.ended_at else None,
+        "inputTokens": record.input_tokens,
+        "outputTokens": record.output_tokens,
     }
 
 
@@ -446,10 +490,14 @@ class WorkflowTaskNotFound(LookupError):
 
 async def task_for_tenant(session: AsyncSession, tenant_id: str, task_id: str) -> WorkflowTaskRecord:
     task = await session.scalar(
-        select(WorkflowTaskRecord).where(
+        select(WorkflowTaskRecord)
+        .where(
             WorkflowTaskRecord.tenant_id == tenant_id,
             WorkflowTaskRecord.task_id == task_id,
         )
+        # Row-lock the checkpoint so concurrent status transitions serialize
+        # (SQLite ignores FOR UPDATE; PostgreSQL takes the row lock).
+        .with_for_update()
     )
     if task is None:
         raise WorkflowTaskNotFound(task_id)

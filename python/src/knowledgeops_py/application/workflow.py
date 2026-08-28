@@ -133,6 +133,14 @@ class ReactWorkflowApplicationService:
             )
             response = await responder()
             answer = str(response.get("answer") or "")
+            usage = response.get("usage") or {}
+
+            def as_token(value: Any) -> int | None:
+                try:
+                    return int(value) if value is not None else None
+                except (TypeError, ValueError):
+                    return None
+
             await self.repository.complete_step(
                 context.tenant_id,
                 task_id,
@@ -143,6 +151,8 @@ class ReactWorkflowApplicationService:
                 observation={"answerLength": len(answer)},
                 phase="responded",
                 state_patch={"response": response},
+                input_tokens=as_token(usage.get("inputTokens")),
+                output_tokens=as_token(usage.get("outputTokens")),
             )
             return {"phase": "responded", "response": response}
 

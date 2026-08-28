@@ -168,6 +168,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 default_dataset["name"],
                 default_dataset["cases"],
             )
+        if workflow_repository is not None:
+            # Java parity (60a69da): a crashed worker must not leave tasks
+            # RUNNING forever; fail everything past the grace period on boot.
+            await workflow_repository.recover_abandoned()
         try:
             yield
         finally:
