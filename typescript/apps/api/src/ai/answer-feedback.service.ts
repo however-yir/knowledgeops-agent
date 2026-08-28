@@ -1,5 +1,5 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
 
@@ -100,10 +100,31 @@ function appendFeedbackDataset(
 
   try {
     mkdirSync(dirname(datasetPath), { recursive: true });
+    // Rotate the dataset file when it would exceed the configured cap. This
+    // caps disk usage even under sustained feedback spam, while still keeping
+    // the most recent data in the active file path so downstream training
+    // pipelines can pick it up as usual (mirror of the Java 06c7cb0 fix).
+    if (env.APP_FEEDBACK_MAX_DATASET_BYTES > 0 && existsSync(datasetPath) && statSync(datasetPath).size >= env.APP_FEEDBACK_MAX_DATASET_BYTES) {
+      rotateFeedbackDataset(datasetPath);
+    }
     appendFileSync(datasetPath, `${JSON.stringify(item)}\n`, "utf8");
   } catch (error) {
     throw new InternalServerErrorException("failed to append feedback dataset", { cause: error });
   }
+}
+
+/**
+ * Renames the dataset to a timestamped sibling (`<stem>-<yyyyMMdd-HHmmss><ext>`)
+ * so the next append starts a fresh active file.
+ */
+export function rotateFeedbackDataset(datasetPath: string, now = new Date()): void {
+  const base = basename(datasetPath);
+  const dot = base.lastIndexOf(".");
+  const stem = dot < 0 ? base : base.slice(0, dot);
+  const extension = dot < 0 ? "" : base.slice(dot);
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  renameSync(datasetPath, join(dirname(datasetPath), `${stem}-${timestamp}${extension}`));
 }
 
 export function extractKeywords(text: string): string[] {

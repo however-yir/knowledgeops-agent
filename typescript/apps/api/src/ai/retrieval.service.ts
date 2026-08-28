@@ -4,6 +4,7 @@ import type { Citation } from "@knowledgeops/shared";
 import { cosineSimilarity, scoreByKeywordDensity, scoreByTokenOverlap, tokenize, truncateText } from "../common/text.js";
 import { env } from "../config/env.js";
 import { embeddingVector, KnowledgeChunk, PlatformStore } from "../platform/platform.store.js";
+import { HYBRID_WEIGHT_PRESETS, HybridWeights, normalizeHybridWeights } from "./hybrid-weights.js";
 import { VectorClient } from "./vector.client.js";
 
 export interface ScoredChunk extends KnowledgeChunk {
@@ -89,15 +90,16 @@ export class RetrievalService {
     }
   }
 
-  retrieve(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K): ScoredChunk[] {
-    return this.hybridRetrieve(query, tenantId, chatId, topK).documents;
+  retrieve(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K, weights: HybridWeights = HYBRID_WEIGHT_PRESETS.DEFAULT): ScoredChunk[] {
+    return this.hybridRetrieve(query, tenantId, chatId, topK, weights).documents;
   }
 
-  hybridRetrieve(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K): HybridRetrievalResult {
-    const vectorDocs = this.vectorRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, 0.4));
-    const keywordDocs = this.keywordRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, 0.25));
-    const graphDocs = this.graphRetrieve(query, tenantId, topK).map((doc) => applyWeight(doc, 0.2));
-    const webDocs = this.webRetrieve(query, topK).map((doc) => applyWeight(doc, 0.15));
+  hybridRetrieve(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K, weights: HybridWeights = HYBRID_WEIGHT_PRESETS.DEFAULT): HybridRetrievalResult {
+    const normalized = normalizeHybridWeights(weights);
+    const vectorDocs = this.vectorRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, normalized.vectorWeight));
+    const keywordDocs = this.keywordRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, normalized.keywordWeight));
+    const graphDocs = this.graphRetrieve(query, tenantId, topK).map((doc) => applyWeight(doc, normalized.graphWeight));
+    const webDocs = this.webRetrieve(query, topK).map((doc) => applyWeight(doc, normalized.webWeight));
     const all = [...vectorDocs, ...keywordDocs, ...graphDocs, ...webDocs]
       .filter((doc) => doc.retrievalScore >= env.RAG_SIMILARITY_THRESHOLD);
     const deduped = deduplicate(all);
@@ -121,11 +123,12 @@ export class RetrievalService {
     return answerFromRetrieval(retrieval);
   }
 
-  async hybridRetrieveAsync(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K): Promise<HybridRetrievalResult> {
-    const vectorDocs = (await this.vectorRetrieveAsync(query, tenantId, chatId, topK)).map((doc) => applyWeight(doc, 0.4));
-    const keywordDocs = this.keywordRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, 0.25));
-    const graphDocs = this.graphRetrieve(query, tenantId, topK).map((doc) => applyWeight(doc, 0.2));
-    const webDocs = (await this.webRetrieveAsync(query, topK)).map((doc) => applyWeight(doc, 0.15));
+  async hybridRetrieveAsync(query: string, tenantId: string, chatId: string, topK = env.RAG_RETRIEVE_TOP_K, weights: HybridWeights = HYBRID_WEIGHT_PRESETS.DEFAULT): Promise<HybridRetrievalResult> {
+    const normalized = normalizeHybridWeights(weights);
+    const vectorDocs = (await this.vectorRetrieveAsync(query, tenantId, chatId, topK)).map((doc) => applyWeight(doc, normalized.vectorWeight));
+    const keywordDocs = this.keywordRetrieve(query, tenantId, chatId, topK).map((doc) => applyWeight(doc, normalized.keywordWeight));
+    const graphDocs = this.graphRetrieve(query, tenantId, topK).map((doc) => applyWeight(doc, normalized.graphWeight));
+    const webDocs = (await this.webRetrieveAsync(query, topK)).map((doc) => applyWeight(doc, normalized.webWeight));
     const all = [...vectorDocs, ...keywordDocs, ...graphDocs, ...webDocs]
       .filter((doc) => doc.retrievalScore >= env.RAG_SIMILARITY_THRESHOLD);
     const deduped = deduplicate(all);

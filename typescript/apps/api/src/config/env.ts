@@ -88,6 +88,7 @@ const envSchema = z.object({
   APP_WORKFLOW_WORKER_INTERVAL_MS: z.coerce.number().int().min(250).default(2000),
   APP_FEEDBACK_ENABLED: z.preprocess((value) => value === true || value === "true", z.boolean()).default(true),
   APP_FEEDBACK_DATASET_PATH: z.string().min(1).default("evaluation/feedback_dataset.jsonl"),
+  APP_FEEDBACK_MAX_DATASET_BYTES: z.coerce.number().int().min(0).default(52428800),
   APP_MCP_HTTP_ALLOWLIST: z.string().default(""),
   APP_MCP_SERVERS_JSON: z.string().default("{}"),
   APP_AGENT_HARNESS_MCP_ALLOWED_HOSTS: z.string().default(""),

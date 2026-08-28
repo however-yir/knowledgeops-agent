@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PlatformStore } from "../platform/platform.store.js";
+import { HYBRID_WEIGHT_PRESETS, hybridWeights } from "./hybrid-weights.js";
 import { RetrievalService } from "./retrieval.service.js";
 
 describe("RetrievalService", () => {
@@ -46,6 +47,31 @@ describe("RetrievalService", () => {
 
     expect(result.documents[0]?.source).toBe("graph");
     expect(result.documents[0]?.content).toContain("shade and water");
+  });
+
+  it("applies configurable per-source weights to the fusion", () => {
+    const service = new RetrievalService(new PlatformStore());
+    service.addDocumentChunks({
+      tenantId: "public",
+      chatId: "chat-1",
+      jobId: "job-1",
+      fileName: "handbook.txt",
+      sourceType: "TEXT",
+      text: "The refund policy allows cancellation within seven days."
+    });
+
+    const baseline = service.hybridRetrieve("refund cancellation", "public", "chat-1");
+    const keywordHeavy = service.hybridRetrieve("refund cancellation", "public", "chat-1", undefined, HYBRID_WEIGHT_PRESETS.KEYWORD);
+    const baselineKeywordDoc = baseline.documents.find((doc) => doc.source === "keyword");
+    const keywordHeavyDoc = keywordHeavy.documents.find((doc) => doc.chunkId === baselineKeywordDoc?.chunkId);
+
+    expect(baselineKeywordDoc).toBeDefined();
+    expect(keywordHeavyDoc?.finalScore).toBeCloseTo((baselineKeywordDoc?.finalScore ?? 0) * 2, 6);
+
+    const unitVector = service.hybridRetrieve("refund cancellation", "public", "chat-1", undefined, hybridWeights(1, 0, 0, 0));
+    const doubledVector = service.hybridRetrieve("refund cancellation", "public", "chat-1", undefined, hybridWeights(2, 0, 0, 0));
+    expect(doubledVector.documents.map((doc) => doc.chunkId)).toEqual(unitVector.documents.map((doc) => doc.chunkId));
+    expect(doubledVector.documents.map((doc) => doc.finalScore)).toEqual(unitVector.documents.map((doc) => doc.finalScore));
   });
 
   it("keeps retrieval results scoped to tenant and chat id", () => {

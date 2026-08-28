@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { env } from "../config/env.js";
 import { PlatformStore } from "../platform/platform.store.js";
 import { AnswerFeedbackService } from "./answer-feedback.service.js";
 
@@ -84,5 +85,27 @@ describe("AnswerFeedbackService", () => {
       forbidden_keywords: ["incorrect", "citation", "an", "inaccurate", "answer"]
     });
     expect(item.id).toMatch(/^feedback_\d{4}-\d{2}-\d{2}_\d+$/);
+  });
+
+  it("rotates the dataset file when it reaches the configured cap", () => {
+    const root = mkdtempSync(join(typescriptRoot, ".feedback-test-"));
+    tempDirs.push(root);
+    const datasetPath = join(root, "feedback.jsonl");
+    const service = new AnswerFeedbackService(new PlatformStore());
+    const originalCap = env.APP_FEEDBACK_MAX_DATASET_BYTES;
+    env.APP_FEEDBACK_MAX_DATASET_BYTES = 1;
+
+    try {
+      service.submit("tenant-a", { chatId: "chat-1", rating: 5, question: "q", answer: "a" }, { enabled: true, datasetPath });
+      service.submit("tenant-a", { chatId: "chat-2", rating: 4, question: "q", answer: "b" }, { enabled: true, datasetPath });
+    } finally {
+      env.APP_FEEDBACK_MAX_DATASET_BYTES = originalCap;
+    }
+
+    const rotated = readdirSync(root).filter((name) => /^feedback-\d{8}-\d{6}\.jsonl$/.test(name));
+    expect(rotated).toHaveLength(1);
+    const lines = readFileSync(datasetPath, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect((JSON.parse(lines[0]) as Record<string, unknown>).chatId).toBe("chat-2");
   });
 });
