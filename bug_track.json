@@ -100,6 +100,15 @@
       "location": "src/main/java/com/enterprise/iqk/retrieval/web/BingSearchBackend.java + SearXNGBackend.java",
       "description": "BingSearchBackend 和 SearXNGBackend 的 getRestTemplate() 用裸 if (restTemplate == null) 懒初始化，无同步。多线程同时首次调用会导致：(1) 两个线程都看到 null 都 new RestTemplate()，其中一个实例被默默丢弃；(2) 两个 SimpleClientHttpRequestFactory 同时被构造但只一个的 setConnectTimeout / setReadTimeout 生效，另一个用默认超时，行为不确定；(3) 最坏情况请求走的是 half-configured factory 导致 IllegalStateException 或静默使用默认 30s 超时。附加：两个 backend 自己 new ObjectMapper() 绕过 Spring 注入，模块配置与其他服务不一致。",
       "handling": "1) 改为 volatile + double-checked locking，懒初始化只发生一次；2) ObjectMapper 改用构造器注入（Spring 管理的 bean），与全局 JSON 配置对齐。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 12,
+      "title": "ChatController 多模态聊天在 Content-Type 缺失时抛 NPE 致 500",
+      "discovered_at": "2026-08-27T13:20:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java (multiModalChat)",
+      "description": "/ai/chat 端点接收 multipart/form-data 的 files[]，每张图被 MimeType.valueOf(getContentType()) 包装成 Spring AI Media。如果客户端（例如 curl --form 没有显式 type=）上传的 MultipartFile 没有 Content-Type header，MultipartFile.getContentType() 返回 null，MimeType.valueOf(null) 抛 NullPointerException → HTTP 500 而不是干净的 4xx。同时 Objects.requireNonNull 在 util 层抛出 NPE 没有任何恢复路径。",
+      "handling": "multiModalChat 在构造 Media 前用 StringUtils.hasText 检查 contentType，缺失时 fallback 到 application/octet-stream，让上层返回 4xx 错误而非 500。同时移除不再使用的 Objects import。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
