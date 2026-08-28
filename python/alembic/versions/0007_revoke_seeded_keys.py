@@ -20,6 +20,12 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "py_api_keys" not in inspector.get_table_names():
+        # On PostgreSQL deployments the py_* baseline tables are provisioned
+        # outside Alembic; nothing seeded means nothing to revoke.
+        return
     op.execute(
         sa.text(
             "UPDATE py_api_keys SET enabled = :enabled, revoked_at = CURRENT_TIMESTAMP, "

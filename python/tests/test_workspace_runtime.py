@@ -68,23 +68,34 @@ def test_apply_unified_diff_rejects_mismatched_context() -> None:
         raise AssertionError("expected invalid diff to be rejected")
 
 
-def test_workspace_shell_ls_and_rg_arguments_must_stay_in_root(tmp_path) -> None:
+def test_workspace_shell_ls_arguments_must_stay_in_root(tmp_path) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "code.py").write_text("value = 1\n", encoding="utf-8")
     workspace = runtime(tmp_path, shell_enabled=True)
 
-    inside = workspace.execute("workspace_run_shell", {"command": "rg value src"})
     flags_only = workspace.execute("workspace_run_shell", {"command": "ls -la"})
     listing = workspace.execute("workspace_run_shell", {"command": "ls src"})
 
-    assert inside["status"] == "success" and inside["exitCode"] == 0
     assert flags_only["status"] == "success"
     assert listing["status"] == "success" and "code.py" in listing["stdout"]
 
-    for command in ("rg value /etc/passwd", "rg value ../secret.txt", "ls /etc", "ls ..", "rg -e value /etc/passwd"):
+    for command in ("ls /etc", "ls .."):
         result = workspace.execute("workspace_run_shell", {"command": command})
         assert result["status"] == "error", command
         assert result["message"] == "command is not allowed", command
+
+
+def test_workspace_shell_rg_confinement_decisions(tmp_path) -> None:
+    """rg confinement decisions are tested without spawning ripgrep so the
+    suite does not depend on the runner image shipping the binary."""
+    workspace = runtime(tmp_path, shell_enabled=True)
+
+    assert workspace._allowed_command(["rg", "value", "src"]) is True
+    assert workspace._allowed_command(["rg", "value"]) is True
+    assert workspace._allowed_command(["rg", "--", "--pattern-like"]) is True
+    assert workspace._allowed_command(["rg", "value", "/etc/passwd"]) is False
+    assert workspace._allowed_command(["rg", "value", "../secret.txt"]) is False
+    assert workspace._allowed_command(["rg", "-e", "value", "/etc/passwd"]) is False
 
 
 def test_workspace_shell_rg_accepts_pattern_and_rooted_paths(tmp_path) -> None:
