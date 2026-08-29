@@ -50,7 +50,7 @@ jobs:
 
       - name: Fixed Java baseline manifest
         env:
-          BASELINE_SHA: f141b02552c553f64c303f543c33ab705ab2eeaa
+          BASELINE_SHA: fea55aef923e2dda72dd3859aa6bd8f9a8cc9573
         run: |
           baseline_dir=$(mktemp -d)
           git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
@@ -223,7 +223,7 @@ jobs:
 
       - name: Prepare fixed Java baseline
         env:
-          BASELINE_SHA: f141b02552c553f64c303f543c33ab705ab2eeaa
+          BASELINE_SHA: fea55aef923e2dda72dd3859aa6bd8f9a8cc9573
         run: |
           baseline_dir="$RUNNER_TEMP/java-baseline"
           git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
