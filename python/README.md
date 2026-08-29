@@ -56,13 +56,13 @@ local-demo-api-key
 
 Read [MIGRATION.md](MIGRATION.md) for production prerequisites, baseline generation, shadow validation and rollback.
 
-## Java Alignment (baseline `a373082`, 2026-08-28)
+## Java Alignment (baseline `f141b02`, 2026-08-29)
 
 This Python track is aligned against the Java `main` tree at commit
-`a373082` ("fix(security): derive rate-limit IP from X-Forwarded-For behind
-proxies"). The pinned manifest (`parity/java-baseline-manifest.json`) and the
-generated report (`reports/python-parity-report.md`) are the evidence of
-record.
+`f141b02` (baseline issue fixes: Spring AI 1.1.7 vectorStore exclude,
+research conversationId, operator bootstrap credentials). The pinned
+manifest (`parity/java-baseline-manifest.json`) and the generated report
+(`reports/python-parity-report.md`) are the evidence of record.
 
 Security parity in this alignment:
 

@@ -66,10 +66,6 @@ services:
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      # Java a373082 registers its own vectorStore bean; Spring AI's pgvector
-      # auto-configuration must not contribute a second (embedding-model
-      # hungry) definition on this classpath, so exclude it outright.
-      SPRING_AUTOCONFIGURE_EXCLUDE: org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
       DB_URL: jdbc:mysql://java-mysql:3306/knowledgeops_java?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: root
       DB_PASSWORD: contract-mysql-pass
@@ -78,6 +74,11 @@ services:
       OPENAI_BASE_URL: http://contract-model:8000
       OPENAI_API_KEY: contract-stub-key
       APP_JWT_SECRET: contract-ci-jwt-secret-must-not-be-default
+      # Explicit operator credential (Java BootstrapApiKeyInitializer); the
+      # repository-committed demo key was revoked by Flyway V15.
+      APP_BOOTSTRAP_API_KEY: dev-admin-key-2026
+      APP_BOOTSTRAP_KEY_NAME: contract-admin
+      APP_BOOTSTRAP_TENANT_ID: public
       APP_SECURITY_ENABLED: "true"
       SPRING_SECURITY_FILTER_DISPATCHER_TYPES: request
       SPRING_AI_RETRY_MAX_ATTEMPTS: "2"
@@ -172,21 +173,6 @@ services:
       timeout: 3s
       retries: 30
 
-  java-seed:
-    image: mysql:8.0.36
-    # Java V15 revokes the repository-committed contract credential at boot;
-    # restore it for this ephemeral, network-isolated test stack only.
-    command:
-      [
-        "sh",
-        "-ec",
-        "mysql -h java-mysql -uroot -pcontract-mysql-pass knowledgeops_java -e \"UPDATE api_keys SET enabled=1, revoked_at=NULL, revoked_reason=NULL WHERE key_hash='1c39ba1a74432335b91233cd2ac43151b22ccbbeb490916c5293de7f3f41435e'\""
-      ]
-    restart: "no"
-    depends_on:
-      java-api:
-        condition: service_healthy
-
   contract:
     image: knowledgeops-contract-python:local
     command:
@@ -200,7 +186,5 @@ services:
     depends_on:
       java-api:
         condition: service_healthy
-      java-seed:
-        condition: service_completed_successfully
       python-api:
         condition: service_healthy

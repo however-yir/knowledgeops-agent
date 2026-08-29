@@ -50,7 +50,7 @@ jobs:
 
       - name: Fixed Java baseline manifest
         env:
-          BASELINE_SHA: a3730820090b16548556102c2306a7d7610ec6b4
+          BASELINE_SHA: f141b02552c553f64c303f543c33ab705ab2eeaa
         run: |
           baseline_dir=$(mktemp -d)
           git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
@@ -223,7 +223,7 @@ jobs:
 
       - name: Prepare fixed Java baseline
         env:
-          BASELINE_SHA: a3730820090b16548556102c2306a7d7610ec6b4
+          BASELINE_SHA: f141b02552c553f64c303f543c33ab705ab2eeaa
         run: |
           baseline_dir="$RUNNER_TEMP/java-baseline"
           git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
@@ -237,10 +237,6 @@ jobs:
           docker compose -f docker-compose.contract.yml up --build -d python-migrate
           docker compose -f docker-compose.contract.yml wait python-migrate
           docker compose -f docker-compose.contract.yml up -d --wait --wait-timeout 180 python-api
-          # The contract container starts with --no-deps, so the one-shot seed
-          # (restores the Java-side contract key after Flyway V15 revokes it)
-          # must be invoked explicitly before the comparison runs.
-          docker compose -f docker-compose.contract.yml up --abort-on-container-exit --exit-code-from java-seed java-seed
           docker compose -f docker-compose.contract.yml up --no-deps --abort-on-container-exit --exit-code-from contract contract
 
       - name: Collect cross-runtime logs
