@@ -5,6 +5,8 @@ import com.enterprise.iqk.service.TenantCostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 import org.springframework.stereotype.Component;
 
 /**
@@ -18,7 +20,7 @@ public class ReportWriterAgent {
     private final ModelRouter modelRouter;
     private final TenantCostService tenantCostService;
 
-    public String writeReport(String topic, String findings, String tenantId, String modelProfile) {
+    public String writeReport(String topic, String findings, String conversationId, String tenantId, String modelProfile) {
         String prompt = "Write a comprehensive research report based on the findings below.%nStructure: 1) Executive Summary 2) Key Findings 3) Detailed Analysis 4) Conclusions & Recommendations%n%nTopic: %s%n%nResearch Findings:%n%s%n".formatted(topic, findings);
 
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "research", tenantId, topic);
@@ -27,6 +29,7 @@ public class ReportWriterAgent {
 
         String report = chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .system("You are a research report writer. Produce well-structured, evidence-based reports in Chinese.")
                 .user(prompt)
                 .call()

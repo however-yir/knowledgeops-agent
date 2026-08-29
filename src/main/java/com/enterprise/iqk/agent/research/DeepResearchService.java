@@ -41,7 +41,7 @@ public class DeepResearchService {
             var planStep = workflowEngine.startStep(task.getTaskId(), "ResearchPlanner", 1,
                     Map.of("topic", request.getTopic()));
             ResearchPlannerAgent.ResearchPlan plan = plannerAgent.plan(
-                    request.getTopic(), normalizedTenant, request.getModelProfile());
+                    request.getTopic(), "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(planStep.getStepId(), "COMPLETED",
                     Map.of("subQuestions", plan.subQuestions(), "strategy", plan.strategy()),
                     plan, null, null, null, 0, 0,
@@ -81,7 +81,7 @@ public class DeepResearchService {
             var writeStep = workflowEngine.startStep(task.getTaskId(), "ReportWriter", stepNum,
                     Map.of("topic", request.getTopic()));
             String report = writerAgent.writeReport(request.getTopic(),
-                    String.join("\n\n", findings), normalizedTenant, request.getModelProfile());
+                    String.join("\n\n", findings), "research_" + task.getTaskId(), normalizedTenant, request.getModelProfile());
             workflowEngine.completeStep(writeStep.getStepId(), "COMPLETED",
                     Map.of("reportLength", report.length()), report,
                     null, null, null, 0, 0, 0, null);

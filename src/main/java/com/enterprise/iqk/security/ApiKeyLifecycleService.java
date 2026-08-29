@@ -23,10 +23,46 @@ public class ApiKeyLifecycleService {
             throw new IllegalArgumentException("active api key already exists for keyName");
         }
         String raw = "ak-" + UUID.randomUUID().toString().replace("-", "");
+        return provision(raw, keyName, roleName, normalizedTenant);
+    }
+
+    /**
+     * Provision an operator-supplied credential (bootstrap / contract stacks).
+     * Idempotent: an already-active key with the same name is left untouched;
+     * a revoked row with the same hash is revived instead of colliding with
+     * the UNIQUE key_hash constraint.
+     */
+    public ApiKeyIssueResult provision(String rawKey, String keyName, String roleName, String tenantId) {
+        String normalizedTenant = normalizeTenant(tenantId);
+        ApiKeyRecord active = apiKeyMapper.findActiveByKeyName(keyName, normalizedTenant);
+        if (active != null) {
+            return new ApiKeyIssueResult(null, keyName, normalizedTenant, active.getExpiresAt());
+        }
+        String rawHash = HashUtils.sha256Hex(rawKey);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiresAt = now.plusDays(Math.max(1, securityProperties.getApiKeyExpireDays()));
+        ApiKeyRecord latest = apiKeyMapper.findLatestByKeyName(keyName, normalizedTenant);
+        if (latest != null && rawHash.equals(latest.getKeyHash())) {
+            ApiKeyRecord revived = ApiKeyRecord.builder()
+                    .id(latest.getId())
+                    .keyHash(latest.getKeyHash())
+                    .keyName(latest.getKeyName())
+                    .tenantId(latest.getTenantId())
+                    .roleName(roleName)
+                    .enabled(1)
+                    .expiresAt(expiresAt)
+                    .revokedAt(null)
+                    .revokedReason(null)
+                    .rotatedFromId(latest.getRotatedFromId())
+                    .createdAt(latest.getCreatedAt())
+                    .updatedAt(now)
+                    .lastUsedAt(null)
+                    .build();
+            apiKeyMapper.updateById(revived);
+            return new ApiKeyIssueResult(rawKey, keyName, normalizedTenant, expiresAt);
+        }
         ApiKeyRecord record = ApiKeyRecord.builder()
-                .keyHash(HashUtils.sha256Hex(raw))
+                .keyHash(rawHash)
                 .keyName(keyName)
                 .tenantId(normalizedTenant)
                 .roleName(roleName)
@@ -36,7 +72,7 @@ public class ApiKeyLifecycleService {
                 .updatedAt(now)
                 .build();
         apiKeyMapper.insert(record);
-        return new ApiKeyIssueResult(raw, record.getKeyName(), normalizedTenant, expiresAt);
+        return new ApiKeyIssueResult(rawKey, keyName, normalizedTenant, expiresAt);
     }
 
     public ApiKeyIssueResult rotate(String keyName, String reason, String tenantId) {

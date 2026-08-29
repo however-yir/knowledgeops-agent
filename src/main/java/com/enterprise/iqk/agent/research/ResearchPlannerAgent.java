@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+
+import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -25,7 +27,7 @@ public class ResearchPlannerAgent {
     private final TenantCostService tenantCostService;
     private final ObjectMapper objectMapper;
 
-    public ResearchPlan plan(String topic, String tenantId, String modelProfile) {
+    public ResearchPlan plan(String topic, String conversationId, String tenantId, String modelProfile) {
         String prompt = "Decompose the following research topic into 3-5 sub-questions.%nReturn JSON only:%n{%n  \"subQuestions\": [\"q1\", \"q2\", ...],%n  \"keywords\": [\"kw1\", \"kw2\", ...],%n  \"strategy\": \"breadth_first\"%n}%n%nTopic: %s%n".formatted(topic);
 
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "research", tenantId, topic);
@@ -34,6 +36,7 @@ public class ResearchPlannerAgent {
 
         String raw = chatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .system("You are a research planner. Decompose complex topics into sub-questions. Return JSON only.")
                 .user(prompt)
                 .call()
