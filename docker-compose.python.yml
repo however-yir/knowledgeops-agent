@@ -1,6 +1,6 @@
 services:
   python-migrate:
-    build:
+    build: &python-build
       context: ./python
     image: knowledgeops-agent-python:local
     command: ["sh", "-ec", "alembic upgrade head && APP_DATABASE_URL=$${APP_PGVECTOR_URL} alembic upgrade head"]
@@ -21,6 +21,7 @@ services:
         condition: service_healthy
 
   python-api:
+    build: *python-build
     image: knowledgeops-agent-python:local
     command: ["knowledgeops-python-api"]
     environment:
@@ -45,6 +46,7 @@ services:
       retries: 5
 
   python-worker:
+    build: *python-build
     image: knowledgeops-agent-python:local
     command: ["knowledgeops-python-worker"]
     environment: *python-environment
