@@ -47,22 +47,10 @@ public class ApiKeyLifecycleService {
         // UNIQUE key_hash constraint is what forces us onto that row.
         ApiKeyRecord latest = apiKeyMapper.findByKeyHash(rawHash);
         if (latest != null) {
-            ApiKeyRecord revived = ApiKeyRecord.builder()
-                    .id(latest.getId())
-                    .keyHash(latest.getKeyHash())
-                    .keyName(keyName)
-                    .tenantId(normalizedTenant)
-                    .roleName(roleName)
-                    .enabled(1)
-                    .expiresAt(expiresAt)
-                    .revokedAt(null)
-                    .revokedReason(null)
-                    .rotatedFromId(latest.getRotatedFromId())
-                    .createdAt(latest.getCreatedAt())
-                    .updatedAt(now)
-                    .lastUsedAt(null)
-                    .build();
-            apiKeyMapper.updateById(revived);
+            // Explicit revive SQL: MyBatis-Plus updateById skips null fields,
+            // so revoked_at / revoked_reason would stay set and the revived
+            // key would never match findActive queries again.
+            apiKeyMapper.revive(latest.getId(), keyName, normalizedTenant, roleName, expiresAt, now);
             return new ApiKeyIssueResult(rawKey, keyName, normalizedTenant, expiresAt);
         }
         ApiKeyRecord record = ApiKeyRecord.builder()

@@ -66,4 +66,28 @@ public interface ApiKeyMapper extends BaseMapper<ApiKeyRecord> {
                @Param("revokedAt") LocalDateTime revokedAt,
                @Param("reason") String reason,
                @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * Explicit SQL on purpose: MyBatis-Plus updateById skips null fields
+     * (NOT_NULL strategy), so revoked_at / revoked_reason could never be
+     * cleared when reviving a bootstrapped key.
+     */
+    @Update("""
+            UPDATE api_keys
+            SET enabled = 1,
+                key_name = #{keyName},
+                tenant_id = #{tenantId},
+                role_name = #{roleName},
+                expires_at = #{expiresAt},
+                revoked_at = NULL,
+                revoked_reason = NULL,
+                updated_at = #{updatedAt}
+            WHERE id = #{id}
+            """)
+    int revive(@Param("id") Long id,
+               @Param("keyName") String keyName,
+               @Param("tenantId") String tenantId,
+               @Param("roleName") String roleName,
+               @Param("expiresAt") LocalDateTime expiresAt,
+               @Param("updatedAt") LocalDateTime updatedAt);
 }
