@@ -41,13 +41,17 @@ public class ApiKeyLifecycleService {
         String rawHash = HashUtils.sha256Hex(rawKey);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiresAt = now.plusDays(Math.max(1, securityProperties.getApiKeyExpireDays()));
-        ApiKeyRecord latest = apiKeyMapper.findLatestByKeyName(keyName, normalizedTenant);
-        if (latest != null && rawHash.equals(latest.getKeyHash())) {
+        // Revive by key_hash rather than key_name: the revoked row may keep
+        // the original seed key_name (V7 'demo-admin-key-2026') while the
+        // operator provisions a different APP_BOOTSTRAP_KEY_NAME, and the
+        // UNIQUE key_hash constraint is what forces us onto that row.
+        ApiKeyRecord latest = apiKeyMapper.findByKeyHash(rawHash);
+        if (latest != null) {
             ApiKeyRecord revived = ApiKeyRecord.builder()
                     .id(latest.getId())
                     .keyHash(latest.getKeyHash())
-                    .keyName(latest.getKeyName())
-                    .tenantId(latest.getTenantId())
+                    .keyName(keyName)
+                    .tenantId(normalizedTenant)
                     .roleName(roleName)
                     .enabled(1)
                     .expiresAt(expiresAt)

@@ -46,6 +46,14 @@ public interface ApiKeyMapper extends BaseMapper<ApiKeyRecord> {
             """)
     ApiKeyRecord findLatestByKeyName(@Param("keyName") String keyName, @Param("tenantId") String tenantId);
 
+    @Select("""
+            SELECT * FROM api_keys
+            WHERE key_hash = #{keyHash}
+            ORDER BY id DESC
+            LIMIT 1
+            """)
+    ApiKeyRecord findByKeyHash(@Param("keyHash") String keyHash);
+
     @Update("""
             UPDATE api_keys
             SET enabled = 0,
