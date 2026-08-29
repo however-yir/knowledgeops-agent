@@ -56,10 +56,10 @@ local-demo-api-key
 
 Read [MIGRATION.md](MIGRATION.md) for production prerequisites, baseline generation, shadow validation and rollback.
 
-## Java Alignment (baseline `fea55ae`, 2026-08-29)
+## Java Alignment (baseline `a1b1287`, 2026-08-29)
 
 This Python track is aligned against the Java `main` tree at commit
-`fea55ae` (baseline issue fixes: Spring AI 1.1.7 vectorStore exclude,
+`a1b1287` (baseline issue fixes: Spring AI 1.1.7 vectorStore exclude,
 research conversationId, operator bootstrap credentials). The pinned
 manifest (`parity/java-baseline-manifest.json`) and the generated report
 (`reports/python-parity-report.md`) are the evidence of record.

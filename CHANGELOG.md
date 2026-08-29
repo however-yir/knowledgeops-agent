@@ -9,7 +9,7 @@ All notable changes to this project are documented in this file.
 - security: SSRF guard for outbound tool base URLs; rate-limit anonymous buckets keyed by the proxy-safe client IP; tenant headers are never trusted over the authenticated tenant; production no longer seeds the committed demo ADMIN key (Alembic 0007 revokes existing rows); workspace ls/rg arguments are confined to the workspace root; expired harness confirmation records are swept; pip-audit reports no known vulnerabilities.
 - features: configurable per-source hybrid retrieval weights (APP_HYBRID_WEIGHTS) with a SearXNG web-search backend; externalized RAG system prompts with APP_RAG_ANSWER_TEMPERATURE; durable workflow steps persist token usage and abandoned tasks are recovered on startup; ingestion claims are tenant-scoped; memories expire out of list/recall/RAG context; the feedback dataset is capped and rotated on disk.
 - removed: the Java-parity GET variants `GET /ai/chat`, `GET /ai/service` and `GET /ai/pdf/chat`; `POST /ai/service` is the text/html customer-service surface.
-- alignment: baseline manifest re-pinned to `fea55ae` with 15 Java migrations and the parity report regenerated (61 fixed endpoints); the research `javaKnownDefect` marker is removed because the Java baseline now provisions conversationId, and the contract stack uses APP_BOOTSTRAP_API_KEY instead of the temporary java-seed service.
+- alignment: baseline manifest re-pinned to `a1b1287` with 15 Java migrations and the parity report regenerated (61 fixed endpoints); the research `javaKnownDefect` marker is removed because the Java baseline now provisions conversationId, and the contract stack uses APP_BOOTSTRAP_API_KEY instead of the temporary java-seed service.
 
 ## [1.0.0] - 2026-04-28
 
