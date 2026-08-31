@@ -360,10 +360,46 @@ public class WorkspaceRuntime implements AgentRuntime {
         }
         if ("mvn".equals(executable)) {
             return command.stream().anyMatch("test"::equals)
-                    && command.stream().allMatch(token -> "mvn".equals(token)
-                    || "test".equals(token)
-                    || "-q".equals(token)
-                    || token.startsWith("-D"));
+                    && command.stream().allMatch(this::isAllowedMvnTestToken);
+        }
+        return false;
+    }
+
+    /**
+     * mvn test allow-list: -q, -D&lt;name&gt;=&lt;value&gt; where the property
+     * name starts with one of the known-safe prefixes. Without this, a
+     * prompt-injected or misconfigured LLM-driven agent invocation of
+     * workspace_run_shell could pass
+     *   mvn test -DargLine="-javaagent:/tmp/evil.jar"
+     *   mvn test -Dsurefire.suiteXmlFiles=/tmp/evil.xml
+     * to make the Surefire test JVM load a hostile Java agent or run a
+     * custom suite XML — bypassing the workspace sandbox from inside the
+     * test process.
+     */
+    private static final java.util.Set<String> SAFE_MVN_PROPERTY_PREFIXES = java.util.Set.of(
+            // Surefire test selection knobs the user would actually want to
+            // pass through. Anything else (argLine, exec.executable,
+            // surefire.suiteXmlFiles, maven.compiler, etc.) can influence
+            // the test JVM classpath or execution and is refused.
+            "test=",
+            "groups=",
+            "excludedGroups=",
+            "failIfNoTests=",
+            "skipTests=",
+            "maven.test.skip="
+    );
+
+    private boolean isAllowedMvnTestToken(String token) {
+        if ("mvn".equals(token) || "test".equals(token) || "-q".equals(token)) {
+            return true;
+        }
+        if (token.startsWith("-D")) {
+            String property = token.substring(2);
+            for (String prefix : SAFE_MVN_PROPERTY_PREFIXES) {
+                if (property.startsWith(prefix)) {
+                    return true;
+                }
+            }
         }
         return false;
     }
