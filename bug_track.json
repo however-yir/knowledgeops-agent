@@ -145,6 +145,15 @@
       "location": "src/main/java/com/enterprise/iqk/security/RateLimitFilter.java (resolveKey)",
       "description": "RateLimitFilter 用 request.getRemoteAddr() 作 IP 限流 key。当服务部署在 nginx / k8s ingress / ALB 等反代后，所有匿名请求的 RemoteAddr = 127.0.0.1（反代本地回环），所有用户共享同一 IP 桶——单个攻击者打满这桶，整个租户匿名流量都被限流（实际等同于 DoS 自己的限流）。同时攻击者可以通过伪造 X-Forwarded-For（如果不限私有地址校验）任意切换 IP 绕过限流。",
       "handling": "1) 新增 resolveClientIp：先看 request.getRemoteAddr() 是否私网/loopback；(2) 只有直连 peer 是私网时（说明我们确实在反代后）才解析 X-Forwarded-For；(3) 选最右非私网 hop（攻击者无法伪造最右 hop——中间代理会覆盖左侧）；(4) 用文本前缀匹配私网段（避免 InetAddress 解析失败影响功能）。生产已部署反代时行为正确；未部署反代时直连 peer 是公网，跳过 X-Forwarded-For，行为不变。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 17,
+      "title": "Workspace propose_patch / apply_patch 无文件大小上限（agent 滥用可写超大文件）",
+      "discovered_at": "2026-08-28T20:20:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (proposePatch / applyPatch)",
+      "description": "readFile 用了 app.agent-harness.workspace.max-file-bytes（默认 20KB）做大小保护；searchText 用 1MB 限制单文件大小。但 proposePatch 和 applyPatch 的 content / patch 字段**没有大小限制**——LLM 驱动的 agent 调 workspace_propose_patch 时可以传一个几 MB 的 content 字符串，导致 worker 分配大字符串并写盘；applyPatch 也是同样问题。攻击路径：(1) 提示词注入让 LLM 生成超大 content；(2) 直接调 MCP action 传大字段。无大小限制使 agent harness 成为 LLM 触发的 disk-fill 通道。",
+      "handling": "1) proposePatch 与 applyPatch 都用同一 maxFileBytes 校验 content.getBytes(UTF_8).length；(2) applyPatch 还校验 patch 长度；(3) applyPatch 在 patch 模式下额外校验 apply 后 nextContent 长度（防止小 patch 展开成大文件）；(4) proposePatch 校验现有文件大小（防止读大文件再覆盖）。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
