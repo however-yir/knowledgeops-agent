@@ -128,7 +128,13 @@ public class WorkspaceRuntime implements AgentRuntime {
                     .limit(Math.max(1, harnessProperties.getWorkspace().getMaxSearchFiles()))
                     .toList();
             for (Path path : candidates) {
-                if (matches.size() >= maxMatches || Files.size(path) > 1_000_000) {
+                // Already collected enough matches; stop walking the candidate
+                // list instead of continuing to open and skip every remaining
+                // file.
+                if (matches.size() >= maxMatches) {
+                    break;
+                }
+                if (Files.size(path) > 1_000_000) {
                     continue;
                 }
                 List<String> lines;
