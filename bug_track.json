@@ -163,6 +163,24 @@
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (argsWithinWorkspace)",
       "description": "WorkspaceRuntime.runCommand 把 rg 列在 allowedCommands，但 argsWithinWorkspace 只跳过以 - 开头的 token，**不审查具体 flag**。ripgrep 的 --pre / --pre-glob 选项会在每个文件被搜索前**执行 shell 命令**（ripgrep 官方文档明示），--hostname-bin / --regexp-file 接受**主机文件系统上的任意文件**作为输入。LLM 驱动的 agent（或 prompt 注入）调 workspace_run_shell 时可以传 rg --pre=\"cat /etc/passwd\" /etc，让 rg 在扫 /etc 前先 cat 主机文件——沙箱立即失效。",
       "handling": "在 argsWithinWorkspace 跳过 - 开头的 token 之前，先剥离 =value 后缀，再拒绝 --pre、--pre-glob、--hostname-bin、--regexp-file 等可执行命令或读主机文件的 flag。允许的 rg 调用因此被限制为只读 + 路径受限（已由 path 验证覆盖）。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 19,
+      "title": "workspace_search_text 收集满 maxMatches 后仍 continue 浪费 I/O",
+      "discovered_at": "2026-08-28T22:30:00+08:00",
+      "severity": "low",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (searchText)",
+      "description": "searchText 已有 per-file 1MB 限制 + 候选文件数限制，但外层 for 循环用 continue 跳过已收集满 maxMatches 的文件——继续遍历剩余所有候选文件并对每个文件调用 Files.size()（stat 系统调用）。大 workspace 下浪费 I/O。",
+      "handling": "将 continue 改为 break：达到 maxMatches 后直接退出候选列表遍历。验证：mvn compile + mvn pmd:check 通过；PR #149 已合。"
+    },
+    {
+      "id": 20,
+      "title": "TrustedActionService.pendingActions 内存累积（仅 preview 路径 sweep）",
+      "discovered_at": "2026-08-28T22:50:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/TrustedActionService.java (execute)",
+      "description": "pendingActions ConcurrentHashMap 只在 preview() 入口 lazy sweep 过期 token。如果调用方只调 execute() 不调 preview（自动化 confirm 循环 / token-from-CI-pipeline 等），过期 token 一直累积到进程退出。10 分钟 TTL × 高流量 = GB 级堆内存累积。",
+      "handling": "在 execute() 入口也加同样的 removeIf sweep：任何路径触碰 map 时都回收过期条目。验证：mvn compile + mvn pmd:check 通过。"
     }
   ],
   "commit": "ba0791c",
