@@ -44,6 +44,11 @@ public class TrustedActionService {
     }
 
     public AgentObservation execute(String token, String tenantId) {
+        // Opportunistically drop expired tokens here as well: the preview
+        // path is the only place that sweeps the map, so an operator that
+        // only ever calls execute (e.g. an automated confirm loop) would
+        // otherwise let expired tokens accumulate until the next preview.
+        pendingActions.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
         PendingTrustedAction pending = pendingActions.get(token);
         if (pending == null || !pending.action().tenantId().equals(tenantId)) {
             return AgentObservation.error("trusted-action", "trusted action token not found", 0);
