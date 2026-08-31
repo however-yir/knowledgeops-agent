@@ -156,6 +156,24 @@ public class WorkspaceRuntime implements AgentRuntime {
         Path path = resolvePath(stringVal(input, "path", ""));
         String content = stringVal(input, "content", "");
         String patch = stringVal(input, "patch", "");
+        // Cap the proposed file size the same way readFile caps read size.
+        // Without this an LLM-driven agent invocation of workspace_propose_patch
+        // could submit a multi-megabyte content / patch and cause the worker
+        // to allocate a matching string, then applyPatch to write the file.
+        int maxFileBytes = Math.max(1, harnessProperties.getWorkspace().getMaxFileBytes());
+        if (content.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "content exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
+        if (patch.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "patch exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
+        if (Files.exists(path) && Files.isRegularFile(path)
+                && Files.size(path) > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "existing file exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
         String oldContent = Files.exists(path) && Files.isRegularFile(path)
                 ? Files.readString(path, StandardCharsets.UTF_8)
                 : "";
@@ -179,12 +197,27 @@ public class WorkspaceRuntime implements AgentRuntime {
         Path path = resolvePath(stringVal(input, "path", ""));
         String content = stringVal(input, "content", "");
         String patch = stringVal(input, "patch", "");
+        // Cap the same way proposePatch does so a caller cannot bypass the
+        // preview cap by going straight to apply.
+        int maxFileBytes = Math.max(1, harnessProperties.getWorkspace().getMaxFileBytes());
+        if (content.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "content exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
+        if (patch.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "patch exceeds maxFileBytes (" + maxFileBytes + ")");
+        }
         String nextContent = content;
         if (StringUtils.hasText(patch)) {
             String oldContent = Files.exists(path) && Files.isRegularFile(path)
                     ? Files.readString(path, StandardCharsets.UTF_8)
                     : "";
             nextContent = diffService.apply(oldContent, patch);
+        }
+        if (nextContent.getBytes(StandardCharsets.UTF_8).length > maxFileBytes) {
+            return Map.of("status", "error", "message",
+                    "resulting content exceeds maxFileBytes (" + maxFileBytes + ")");
         }
         Path parent = path.getParent();
         if (parent != null) {
