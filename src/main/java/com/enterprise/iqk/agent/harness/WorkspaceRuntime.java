@@ -365,6 +365,24 @@ public class WorkspaceRuntime implements AgentRuntime {
     private boolean argsWithinWorkspace(List<String> args) {
         for (String arg : args) {
             if (arg.startsWith("-")) {
+                // Reject options that cause the underlying tool to execute
+                // commands or read arbitrary host files. ripgrep's --pre and
+                // --pre-glob run a shell command before each file is
+                // searched; --hostname-bin and --regexp-file read files
+                // from the host filesystem. ls / git do not currently have
+                // equivalents, so the option-list approach keeps the
+                // allow-list narrow.
+                String normalized = arg;
+                int eq = normalized.indexOf('=');
+                if (eq >= 0) {
+                    normalized = normalized.substring(0, eq);
+                }
+                if (normalized.startsWith("--pre")
+                        || normalized.startsWith("--pre-glob")
+                        || normalized.equals("--hostname-bin")
+                        || normalized.equals("--regexp-file")) {
+                    return false;
+                }
                 continue;
             }
             try {
