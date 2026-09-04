@@ -199,6 +199,15 @@
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (isAllowedCommand)",
       "description": "git 分支只校验子命令是否在白名单，不校验 flag。LLM 驱动的 agent 可传 git log --output=/tmp/evil 写文件到主机路径（绕过 workspace sandbox），或 git log --upload-pack=evil-cmd 把命令交给 git transport。",
       "handling": "加 UNSAFE_GIT_FLAGS deny-list：--output/-o/--exec/--upload-pack/--receive-pack/--ssh-command 全部拒绝。argsWithinWorkspace 之前的 --pre/--pre-glob/--hostname-bin/--regexp-file ripgrep deny-list 同步重构为共用 stripOptionValue 工具。文件行数 499（保持 checkstyle 500 上限内）。验证：mvn compile + mvn pmd:check + checkstyle 通过；PR #154 已合。"
+    },
+    {
+      "id": 23,
+      "title": "GraphService.getNeighbors 跨租户 entity 读取（缺 tenantId 过滤）",
+      "discovered_at": "2026-08-29T00:30:00+08:00",
+      "severity": "high",
+      "location": "src/main/java/com/enterprise/iqk/graph/KgEntityMapper.java (findByEntityId) + GraphService.getNeighbors",
+      "description": "GraphService.getNeighbors 流程：先 findRelations(tenantId, entityId) 按租户过滤（OK），再对每个 relation 端点 entity_id 调 findByEntityId(entityId) —— 但 findByEntityId 本身不带 tenantId 过滤，SQL 是 SELECT * FROM kg_entity WHERE entity_id = ?。schema 没有跨表约束保证 relation 两端 entity 共享同一 tenant，所以一旦 relation 涉及跨租户的 entity（合法情况或错误数据），另一租户的 entity 详情（name / description / metadata）就会被返回。LLM 调 graph_search action 即可触发泄露。",
+      "handling": "1) KgEntityMapper.findByEntityId 加 tenantId 参数 + SQL 加 AND tenant_id = #{tenantId} 过滤；2) GraphService.getNeighbors 传入 tenantId。跨租户的 entity 在一跳邻居展开时被静默过滤（返回 null，邻居列表中无该邻居）。验证：mvn compile + mvn pmd:check 通过；PR #156 已合。"
     }
   ],
   "commit": "ba0791c",
