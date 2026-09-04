@@ -190,6 +190,15 @@
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (isAllowedCommand)",
       "description": "mvn test 分支之前接受任意 -D<name>=<value>，LLM 驱动的 agent 可传 -DargLine=\"-javaagent:/tmp/evil.jar\"、-Dsurefire.suiteXmlFiles=/tmp/evil.xml、-Dexec.executable=/bin/sh 等，让 Surefire test JVM 加载 Java agent / 执行任意测试套件 / 把 shell 交给 Maven 插件，从测试进程内部逃逸 workspace 沙箱。",
       "handling": "将 mvn test 路径改为只接受 mvn/test/-q + -D<name>=<value>（name 必须以安全前缀开头：test=/groups=/excludedGroups=/failIfNoTests=/skipTests=/maven.test.skip=）。其他 -D（含 argLine、surefire.suiteXmlFiles、exec.executable 等）在 spawn 之前就被拒。验证：mvn compile + mvn pmd:check 通过；PR #152 已合。"
+    },
+    {
+      "id": 22,
+      "title": "git 子命令危险 flag（--output 等）写文件逃逸 sandbox",
+      "discovered_at": "2026-08-28T23:50:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (isAllowedCommand)",
+      "description": "git 分支只校验子命令是否在白名单，不校验 flag。LLM 驱动的 agent 可传 git log --output=/tmp/evil 写文件到主机路径（绕过 workspace sandbox），或 git log --upload-pack=evil-cmd 把命令交给 git transport。",
+      "handling": "加 UNSAFE_GIT_FLAGS deny-list：--output/-o/--exec/--upload-pack/--receive-pack/--ssh-command 全部拒绝。argsWithinWorkspace 之前的 --pre/--pre-glob/--hostname-bin/--regexp-file ripgrep deny-list 同步重构为共用 stripOptionValue 工具。文件行数 499（保持 checkstyle 500 上限内）。验证：mvn compile + mvn pmd:check + checkstyle 通过；PR #154 已合。"
     }
   ],
   "commit": "ba0791c",
