@@ -42,7 +42,7 @@ public class GraphService {
             String neighborId = rel.getSourceEntityId().equals(entityId)
                     ? rel.getTargetEntityId() : rel.getSourceEntityId();
             KgEntityRecord entity = entityCache.computeIfAbsent(neighborId,
-                    id -> entityMapper.findByEntityId(id));
+                    id -> entityMapper.findByEntityId(tenantId, id));
             if (entity == null) continue;
             boolean outgoing = rel.getSourceEntityId().equals(entityId);
             neighbors.add(GraphNeighbor.builder()

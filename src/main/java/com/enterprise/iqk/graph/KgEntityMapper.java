@@ -25,6 +25,12 @@ public interface KgEntityMapper extends BaseMapper<KgEntityRecord> {
     List<KgEntityRecord> findByType(@Param("tenantId") String tenantId,
                                      @Param("type") String type);
 
-    @Select("SELECT * FROM kg_entity WHERE entity_id = #{entityId}")
-    KgEntityRecord findByEntityId(@Param("entityId") String entityId);
+    @Select("""
+            SELECT * FROM kg_entity
+            WHERE entity_id = #{entityId}
+              AND tenant_id = #{tenantId}
+            LIMIT 1
+            """)
+    KgEntityRecord findByEntityId(@Param("tenantId") String tenantId,
+                                  @Param("entityId") String entityId);
 }
