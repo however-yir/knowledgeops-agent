@@ -356,7 +356,8 @@ public class WorkspaceRuntime implements AgentRuntime {
         }
         if ("git".equals(executable)) {
             return command.size() >= 2
-                    && harnessProperties.getWorkspace().getAllowedGitSubcommands().contains(command.get(1));
+                    && harnessProperties.getWorkspace().getAllowedGitSubcommands().contains(command.get(1))
+                    && argsAreSafeGitFlags(command.subList(2, command.size()));
         }
         if ("mvn".equals(executable)) {
             return command.stream().anyMatch("test"::equals)
@@ -404,6 +405,28 @@ public class WorkspaceRuntime implements AgentRuntime {
         return false;
     }
 
+    /**
+     * git flag deny-list: every flag passed to a whitelisted git subcommand
+     * must not match any of these. The main concern is --output which makes
+     * git log / git show write to a host path, defeating the workspace
+     * sandbox. --exec / --upload-pack / --receive-pack accept an
+     * attacker-controlled command and are also refused.
+     */
+    private static final java.util.Set<String> UNSAFE_GIT_FLAGS = java.util.Set.of(
+            "--output", "-o", "--exec", "--upload-pack", "--receive-pack",
+            "--ssh-command");
+
+    private boolean argsAreSafeGitFlags(java.util.List<String> args) {
+        return args.stream().filter(a -> a.startsWith("-"))
+                .map(this::stripOptionValue)
+                .noneMatch(UNSAFE_GIT_FLAGS::contains);
+    }
+
+    private String stripOptionValue(String arg) {
+        int eq = arg.indexOf('=');
+        return eq < 0 ? arg : arg.substring(0, eq);
+    }
+
     private boolean argsWithinWorkspace(List<String> args) {
         for (String arg : args) {
             if (arg.startsWith("-")) {
@@ -414,11 +437,7 @@ public class WorkspaceRuntime implements AgentRuntime {
                 // from the host filesystem. ls / git do not currently have
                 // equivalents, so the option-list approach keeps the
                 // allow-list narrow.
-                String normalized = arg;
-                int eq = normalized.indexOf('=');
-                if (eq >= 0) {
-                    normalized = normalized.substring(0, eq);
-                }
+                String normalized = stripOptionValue(arg);
                 if (normalized.startsWith("--pre")
                         || normalized.startsWith("--pre-glob")
                         || normalized.equals("--hostname-bin")
