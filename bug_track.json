@@ -181,6 +181,15 @@
       "location": "src/main/java/com/enterprise/iqk/agent/harness/TrustedActionService.java (execute)",
       "description": "pendingActions ConcurrentHashMap 只在 preview() 入口 lazy sweep 过期 token。如果调用方只调 execute() 不调 preview（自动化 confirm 循环 / token-from-CI-pipeline 等），过期 token 一直累积到进程退出。10 分钟 TTL × 高流量 = GB 级堆内存累积。",
       "handling": "在 execute() 入口也加同样的 removeIf sweep：任何路径触碰 map 时都回收过期条目。验证：mvn compile + mvn pmd:check 通过。"
+    },
+    {
+      "id": 21,
+      "title": "mvn test -D 系统属性无白名单（test JVM 沙箱逃逸）",
+      "discovered_at": "2026-08-28T23:30:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (isAllowedCommand)",
+      "description": "mvn test 分支之前接受任意 -D<name>=<value>，LLM 驱动的 agent 可传 -DargLine=\"-javaagent:/tmp/evil.jar\"、-Dsurefire.suiteXmlFiles=/tmp/evil.xml、-Dexec.executable=/bin/sh 等，让 Surefire test JVM 加载 Java agent / 执行任意测试套件 / 把 shell 交给 Maven 插件，从测试进程内部逃逸 workspace 沙箱。",
+      "handling": "将 mvn test 路径改为只接受 mvn/test/-q + -D<name>=<value>（name 必须以安全前缀开头：test=/groups=/excludedGroups=/failIfNoTests=/skipTests=/maven.test.skip=）。其他 -D（含 argLine、surefire.suiteXmlFiles、exec.executable 等）在 spawn 之前就被拒。验证：mvn compile + mvn pmd:check 通过；PR #152 已合。"
     }
   ],
   "commit": "ba0791c",
