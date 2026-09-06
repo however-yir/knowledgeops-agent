@@ -10,7 +10,7 @@ import com.enterprise.iqk.service.TenantCostService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
@@ -28,26 +28,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * End-to-end test for the cost-governance wiring on /ai/chat. We boot the
- * full application context (but with the auth / rate-limit / audit filter
- * chain disabled) so that the real ModelRouter, real chat history repo and
- * the real Hibernate-style transaction handling is exercised. The ChatClient
- * is mocked because the model would otherwise need a live OpenAI endpoint.
+ * Verifies that /ai/chat wires the new trackedChatStream helper: the
+ * chat call asserts the tenant budget before invoking the model and
+ * records the input + output tokens when the stream finishes.
  */
-@SpringBootTest(properties = {
-        "app.cost-governance.enabled=true"
+@WebMvcTest(value = ChatController.class, excludeFilters = {
+        @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = ApiKeyOrJwtAuthFilter.class),
+        @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = RateLimitFilter.class),
+        @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = AuditLogFilter.class),
+        @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = HttpMetricsFilter.class),
+        @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = RequestContextFilter.class)
 })
 @AutoConfigureMockMvc(addFilters = false)
-@ComponentScan(
-        basePackages = "com.enterprise.iqk",
-        excludeFilters = {
-                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = ApiKeyOrJwtAuthFilter.class),
-                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = RateLimitFilter.class),
-                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = AuditLogFilter.class),
-                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = HttpMetricsFilter.class),
-                @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = RequestContextFilter.class),
-        }
-)
 class ChatControllerWebMvcTest {
 
     @Autowired
@@ -73,6 +65,7 @@ class ChatControllerWebMvcTest {
         when(chatClient.prompt()).thenReturn(spec);
         when(spec.options(any())).thenReturn(spec);
         when(spec.user(anyString())).thenReturn(spec);
+        // advisors() has two overloads; use doReturn to disambiguate.
         org.mockito.Mockito.doReturn(spec).when(spec).advisors(
                 org.mockito.ArgumentMatchers.<org.springframework.ai.chat.client.advisor.api.Advisor>any());
         when(spec.stream()).thenReturn(streamResponse);
@@ -84,7 +77,7 @@ class ChatControllerWebMvcTest {
                 .andExpect(status().isOk());
 
         // Cost governance fires for every chat call: assert before send,
-        // record exactly once on stream completion.
+        // record exactly once when the stream finishes.
         verify(tenantCostService).assertBudget(eq("public"), anyString(), anyLong(), anyLong());
         verify(tenantCostService, times(1)).recordUsage(eq("public"), anyString(), anyLong(), anyLong(), anyString());
         // chat history recorded.
