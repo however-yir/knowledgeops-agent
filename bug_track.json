@@ -9,7 +9,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (runCommand)",
       "description": "pmd 7.24 升级后，mvn test 在 PMD 检查阶段直接失败（测试套件无法运行）。workspace_run_shell 启动的 Process 从未关闭：waitFor 抛 InterruptedException 时子进程泄漏，且 CloseResource 规则不识别 destroyForcibly 为关闭操作。",
-      "handling": "runCommand 改为 try/finally，finally 中调用 process.destroyForcibly() 保证子进程必然被回收；同时更新 pmd-ruleset.xml，为 CloseResource 规则配置 closeTargets 加入 destroy/destroyForcibly。验证：mvn compile 与 mvn pmd:check 均通过。"
+      "handling": "runCommand 改为 try/finally，finally 中调用 process.destroyForcibly() 保证子进程必然被回收；同时更新 pmd-ruleset.xml，为 CloseResource 规则配置 closeTargets 加入 destroy/destroyForcibly。验证：mvn compile 与 mvn pmd:check 均通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 135,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/135",
+      "pr_title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens"
     },
     {
       "id": 2,
@@ -18,7 +24,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/agent/workflow/WorkflowReactAgentService.java (stream)",
       "description": "stream() 的 onErrorResume 只向客户端发送 SSE error 事件，从不调用 workflowEngine.failTask，导致任务记录永远停留在 PLANNING/SEARCHING 等非终态，与 chat() 路径行为不一致。",
-      "handling": "在 stream() 的 onErrorResume 中调用 workflowEngine.failTask(taskId, message) 并将任务标记为 FAILED，同时记录 FAILED 指标；通过 AtomicReference 传递 defer 内创建的任务 ID。"
+      "handling": "在 stream() 的 onErrorResume 中调用 workflowEngine.failTask(taskId, message) 并将任务标记为 FAILED，同时记录 FAILED 指标；通过 AtomicReference 传递 defer 内创建的任务 ID。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 135,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/135",
+      "pr_title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens"
     },
     {
       "id": 3,
@@ -27,7 +39,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/agent/workflow/AgentStepMapper.java (completeStep)",
       "description": "数据库 schema（V10 迁移）存在 input_tokens 列，AgentWorkflowEngine.completeStep 也接收 inputTokens 参数，WorkflowStepVO 也暴露该字段，但 completeStep 的 UPDATE SQL 从不写入该列，步骤级输入 token 统计永远为 0。",
-      "handling": "completeStep SQL 增加 input_tokens = #{inputTokens}，引擎调用处把 inputTokens 参数传入 mapper。"
+      "handling": "completeStep SQL 增加 input_tokens = #{inputTokens}，引擎调用处把 inputTokens 参数传入 mapper。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 135,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/135",
+      "pr_title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens"
     },
     {
       "id": 4,
@@ -36,7 +54,13 @@
       "severity": "medium",
       "location": "src/test/java/com/enterprise/iqk/agent/harness/WorkspaceRuntimeTest.java (runsOnlyAllowedCommandFamilies)",
       "description": "测试断言 pwd 命令输出包含 workspace.toString()（Windows 绝对路径），但 Windows 上 PATH 中的 pwd.exe（Git Bash/MSYS）输出 /tmp/junit-... 风格路径，导致断言失败。仅 Linux CI 上能通过。",
-      "handling": "断言改为包含 workspace.toAbsolutePath().getFileName()（工作区目录名），不依赖具体路径风格，全平台通过。"
+      "handling": "断言改为包含 workspace.toAbsolutePath().getFileName()（工作区目录名），不依赖具体路径风格，全平台通过。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 135,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/135",
+      "pr_title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens"
     },
     {
       "id": 5,
@@ -45,7 +69,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/mapper/IngestionJobMapper.java (claimForRun) + IngestionService.processQueuedJob",
       "description": "POST /ingestion/jobs/process 接口先 getByJobId(tenant, jobId) 校验存在，但 processQueuedJob(jobId, traceId) 调用的 claimForRun SQL 只按 job_id 过滤不带 tenant。攻击者用合法 token + 任意其他租户的 jobId 即可绕过校验，让系统 claim 并处理别人的任务（跨租户副作用 + 成本与状态污染）。",
-      "handling": "1) claimForRun SQL 加 tenant_id = #{tenantId} 条件；2) IngestionService 加重载 processQueuedJob(jobId, tenantId, traceId)：HTTP 路径从 MDC 取，Worker/Rabbit 路径从 job 自带 tenantId 取（其线程无 MDC）；3) IngestionWorker 与 RabbitMqIngestionListener 改用新重载，传入 job.getTenantId()。修复后其他租户的 jobId 在 claim 阶段就会被 0 行拒绝。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) claimForRun SQL 加 tenant_id = #{tenantId} 条件；2) IngestionService 加重载 processQueuedJob(jobId, tenantId, traceId)：HTTP 路径从 MDC 取，Worker/Rabbit 路径从 job 自带 tenantId 取（其线程无 MDC）；3) IngestionWorker 与 RabbitMqIngestionListener 改用新重载，传入 job.getTenantId()。修复后其他租户的 jobId 在 claim 阶段就会被 0 行拒绝。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 139,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/139",
+      "pr_title": "fix(backend): scope ingestion job claim to the owning tenant"
     },
     {
       "id": 6,
@@ -54,7 +84,13 @@
       "severity": "info",
       "location": "src/main/java/com/enterprise/iqk/tools/CourseTools.java",
       "description": "CourseTools.queryCourse/querySchool/addCourseReservation 没有 tenant 过滤，直接调用 service.list(qw) 与 service.save()，全平台共享同一张表。但 V1 迁移中 course_reservation/course/school 表本身就没有 tenant_id 列，schema 设计就是平台级共享数据。",
-      "handling": "暂不修。要支持多租户需要新 Flyway 迁移添加 tenant_id、回填、改所有查询路径，影响面大且涉及产品决策；当前 PR 仅记录以便后续规划。"
+      "handling": "暂不修。要支持多租户需要新 Flyway 迁移添加 tenant_id、回填、改所有查询路径，影响面大且涉及产品决策；当前 PR 仅记录以便后续规划。",
+      "severity_label": "ℹ️ info",
+      "state": "not-fix",
+      "state_label": "🟣 tracked (not fixed)",
+      "pr": null,
+      "pr_url": null,
+      "pr_title": null
     },
     {
       "id": 7,
@@ -63,7 +99,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java 与 CustomerServiceController.java",
       "description": "/ai/chat 与 /ai/service 两个端点直接调用 chatClient.stream().content()，从未调用 tenantCostService.assertBudget / recordUsage，与 RAG/REACT 路径不一致——可被滥用为免费 LLM 通道。",
-      "handling": "待评估。修复需要在两个 controller 中加与 RAG 相同的计费链（assertBudget → call → recordUsage），改动可控但涉及业务策略（这些端点是否走预算治理），建议所有者决策后再合并。"
+      "handling": "待评估。修复需要在两个 controller 中加与 RAG 相同的计费链（assertBudget → call → recordUsage），改动可控但涉及业务策略（这些端点是否走预算治理），建议所有者决策后再合并。",
+      "severity_label": "🔴 high",
+      "state": "not-fix",
+      "state_label": "🟣 tracked (not fixed)",
+      "pr": null,
+      "pr_url": null,
+      "pr_title": null
     },
     {
       "id": 8,
@@ -72,7 +114,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/graph/GraphService.java + src/main/java/com/enterprise/iqk/mapper/AgentSessionStateMapper.java（被 src/main/java/com/enterprise/iqk/service/AgentSessionService.java 调用）",
       "description": "KgEntityMapper.searchByName、KgFactMapper.searchByKeyword、AgentSessionStateMapper.countByTenant / findByTenant 都用 LIKE CONCAT('%', #{keyword}, '%') 直接拼接用户输入。MyBatis #{} 做了预编译但不会转义 LIKE 通配符——攻击者传 % 或 _ 会匹配整张表的全部行（即使有 tenant_id 过滤，仍能拉回本租户的全部记录），属于 DoS + 数据过载。GraphRetriever.extractMainKeyword 取 query 最长 token 直接透传，RAG / 深度研究 / Agent harness 走 rag_search action 时用户可触发。",
-      "handling": "1) 新增 util/SqlLikeUtils.escapeForLike 转义 \\ % _；2) GraphService.searchEntities / searchFacts 在传 mapper 前调用 escapeForLike；3) AgentSessionService.list 对 keyword 同样转义后再传 mapper。ConversationMapper 的 LIKE CONCAT(#{type}, '::%') 不修——type 来自受控字典 (chat / service / pdf / react / eval)，非用户输入。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) 新增 util/SqlLikeUtils.escapeForLike 转义 \\ % _；2) GraphService.searchEntities / searchFacts 在传 mapper 前调用 escapeForLike；3) AgentSessionService.list 对 keyword 同样转义后再传 mapper。ConversationMapper 的 LIKE CONCAT(#{type}, '::%') 不修——type 来自受控字典 (chat / service / pdf / react / eval)，非用户输入。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 139,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/139",
+      "pr_title": "fix(backend): cap feedback dataset growth and filter expired memories"
     },
     {
       "id": 9,
@@ -81,7 +129,13 @@
       "severity": "medium",
       "location": "frontend/src/App.vue (renderMarkdown)",
       "description": "App.vue 第 333 行用 v-html 渲染 LLM 输出的 Markdown。renderMarkdown 调 marked.parse + DOMPurify.sanitize 但配置过宽：(1) 未禁用 style、on* 事件属性（虽 DOMPurify 默认会拦但代码显式 allow-list 才能防版本升级带来的回归）；(2) DOMPurify 默认会保留 target 属性却不会强制 rel=noopener，prompt 注入的 <a target=_blank href=...> 渲染后新窗口可经 window.opener 操纵原页面（reverse-tabnabbing）。",
-      "handling": "1) DOMPurify.sanitize 显式传 ALLOWED_ATTR / FORBID_ATTR / FORBID_TAGS 白名单（保留 markdown 必需属性、显式拒绝 on* 与 style / iframe 等）；2) 模块加载时注册 DOMPurify.addHook('afterSanitizeAttributes')，对所有 target=_blank 链接强制合并 rel=noopener noreferrer；3) hook 用 module-level 一次性注册，避免 renderMarkdown 多次调用时 addHook 重复问题。"
+      "handling": "1) DOMPurify.sanitize 显式传 ALLOWED_ATTR / FORBID_ATTR / FORBID_TAGS 白名单（保留 markdown 必需属性、显式拒绝 on* 与 style / iframe 等）；2) 模块加载时注册 DOMPurify.addHook('afterSanitizeAttributes')，对所有 target=_blank 链接强制合并 rel=noopener noreferrer；3) hook 用 module-level 一次性注册，避免 renderMarkdown 多次调用时 addHook 重复问题。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 140,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/140",
+      "pr_title": "fix(frontend): satisfy Prettier CI check"
     },
     {
       "id": 10,
@@ -90,7 +144,13 @@
       "severity": "high",
       "location": "frontend/src/App.vue (STORAGE_KEY + bootstrap ref)",
       "description": "App.vue 第 755-1349 行：登录后把 token、refreshToken、apiKey、tenantId 全部以 JSON 形式写入 localStorage('knowledgeops-agent-react-console-v2')，刷新页面从 localStorage 恢复。XSS 一旦发生（即使低危），攻击者 localStorage.getItem 一行就能拿到所有用户的 API key 与 refresh token——账户完全失陷，且 refresh token 可签发新 JWT 持续 14 天。建议改用 httpOnly Secure SameSite=Strict cookie 存 refresh token，前端只放短期 access token。",
-      "handling": "暂不修——是架构性方案变更（前后端都要改：后端 AuthController 改用 Set-Cookie + CSRF token；前端 axios 改 credentials=include + 移除 localStorage 持久化）。建议单独建一个 issue 与所有者讨论，注明风险等级与影响范围。"
+      "handling": "暂不修——是架构性方案变更（前后端都要改：后端 AuthController 改用 Set-Cookie + CSRF token；前端 axios 改 credentials=include + 移除 localStorage 持久化）。建议单独建一个 issue 与所有者讨论，注明风险等级与影响范围。",
+      "severity_label": "🔴 high",
+      "state": "not-fix",
+      "state_label": "🟣 tracked (not fixed)",
+      "pr": null,
+      "pr_url": null,
+      "pr_title": null
     },
     {
       "id": 11,
@@ -99,7 +159,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/retrieval/web/BingSearchBackend.java + SearXNGBackend.java",
       "description": "BingSearchBackend 和 SearXNGBackend 的 getRestTemplate() 用裸 if (restTemplate == null) 懒初始化，无同步。多线程同时首次调用会导致：(1) 两个线程都看到 null 都 new RestTemplate()，其中一个实例被默默丢弃；(2) 两个 SimpleClientHttpRequestFactory 同时被构造但只一个的 setConnectTimeout / setReadTimeout 生效，另一个用默认超时，行为不确定；(3) 最坏情况请求走的是 half-configured factory 导致 IllegalStateException 或静默使用默认 30s 超时。附加：两个 backend 自己 new ObjectMapper() 绕过 Spring 注入，模块配置与其他服务不一致。",
-      "handling": "1) 改为 volatile + double-checked locking，懒初始化只发生一次；2) ObjectMapper 改用构造器注入（Spring 管理的 bean），与全局 JSON 配置对齐。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) 改为 volatile + double-checked locking，懒初始化只发生一次；2) ObjectMapper 改用构造器注入（Spring 管理的 bean），与全局 JSON 配置对齐。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 141,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/141",
+      "pr_title": "fix(backend): thread-safe RestTemplate init in web search backends"
     },
     {
       "id": 12,
@@ -108,7 +174,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java (multiModalChat)",
       "description": "/ai/chat 端点接收 multipart/form-data 的 files[]，每张图被 MimeType.valueOf(getContentType()) 包装成 Spring AI Media。如果客户端（例如 curl --form 没有显式 type=）上传的 MultipartFile 没有 Content-Type header，MultipartFile.getContentType() 返回 null，MimeType.valueOf(null) 抛 NullPointerException → HTTP 500 而不是干净的 4xx。同时 Objects.requireNonNull 在 util 层抛出 NPE 没有任何恢复路径。",
-      "handling": "multiModalChat 在构造 Media 前用 StringUtils.hasText 检查 contentType，缺失时 fallback 到 application/octet-stream，让上层返回 4xx 错误而非 500。同时移除不再使用的 Objects import。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "multiModalChat 在构造 Media 前用 StringUtils.hasText 检查 contentType，缺失时 fallback 到 application/octet-stream，让上层返回 4xx 错误而非 500。同时移除不再使用的 Objects import。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 143,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/143",
+      "pr_title": "fix(backend): handle missing multipart Content-Type in /ai/chat"
     },
     {
       "id": 13,
@@ -117,7 +189,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/service/AnswerFeedbackService.java (appendToDataset) + config/properties/FeedbackProperties.java",
       "description": "POST /ai/feedback 接受带 PERM_FEEDBACK_WRITE / PERM_CHAT_WRITE / ROLE_ADMIN 任意一个的用户提交反馈。AnswerFeedbackService.appendToDataset 用 Files.writeString + StandardOpenOption.APPEND 不断往 feedback_dataset.jsonl 追加，没有大小或行数上限。单个 comment 1024 + answer 1500 + question 100 ≈ 2600 bytes/行，每行可被 1024-1500 字符的 comment 撑大到 3-4KB。攻击者拿到任意上述凭证后可以快速耗尽磁盘（每 MB 大约 300-400 次请求）。",
-      "handling": "1) FeedbackProperties 新增 maxDatasetBytes 字段（默认 50 MiB）可配；2) appendToDataset 在写入前检查目标文件大小，达到阈值则 rename 到带时间戳的兄弟文件（feedback_dataset-20260827-141500.jsonl）后再继续追加；3) Files.move 原子完成轮转，下游训练 pipeline 仍可读取 active 文件。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) FeedbackProperties 新增 maxDatasetBytes 字段（默认 50 MiB）可配；2) appendToDataset 在写入前检查目标文件大小，达到阈值则 rename 到带时间戳的兄弟文件（feedback_dataset-20260827-141500.jsonl）后再继续追加；3) Files.move 原子完成轮转，下游训练 pipeline 仍可读取 active 文件。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 144,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/144",
+      "pr_title": "fix(backend): cap feedback dataset growth and filter expired memories"
     },
     {
       "id": 14,
@@ -126,7 +204,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/memory/MemoryItemMapper.java (findByUser / findByTenantAndTaskId / findByTenantAndMemoryId)",
       "description": "PR #137 给 findByUserAndType / findByTypeAndConfidence 加了 expires_at 过滤，但漏了其他 3 个 query：findByUser（行 28-37）/ findByTenantAndTaskId（行 39）/ findByTenantAndMemoryId（行 57）。MemoryService.buildContext 调 queryShortMemory / queryLongMemory / queryFactMemory（底层走 findByUser / findByUserAndType / findByTypeAndConfidence），其中 findByUser 仍可能返回过期 memory，被注入到 RAG prompt——过期事实污染 LLM 上下文。",
-      "handling": "为这 3 个 query 统一补上 (expires_at IS NULL OR expires_at > NOW()) 谓词，与 PR #137 风格一致。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "为这 3 个 query 统一补上 (expires_at IS NULL OR expires_at > NOW()) 谓词，与 PR #137 风格一致。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 144,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/144",
+      "pr_title": "fix(backend): cap feedback dataset growth and filter expired memories"
     },
     {
       "id": 15,
@@ -135,7 +219,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/HttpMcpToolAdapter.java",
       "description": "HttpMcpToolAdapter.resolveUri 直接用 URI.create(baseUrl + path) 拼 URL，supports 也不校验 baseUrl 协议/主机。攻击者可以通过两个路径触发 SSRF：(1) 运营者把 app.agent-harness.mcp.servers.<x>.base-url 误配置为内部地址（如 http://169.254.169.254/latest/meta-data/ AWS metadata / http://127.0.0.1:8500 内网服务）；(2) LLM 通过 mcp_call action 间接利用。HttpClient.newHttpClient() 不会自动拒绝私网或 loopback 地址。",
-      "handling": "1) 新增 isSafeBaseUrl 静态方法：要求 scheme 是 http/https，URI 解析成功，host 非空；(2) 用 InetAddress.getAllByName 解析 host 后逐个检查 isLoopbackAddress / isAnyLocalAddress / isLinkLocalAddress / isSiteLocalAddress / isMulticastAddress，任一为真则拒绝；(3) supports 与 resolveUri 都调 isSafeBaseUrl，确保 baseUrl 在 MCP 工具被发现与执行时都被校验。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) 新增 isSafeBaseUrl 静态方法：要求 scheme 是 http/https，URI 解析成功，host 非空；(2) 用 InetAddress.getAllByName 解析 host 后逐个检查 isLoopbackAddress / isAnyLocalAddress / isLinkLocalAddress / isSiteLocalAddress / isMulticastAddress，任一为真则拒绝；(3) supports 与 resolveUri 都调 isSafeBaseUrl，确保 baseUrl 在 MCP 工具被发现与执行时都被校验。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 145,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/145",
+      "pr_title": "fix(backend): reject private/loopback MCP baseUrls to close SSRF"
     },
     {
       "id": 16,
@@ -144,7 +234,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/security/RateLimitFilter.java (resolveKey)",
       "description": "RateLimitFilter 用 request.getRemoteAddr() 作 IP 限流 key。当服务部署在 nginx / k8s ingress / ALB 等反代后，所有匿名请求的 RemoteAddr = 127.0.0.1（反代本地回环），所有用户共享同一 IP 桶——单个攻击者打满这桶，整个租户匿名流量都被限流（实际等同于 DoS 自己的限流）。同时攻击者可以通过伪造 X-Forwarded-For（如果不限私有地址校验）任意切换 IP 绕过限流。",
-      "handling": "1) 新增 resolveClientIp：先看 request.getRemoteAddr() 是否私网/loopback；(2) 只有直连 peer 是私网时（说明我们确实在反代后）才解析 X-Forwarded-For；(3) 选最右非私网 hop（攻击者无法伪造最右 hop——中间代理会覆盖左侧）；(4) 用文本前缀匹配私网段（避免 InetAddress 解析失败影响功能）。生产已部署反代时行为正确；未部署反代时直连 peer 是公网，跳过 X-Forwarded-For，行为不变。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) 新增 resolveClientIp：先看 request.getRemoteAddr() 是否私网/loopback；(2) 只有直连 peer 是私网时（说明我们确实在反代后）才解析 X-Forwarded-For；(3) 选最右非私网 hop（攻击者无法伪造最右 hop——中间代理会覆盖左侧）；(4) 用文本前缀匹配私网段（避免 InetAddress 解析失败影响功能）。生产已部署反代时行为正确；未部署反代时直连 peer 是公网，跳过 X-Forwarded-For，行为不变。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 146,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/146",
+      "pr_title": "fix(security): derive rate-limit IP from X-Forwarded-For behind proxies"
     },
     {
       "id": 17,
@@ -153,7 +249,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (proposePatch / applyPatch)",
       "description": "readFile 用了 app.agent-harness.workspace.max-file-bytes（默认 20KB）做大小保护；searchText 用 1MB 限制单文件大小。但 proposePatch 和 applyPatch 的 content / patch 字段**没有大小限制**——LLM 驱动的 agent 调 workspace_propose_patch 时可以传一个几 MB 的 content 字符串，导致 worker 分配大字符串并写盘；applyPatch 也是同样问题。攻击路径：(1) 提示词注入让 LLM 生成超大 content；(2) 直接调 MCP action 传大字段。无大小限制使 agent harness 成为 LLM 触发的 disk-fill 通道。",
-      "handling": "1) proposePatch 与 applyPatch 都用同一 maxFileBytes 校验 content.getBytes(UTF_8).length；(2) applyPatch 还校验 patch 长度；(3) applyPatch 在 patch 模式下额外校验 apply 后 nextContent 长度（防止小 patch 展开成大文件）；(4) proposePatch 校验现有文件大小（防止读大文件再覆盖）。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "1) proposePatch 与 applyPatch 都用同一 maxFileBytes 校验 content.getBytes(UTF_8).length；(2) applyPatch 还校验 patch 长度；(3) applyPatch 在 patch 模式下额外校验 apply 后 nextContent 长度（防止小 patch 展开成大文件）；(4) proposePatch 校验现有文件大小（防止读大文件再覆盖）。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 147,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/147",
+      "pr_title": "fix(harness): cap workspace propose_patch/apply_patch content size"
     },
     {
       "id": 18,
@@ -162,7 +264,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (argsWithinWorkspace)",
       "description": "WorkspaceRuntime.runCommand 把 rg 列在 allowedCommands，但 argsWithinWorkspace 只跳过以 - 开头的 token，**不审查具体 flag**。ripgrep 的 --pre / --pre-glob 选项会在每个文件被搜索前**执行 shell 命令**（ripgrep 官方文档明示），--hostname-bin / --regexp-file 接受**主机文件系统上的任意文件**作为输入。LLM 驱动的 agent（或 prompt 注入）调 workspace_run_shell 时可以传 rg --pre=\"cat /etc/passwd\" /etc，让 rg 在扫 /etc 前先 cat 主机文件——沙箱立即失效。",
-      "handling": "在 argsWithinWorkspace 跳过 - 开头的 token 之前，先剥离 =value 后缀，再拒绝 --pre、--pre-glob、--hostname-bin、--regexp-file 等可执行命令或读主机文件的 flag。允许的 rg 调用因此被限制为只读 + 路径受限（已由 path 验证覆盖）。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "在 argsWithinWorkspace 跳过 - 开头的 token 之前，先剥离 =value 后缀，再拒绝 --pre、--pre-glob、--hostname-bin、--regexp-file 等可执行命令或读主机文件的 flag。允许的 rg 调用因此被限制为只读 + 路径受限（已由 path 验证覆盖）。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 148,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/148",
+      "pr_title": "fix(harness): reject ripgrep flags that execute commands or read host files"
     },
     {
       "id": 19,
@@ -171,7 +279,13 @@
       "severity": "low",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (searchText)",
       "description": "searchText 已有 per-file 1MB 限制 + 候选文件数限制，但外层 for 循环用 continue 跳过已收集满 maxMatches 的文件——继续遍历剩余所有候选文件并对每个文件调用 Files.size()（stat 系统调用）。大 workspace 下浪费 I/O。",
-      "handling": "将 continue 改为 break：达到 maxMatches 后直接退出候选列表遍历。验证：mvn compile + mvn pmd:check 通过；PR #149 已合。"
+      "handling": "将 continue 改为 break：达到 maxMatches 后直接退出候选列表遍历。验证：mvn compile + mvn pmd:check 通过；PR #149 已合。",
+      "severity_label": "🟢 low",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 149,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/149",
+      "pr_title": "fix(harness): stop walking candidates once maxMatches is hit"
     },
     {
       "id": 20,
@@ -180,7 +294,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/TrustedActionService.java (execute)",
       "description": "pendingActions ConcurrentHashMap 只在 preview() 入口 lazy sweep 过期 token。如果调用方只调 execute() 不调 preview（自动化 confirm 循环 / token-from-CI-pipeline 等），过期 token 一直累积到进程退出。10 分钟 TTL × 高流量 = GB 级堆内存累积。",
-      "handling": "在 execute() 入口也加同样的 removeIf sweep：任何路径触碰 map 时都回收过期条目。验证：mvn compile + mvn pmd:check 通过。"
+      "handling": "在 execute() 入口也加同样的 removeIf sweep：任何路径触碰 map 时都回收过期条目。验证：mvn compile + mvn pmd:check 通过。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 150,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/150",
+      "pr_title": "fix(harness): also sweep expired trusted-action tokens on execute"
     },
     {
       "id": 21,
@@ -189,7 +309,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (isAllowedCommand)",
       "description": "mvn test 分支之前接受任意 -D<name>=<value>，LLM 驱动的 agent 可传 -DargLine=\"-javaagent:/tmp/evil.jar\"、-Dsurefire.suiteXmlFiles=/tmp/evil.xml、-Dexec.executable=/bin/sh 等，让 Surefire test JVM 加载 Java agent / 执行任意测试套件 / 把 shell 交给 Maven 插件，从测试进程内部逃逸 workspace 沙箱。",
-      "handling": "将 mvn test 路径改为只接受 mvn/test/-q + -D<name>=<value>（name 必须以安全前缀开头：test=/groups=/excludedGroups=/failIfNoTests=/skipTests=/maven.test.skip=）。其他 -D（含 argLine、surefire.suiteXmlFiles、exec.executable 等）在 spawn 之前就被拒。验证：mvn compile + mvn pmd:check 通过；PR #152 已合。"
+      "handling": "将 mvn test 路径改为只接受 mvn/test/-q + -D<name>=<value>（name 必须以安全前缀开头：test=/groups=/excludedGroups=/failIfNoTests=/skipTests=/maven.test.skip=）。其他 -D（含 argLine、surefire.suiteXmlFiles、exec.executable 等）在 spawn 之前就被拒。验证：mvn compile + mvn pmd:check 通过；PR #152 已合。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 152,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/152",
+      "pr_title": "fix(harness): restrict mvn test -D properties to a safe allow-list"
     },
     {
       "id": 22,
@@ -198,7 +324,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/WorkspaceRuntime.java (isAllowedCommand)",
       "description": "git 分支只校验子命令是否在白名单，不校验 flag。LLM 驱动的 agent 可传 git log --output=/tmp/evil 写文件到主机路径（绕过 workspace sandbox），或 git log --upload-pack=evil-cmd 把命令交给 git transport。",
-      "handling": "加 UNSAFE_GIT_FLAGS deny-list：--output/-o/--exec/--upload-pack/--receive-pack/--ssh-command 全部拒绝。argsWithinWorkspace 之前的 --pre/--pre-glob/--hostname-bin/--regexp-file ripgrep deny-list 同步重构为共用 stripOptionValue 工具。文件行数 499（保持 checkstyle 500 上限内）。验证：mvn compile + mvn pmd:check + checkstyle 通过；PR #154 已合。"
+      "handling": "加 UNSAFE_GIT_FLAGS deny-list：--output/-o/--exec/--upload-pack/--receive-pack/--ssh-command 全部拒绝。argsWithinWorkspace 之前的 --pre/--pre-glob/--hostname-bin/--regexp-file ripgrep deny-list 同步重构为共用 stripOptionValue 工具。文件行数 499（保持 checkstyle 500 上限内）。验证：mvn compile + mvn pmd:check + checkstyle 通过；PR #154 已合。",
+      "severity_label": "🟡 medium",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 154,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/154",
+      "pr_title": "fix(harness): reject ripgrep flags that execute commands or read host files"
     },
     {
       "id": 23,
@@ -207,7 +339,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/graph/KgEntityMapper.java (findByEntityId) + GraphService.getNeighbors",
       "description": "GraphService.getNeighbors 流程：先 findRelations(tenantId, entityId) 按租户过滤（OK），再对每个 relation 端点 entity_id 调 findByEntityId(entityId) —— 但 findByEntityId 本身不带 tenantId 过滤，SQL 是 SELECT * FROM kg_entity WHERE entity_id = ?。schema 没有跨表约束保证 relation 两端 entity 共享同一 tenant，所以一旦 relation 涉及跨租户的 entity（合法情况或错误数据），另一租户的 entity 详情（name / description / metadata）就会被返回。LLM 调 graph_search action 即可触发泄露。",
-      "handling": "1) KgEntityMapper.findByEntityId 加 tenantId 参数 + SQL 加 AND tenant_id = #{tenantId} 过滤；2) GraphService.getNeighbors 传入 tenantId。跨租户的 entity 在一跳邻居展开时被静默过滤（返回 null，邻居列表中无该邻居）。验证：mvn compile + mvn pmd:check 通过；PR #156 已合。"
+      "handling": "1) KgEntityMapper.findByEntityId 加 tenantId 参数 + SQL 加 AND tenant_id = #{tenantId} 过滤；2) GraphService.getNeighbors 传入 tenantId。跨租户的 entity 在一跳邻居展开时被静默过滤（返回 null，邻居列表中无该邻居）。验证：mvn compile + mvn pmd:check 通过；PR #156 已合。",
+      "severity_label": "🔴 high",
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 156,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/156",
+      "pr_title": "fix(graph): scope findByEntityId by tenant to close cross-tenant leak"
     },
     {
       "id": 24,
@@ -216,7 +354,13 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/HttpMcpToolAdapter.java (execute)",
       "description": "HttpMcpToolAdapter.execute 用 HttpResponse.BodyHandlers.ofString() 把整个 MCP HTTP response 一次读到内存。LLM 驱动的 agent（prompt 注入或被攻破的 MCP server）可返回多 MB body，单次 mcp_call 即可耗尽 JVM 内存。",
-      "handling": "1) 改用 ofByteArray() 读 byte[]；2) 加 MAX_MCP_RESPONSE_BYTES = 2 MiB 上限；3) 超过上限返回结构化 error，不 decode 不 parse。验证：mvn compile + mvn pmd:check 通过；PR #158 已合。"
+      "handling": "1) 改用 ofByteArray() 读 byte[]；2) 加 MAX_MCP_RESPONSE_BYTES = 2 MiB 上限；3) 超过上限返回结构化 error，不 decode 不 parse。验证：mvn compile + mvn pmd:check 通过；PR #158 已合。",
+      "severity_label": "🟡 medium",
+      "state": "not-fix",
+      "state_label": "🟣 tracked (not fixed)",
+      "pr": null,
+      "pr_url": null,
+      "pr_title": null
     }
   ],
   "commit": "ba0791c",
@@ -262,6 +406,134 @@
         "可选代理 http://127.0.0.1:7897 (本机 Clash)"
       ],
       "missing": []
+    }
+  },
+  "summary": {
+    "generated_at": "2026-09-06T04:25:54.002Z",
+    "total_bugs": 24,
+    "by_severity": {
+      "high": 13,
+      "medium": 9,
+      "low": 1,
+      "info": 1
+    },
+    "by_state": {
+      "merged": 20,
+      "open": 0,
+      "not-fix": 4
+    },
+    "open_prs": [
+      {
+        "pr": 135,
+        "title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/135"
+      },
+      {
+        "pr": 135,
+        "title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/135"
+      },
+      {
+        "pr": 135,
+        "title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/135"
+      },
+      {
+        "pr": 135,
+        "title": "fix(harness): harden workspace process lifecycle, fail orphaned stream tasks, persist step input tokens",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/135"
+      },
+      {
+        "pr": 139,
+        "title": "fix(backend): scope ingestion job claim to the owning tenant",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/139"
+      },
+      {
+        "pr": 139,
+        "title": "fix(backend): cap feedback dataset growth and filter expired memories",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/139"
+      },
+      {
+        "pr": 140,
+        "title": "fix(frontend): satisfy Prettier CI check",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/140"
+      },
+      {
+        "pr": 141,
+        "title": "fix(backend): thread-safe RestTemplate init in web search backends",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/141"
+      },
+      {
+        "pr": 143,
+        "title": "fix(backend): handle missing multipart Content-Type in /ai/chat",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/143"
+      },
+      {
+        "pr": 144,
+        "title": "fix(backend): cap feedback dataset growth and filter expired memories",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/144"
+      },
+      {
+        "pr": 144,
+        "title": "fix(backend): cap feedback dataset growth and filter expired memories",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/144"
+      },
+      {
+        "pr": 145,
+        "title": "fix(backend): reject private/loopback MCP baseUrls to close SSRF",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/145"
+      },
+      {
+        "pr": 146,
+        "title": "fix(security): derive rate-limit IP from X-Forwarded-For behind proxies",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/146"
+      },
+      {
+        "pr": 147,
+        "title": "fix(harness): cap workspace propose_patch/apply_patch content size",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/147"
+      },
+      {
+        "pr": 148,
+        "title": "fix(harness): reject ripgrep flags that execute commands or read host files",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/148"
+      },
+      {
+        "pr": 149,
+        "title": "fix(harness): stop walking candidates once maxMatches is hit",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/149"
+      },
+      {
+        "pr": 150,
+        "title": "fix(harness): also sweep expired trusted-action tokens on execute",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/150"
+      },
+      {
+        "pr": 152,
+        "title": "fix(harness): restrict mvn test -D properties to a safe allow-list",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/152"
+      },
+      {
+        "pr": 154,
+        "title": "fix(harness): reject ripgrep flags that execute commands or read host files",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/154"
+      },
+      {
+        "pr": 156,
+        "title": "fix(graph): scope findByEntityId by tenant to close cross-tenant leak",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/156"
+      }
+    ],
+    "severity_legend": {
+      "high": "🔴 high",
+      "medium": "🟡 medium",
+      "low": "🟢 low",
+      "info": "ℹ️ info"
+    },
+    "state_legend": {
+      "merged": "✅ merged",
+      "open": "🟠 open",
+      "not-fix": "🟣 tracked (not fixed)"
     }
   }
 }
