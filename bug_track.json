@@ -208,6 +208,15 @@
       "location": "src/main/java/com/enterprise/iqk/graph/KgEntityMapper.java (findByEntityId) + GraphService.getNeighbors",
       "description": "GraphService.getNeighbors 流程：先 findRelations(tenantId, entityId) 按租户过滤（OK），再对每个 relation 端点 entity_id 调 findByEntityId(entityId) —— 但 findByEntityId 本身不带 tenantId 过滤，SQL 是 SELECT * FROM kg_entity WHERE entity_id = ?。schema 没有跨表约束保证 relation 两端 entity 共享同一 tenant，所以一旦 relation 涉及跨租户的 entity（合法情况或错误数据），另一租户的 entity 详情（name / description / metadata）就会被返回。LLM 调 graph_search action 即可触发泄露。",
       "handling": "1) KgEntityMapper.findByEntityId 加 tenantId 参数 + SQL 加 AND tenant_id = #{tenantId} 过滤；2) GraphService.getNeighbors 传入 tenantId。跨租户的 entity 在一跳邻居展开时被静默过滤（返回 null，邻居列表中无该邻居）。验证：mvn compile + mvn pmd:check 通过；PR #156 已合。"
+    },
+    {
+      "id": 24,
+      "title": "MCP HTTP response body 无大小上限（DoS / OOM）",
+      "discovered_at": "2026-08-29T01:30:00+08:00",
+      "severity": "medium",
+      "location": "src/main/java/com/enterprise/iqk/agent/harness/HttpMcpToolAdapter.java (execute)",
+      "description": "HttpMcpToolAdapter.execute 用 HttpResponse.BodyHandlers.ofString() 把整个 MCP HTTP response 一次读到内存。LLM 驱动的 agent（prompt 注入或被攻破的 MCP server）可返回多 MB body，单次 mcp_call 即可耗尽 JVM 内存。",
+      "handling": "1) 改用 ofByteArray() 读 byte[]；2) 加 MAX_MCP_RESPONSE_BYTES = 2 MiB 上限；3) 超过上限返回结构化 error，不 decode 不 parse。验证：mvn compile + mvn pmd:check 通过；PR #158 已合。"
     }
   ],
   "commit": "ba0791c",
