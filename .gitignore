@@ -62,3 +62,6 @@ __pycache__/
 .env.*
 node_modules/
 dist/
+
+# Local work files (not part of the project, kept out of source control).
+考研入警准备手册.txt
