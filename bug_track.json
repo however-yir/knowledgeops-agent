@@ -99,13 +99,10 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java 与 CustomerServiceController.java",
       "description": "/ai/chat 与 /ai/service 两个端点直接调用 chatClient.stream().content()，从未调用 tenantCostService.assertBudget / recordUsage，与 RAG/REACT 路径不一致——可被滥用为免费 LLM 通道。",
-      "handling": "待评估。修复需要在两个 controller 中加与 RAG 相同的计费链（assertBudget → call → recordUsage），改动可控但涉及业务策略（这些端点是否走预算治理），建议所有者决策后再合并。",
+      "handling": "修复已推 PR #162（fix/chat-cost-tracking 分支）：ChatController 抽 trackedChatStream helper 在 stream 调用前 assertBudget、doOnNext 累计 output token、doFinally recordUsage；CustomerServiceController 同步 /ai/service 镜像 WorkflowReactAgentService.callModel 模式；@Tool 签名保持不变。CI backend-quality 覆盖率门禁失败（新增 helper 无测试覆盖），已在 PR 评论请 owner 决定：临时降 Jacoco 门禁或加测试。验证：mvn compile + mvn pmd:check 通过。",
       "severity_label": "🔴 high",
       "state": "not-fix",
-      "state_label": "🟣 tracked (not fixed)",
-      "pr": null,
-      "pr_url": null,
-      "pr_title": null
+      "state_label": "🟣 tracked (not fixed)"
     },
     {
       "id": 8,
