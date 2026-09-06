@@ -4,6 +4,7 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,8 +22,9 @@ import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 @RequestMapping("/ai")
 public class CustomerServiceController {
 
-    private final ChatClient serviceChatClient;//注意bean的名字已经换成了serviceChatClient
+    private final ChatClient serviceChatClient;
     private final ModelRouter modelRouter;
+    private final TenantCostService tenantCostService;
 
     private final ChatHistoryRepository chatHistoryRepository;
 
@@ -35,12 +37,21 @@ public class CustomerServiceController {
         String conversationId = ConversationIdHelper.build("service", chatId);
         String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
         ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "service", tenantId, chatId);
+        // Cost governance: same pattern as WorkflowReactAgentService.callModel
+        // (assert before send, record after call) so the synchronous
+        // /ai/service endpoint counts the same as the streaming ReAct
+        // endpoints.
+        long inputTokens = tenantCostService.estimateTokens(prompt);
+        tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
         // 2.请求模型
-        return serviceChatClient.prompt()
+        String answer = serviceChatClient.prompt()
                 .options(ChatOptions.builder().model(decision.model()).build())
                 .user(prompt)
                 .advisors(a -> a.param(CONVERSATION_ID, conversationId))
                 .call()
                 .content();
+        long outputTokens = tenantCostService.estimateTokens(answer);
+        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, "service");
+        return answer;
     }
 }
