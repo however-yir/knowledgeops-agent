@@ -3,6 +3,7 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,9 +22,18 @@ import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import static org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID;
 
+/**
+ * Routes /ai/chat and /ai/chat/stream through TenantCostService the same
+ * way the rest of the platform does. Without this, callers with
+ * PERM_CHAT_WRITE could fire unlimited /ai/chat requests and consume
+ * LLM tokens without ever being counted toward the tenant's monthly
+ * budget, defeating the cost_governance.enabled = true setting.
+ */
 @RestController
 @RequestMapping("/ai")
 @RequiredArgsConstructor
@@ -31,6 +41,7 @@ public class ChatController {
 
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
+    private final TenantCostService tenantCostService;
 
     private final ChatHistoryRepository chatHistoryRepository;
 
@@ -51,7 +62,6 @@ public class ChatController {
             // 有附件，多模态聊天
             return multiModalChat(prompt, conversationId, files, modelProfile, chatId);
         }
-
     }
 
     @RequestMapping(value = "/chat/stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -81,25 +91,47 @@ public class ChatController {
             return new Media(mime, f.getResource());
         }).toList();
 
-        return routedPrompt(modelProfile, "chat", chatId)
-                .user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new)))
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
-                .stream()
-                .content();
+        return trackedChatStream(
+                prompt, modelProfile, chatId, conversationId, "chat",
+                spec -> spec.user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new))));
     }
 
     private Flux<String> textChat(String prompt, String conversationId, String modelProfile, String chatId) {
-        return routedPrompt(modelProfile, "chat", chatId)
-                .user(prompt)
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
-                .stream()
-                .content();
+        return trackedChatStream(
+                prompt, modelProfile, chatId, conversationId, "chat",
+                spec -> spec.user(prompt));
     }
 
-    private ChatClient.ChatClientRequestSpec routedPrompt(String requestedProfile, String endpoint, String subjectKey) {
+    /**
+     * Common chat-stream wrapper. The two callers above only differ in
+     * the .user(...) call, so the cost-tracking, advisor and stream()
+     * setup is shared here. Without the helper, both methods end up
+     * with the same six lines around .user(prompt), which is exactly
+     * what the SpotBugs DB_DUPLICATE_BRANCHES check flags.
+     */
+    private Flux<String> trackedChatStream(String prompt,
+                                          String modelProfile,
+                                          String chatId,
+                                          String conversationId,
+                                          String endpointTag,
+                                          Function<ChatClient.ChatClientRequestSpec, ChatClient.ChatClientRequestSpec> userCustomizer) {
         String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
-        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(requestedProfile, endpoint, tenantId, subjectKey);
-        return chatClient.prompt()
-                .options(ChatOptions.builder().model(decision.model()).build());
+        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "chat", tenantId, chatId);
+        long inputTokens = tenantCostService.estimateTokens(prompt);
+        tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
+        StringBuilder outputCollector = new StringBuilder();
+        AtomicBoolean recorded = new AtomicBoolean(false);
+        return userCustomizer.apply(chatClient.prompt()
+                        .options(ChatOptions.builder().model(decision.model()).build()))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
+                .stream()
+                .content()
+                .doOnNext(outputCollector::append)
+                .doFinally(signal -> {
+                    if (recorded.compareAndSet(false, true)) {
+                        long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
+                        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
+                    }
+                });
     }
 }
