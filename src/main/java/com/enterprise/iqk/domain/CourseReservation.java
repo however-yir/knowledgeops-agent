@@ -46,5 +46,10 @@ public class CourseReservation implements Serializable {
      */
     private String remark;
 
+    /**
+     * 租户 id（V17 引入，用于跨租户数据隔离）
+     */
+    private String tenantId;
+
 
 }
