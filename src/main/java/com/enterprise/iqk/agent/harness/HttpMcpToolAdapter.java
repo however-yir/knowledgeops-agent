@@ -31,6 +31,11 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
     private final AgentHarnessProperties harnessProperties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    // Cap the MCP HTTP response body so a hostile or compromised MCP
+    // server cannot exhaust JVM memory by returning a multi-MB payload.
+    // 2 MiB matches the same order of magnitude as the workspace
+    // max-file-bytes cap and is generous for typical JSON-RPC responses.
+    private static final long MAX_MCP_RESPONSE_BYTES = 2L * 1024L * 1024L;
 
     @Override
     public String server() {
@@ -70,11 +75,17 @@ public class HttpMcpToolAdapter implements McpToolAdapter {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            byte[] bodyBytes = response.body();
+            if (bodyBytes.length > MAX_MCP_RESPONSE_BYTES) {
+                return Map.of("status", "error", "message",
+                        "mcp response exceeds " + MAX_MCP_RESPONSE_BYTES + " bytes");
+            }
+            String bodyStr = new String(bodyBytes, java.nio.charset.StandardCharsets.UTF_8);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 return Map.of("status", "error", "message", "mcp http status: " + response.statusCode());
             }
-            return objectMapper.readValue(response.body(), Object.class);
+            return objectMapper.readValue(bodyStr, Object.class);
         } catch (Exception ex) {
             return Map.of("status", "error", "message", "mcp http call failed: " + ex.getMessage());
         }
