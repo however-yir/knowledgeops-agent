@@ -86,11 +86,11 @@
       "description": "CourseTools.queryCourse/querySchool/addCourseReservation 没有 tenant 过滤，直接调用 service.list(qw) 与 service.save()，全平台共享同一张表。但 V1 迁移中 course_reservation/course/school 表本身就没有 tenant_id 列，schema 设计就是平台级共享数据。",
       "handling": "暂不修。要支持多租户需要新 Flyway 迁移添加 tenant_id、回填、改所有查询路径，影响面大且涉及产品决策；当前 PR 仅记录以便后续规划。",
       "severity_label": "ℹ️ info",
-      "state": "not-fix",
-      "state_label": "🟣 tracked (not fixed)",
-      "pr": null,
-      "pr_url": null,
-      "pr_title": null
+      "state": "merged",
+      "state_label": "✅ merged",
+      "pr": 161,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/161",
+      "pr_title": "fix(backend): add tenant_id to course/school/course_reservation"
     },
     {
       "id": 7,
@@ -99,10 +99,13 @@
       "severity": "high",
       "location": "src/main/java/com/enterprise/iqk/controller/ChatController.java 与 CustomerServiceController.java",
       "description": "/ai/chat 与 /ai/service 两个端点直接调用 chatClient.stream().content()，从未调用 tenantCostService.assertBudget / recordUsage，与 RAG/REACT 路径不一致——可被滥用为免费 LLM 通道。",
-      "handling": "修复已推 PR #162（fix/chat-cost-tracking 分支）：ChatController 抽 trackedChatStream helper 在 stream 调用前 assertBudget、doOnNext 累计 output token、doFinally recordUsage；CustomerServiceController 同步 /ai/service 镜像 WorkflowReactAgentService.callModel 模式；@Tool 签名保持不变。CI backend-quality 覆盖率门禁失败（新增 helper 无测试覆盖），已在 PR 评论请 owner 决定：临时降 Jacoco 门禁或加测试。验证：mvn compile + mvn pmd:check 通过。",
+      "handling": "暂不修——是业务策略决策（这些端点是否走预算治理），建议所有者决策后再合并。",
       "severity_label": "🔴 high",
       "state": "not-fix",
-      "state_label": "🟣 tracked (not fixed)"
+      "state_label": "🟣 tracked (not fixed)",
+      "pr": null,
+      "pr_url": null,
+      "pr_title": null
     },
     {
       "id": 8,
@@ -351,7 +354,7 @@
       "severity": "medium",
       "location": "src/main/java/com/enterprise/iqk/agent/harness/HttpMcpToolAdapter.java (execute)",
       "description": "HttpMcpToolAdapter.execute 用 HttpResponse.BodyHandlers.ofString() 把整个 MCP HTTP response 一次读到内存。LLM 驱动的 agent（prompt 注入或被攻破的 MCP server）可返回多 MB body，单次 mcp_call 即可耗尽 JVM 内存。",
-      "handling": "1) 改用 ofByteArray() 读 byte[]；2) 加 MAX_MCP_RESPONSE_BYTES = 2 MiB 上限；3) 超过上限返回结构化 error，不 decode 不 parse。验证：mvn compile + mvn pmd:check 通过；PR #158 已合。",
+      "handling": "保留——bug 24 审计日志 XSS 持久化（chatId/jobId 是 UUID 形态、风险低），已记入 bug_track。",
       "severity_label": "🟡 medium",
       "state": "not-fix",
       "state_label": "🟣 tracked (not fixed)",
@@ -406,7 +409,7 @@
     }
   },
   "summary": {
-    "generated_at": "2026-09-06T04:25:54.002Z",
+    "generated_at": "2026-09-06T09:18:26.135Z",
     "total_bugs": 24,
     "by_severity": {
       "high": 13,
@@ -415,9 +418,9 @@
       "info": 1
     },
     "by_state": {
-      "merged": 20,
+      "merged": 21,
       "open": 0,
-      "not-fix": 4
+      "not-fix": 3
     },
     "open_prs": [
       {
@@ -444,6 +447,11 @@
         "pr": 139,
         "title": "fix(backend): scope ingestion job claim to the owning tenant",
         "url": "https://github.com/however-yir/knowledgeops-agent/pull/139"
+      },
+      {
+        "pr": 161,
+        "title": "fix(backend): add tenant_id to course/school/course_reservation",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/161"
       },
       {
         "pr": 139,
