@@ -7,6 +7,7 @@ import com.enterprise.iqk.domain.Course;
 import com.enterprise.iqk.domain.CourseReservation;
 import com.enterprise.iqk.domain.School;
 import com.enterprise.iqk.domain.query.CourseQuery;
+import com.enterprise.iqk.security.TenantContext;
 import com.enterprise.iqk.service.ICourseReservationService;
 import com.enterprise.iqk.service.ICourseService;
 import com.enterprise.iqk.service.ISchoolService;
@@ -35,7 +36,13 @@ public class CourseTools {
     public List<Course> queryCourse(@ToolParam(required = false, description = "需要查询的课程的条件") CourseQuery query) {
         return instrument("query_course", () -> {
             CourseQuery safeQuery = query == null ? new CourseQuery() : query;
+            // Tenant isolation: V17 added tenant_id to the course table;
+            // the @Tool signature cannot be changed without breaking the
+            // agent contract, so the tenant filter is applied here from
+            // TenantContext (set by the auth filter on the request thread).
+            String tenantId = TenantContext.currentTenantId();
             QueryWrapper<Course> qw = new QueryWrapper<>();
+            qw.eq("tenant_id", tenantId);
             qw.le(safeQuery.getEdu() != null, "edu", safeQuery.getEdu());
             qw.eq(StrUtil.isNotBlank(safeQuery.getType()), "type", safeQuery.getType());
 
@@ -54,7 +61,12 @@ public class CourseTools {
 
     @Tool(description = "查询所有的校区列表")
     public List<School> querySchool() {
-        return instrument("query_school", schoolService::list);
+        return instrument("query_school", () -> {
+            String tenantId = TenantContext.currentTenantId();
+            return schoolService.list(
+                    new QueryWrapper<School>().eq("tenant_id", tenantId)
+            );
+        });
     }
 
     @Tool(description = "新增学生的预约单记录，并且返回预约的单号")
@@ -66,7 +78,12 @@ public class CourseTools {
             @ToolParam(required = false, description = "学生预留的备注信息") String remark
     ) {
         return instrument("add_course_reservation", () -> {
+            // Tag the reservation with the caller's tenant so the row cannot
+            // be read or counted by any other tenant through listByMap or
+            // admin tooling.
+            String tenantId = TenantContext.currentTenantId();
             CourseReservation reservation = new CourseReservation();
+            reservation.setTenantId(tenantId);
             reservation.setCourse(course);
             reservation.setStudentName(studentName);
             reservation.setContactInfo(contactInfo);
