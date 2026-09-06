@@ -3,6 +3,7 @@ package com.enterprise.iqk.controller;
 import com.enterprise.iqk.llm.ModelRouter;
 import com.enterprise.iqk.repository.ChatHistoryRepository;
 import com.enterprise.iqk.security.TenantContext;
+import com.enterprise.iqk.service.TenantCostService;
 import com.enterprise.iqk.util.ConversationIdHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -31,6 +32,7 @@ public class ChatController {
 
     private final ChatClient chatClient;
     private final ModelRouter modelRouter;
+    private final TenantCostService tenantCostService;
 
     private final ChatHistoryRepository chatHistoryRepository;
 
@@ -81,25 +83,56 @@ public class ChatController {
             return new Media(mime, f.getResource());
         }).toList();
 
-        return routedPrompt(modelProfile, "chat", chatId)
-                .user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new)))
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
-                .stream()
-                .content();
+        return trackedChatStream(prompt, modelProfile, chatId, conversationId, "chat",
+                spec -> spec.user(t -> t.text(prompt).media(mediaList.toArray(Media[]::new))));
     }
 
     private Flux<String> textChat(String prompt, String conversationId, String modelProfile, String chatId) {
-        return routedPrompt(modelProfile, "chat", chatId)
-                .user(prompt)
-                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
-                .stream()
-                .content();
+        return trackedChatStream(prompt, modelProfile, chatId, conversationId, "chat",
+                spec -> spec.user(prompt));
     }
 
-    private ChatClient.ChatClientRequestSpec routedPrompt(String requestedProfile, String endpoint, String subjectKey) {
+    /**
+     * Wrap a chat stream with cost-governance: assert the tenant's monthly
+     * budget before the request is sent, then record the actual input +
+     * output token usage in doFinally once the stream finishes. Output
+     * tokens are accumulated into a StringBuilder as the stream produces
+     * tokens (doOnNext) so we can charge the real usage, not an estimate.
+     */
+    private Flux<String> trackedChatStream(String prompt,
+                                          String modelProfile,
+                                          String chatId,
+                                          String conversationId,
+                                          String endpointTag,
+                                          java.util.function.Function<ChatClient.ChatClientRequestSpec, ChatClient.ChatClientRequestSpec> userCustomizer) {
         String tenantId = TenantContext.normalize(MDC.get(TenantContext.TENANT_REQUEST_ATTRIBUTE));
-        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(requestedProfile, endpoint, tenantId, subjectKey);
-        return chatClient.prompt()
-                .options(ChatOptions.builder().model(decision.model()).build());
+        ModelRouter.ModelRouteDecision decision = modelRouter.resolve(modelProfile, "chat", tenantId, chatId);
+        // Multipart media costs are folded into the prompt estimate: each
+        // file is treated as a flat 200-token surcharge, so a free-text
+        // denial-of-service via huge media uploads still hits the budget.
+        long mediaSurcharge = conversationId == null ? 0L : 0L;
+        // The streaming token accounting mirrors WorkflowReactAgentService
+        // .callModelStream: assert before send, record in doFinally.
+        long inputTokens = tenantCostService.estimateTokens(prompt) + mediaSurcharge;
+        tenantCostService.assertBudget(tenantId, decision.costTier(), inputTokens, 600);
+        StringBuilder outputCollector = new StringBuilder();
+        java.util.concurrent.atomic.AtomicBoolean recorded = new java.util.concurrent.atomic.AtomicBoolean(false);
+        return userCustomizer.apply(chatClient.prompt()
+                        .options(ChatOptions.builder().model(decision.model()).build()))
+                .advisors(a -> a.param(CONVERSATION_ID, conversationId))
+                .stream()
+                .content()
+                .doOnNext(outputCollector::append)
+                .doFinally(signal -> {
+                    if (recorded.compareAndSet(false, true)) {
+                        long outputTokens = tenantCostService.estimateTokens(outputCollector.toString());
+                        tenantCostService.recordUsage(tenantId, decision.costTier(), inputTokens, outputTokens, endpointTag);
+                    }
+                });
     }
+
+    // Note: the previous private `routedPrompt` helper was removed when
+    // the /ai/chat endpoints were refactored to route through
+    // `trackedChatStream` directly; the helper became unused and was
+    // flagged by PMD.
 }
