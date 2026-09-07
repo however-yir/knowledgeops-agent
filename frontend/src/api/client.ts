@@ -83,6 +83,7 @@ export async function exchangeApiKey(
   tenantId?: string,
 ): Promise<AuthTokenResponse> {
   const response = await fetch(resolveApi('/auth/token'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'X-API-Key': apiKey,
@@ -98,6 +99,7 @@ export async function exchangeApiKey(
 
 export async function refreshJwt(refreshToken: string): Promise<AuthTokenResponse> {
   const response = await fetch(resolveApi('/auth/refresh'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'X-Refresh-Token': refreshToken,
@@ -116,6 +118,7 @@ export async function reactChat(
   signal?: AbortSignal,
 ): Promise<ReactChatResponse> {
   const response = await fetch(resolveApi('/ai/react/chat'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -220,6 +223,7 @@ export async function streamReactChat(
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch(resolveApi('/ai/react/chat/stream'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -293,6 +297,7 @@ export async function listSessionStates(
   const response = await fetch(
     resolveApi(
       withQuery('/ai/sessions', {
+        credentials: 'include',
         page: params?.page ?? 1,
         pageSize: params?.pageSize ?? 50,
         search: params?.search ?? '',
@@ -317,6 +322,7 @@ export async function saveSessionState(
   auth?: AuthContext,
 ): Promise<SessionState> {
   const response = await fetch(resolveApi(`/ai/sessions/${encodeURIComponent(session.id)}`), {
+    credentials: 'include',
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -338,6 +344,7 @@ export async function setSessionPinned(
 ): Promise<SessionState> {
   const response = await fetch(
     resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/pin`, { value })),
+      credentials: 'include',
     {
       method: 'POST',
       headers: buildAuthHeaders(auth),
@@ -357,6 +364,7 @@ export async function setSessionArchived(
 ): Promise<SessionState> {
   const response = await fetch(
     resolveApi(withQuery(`/ai/sessions/${encodeURIComponent(sessionId)}/archive`, { value })),
+      credentials: 'include',
     {
       method: 'POST',
       headers: buildAuthHeaders(auth),
@@ -376,6 +384,7 @@ export async function compareSessionBranches(
 ): Promise<BranchCompareResult> {
   const response = await fetch(
     resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/branches/compare`),
+      credentials: 'include',
     {
       method: 'POST',
       headers: {
@@ -399,6 +408,7 @@ export async function mergeSessionBranches(
 ): Promise<BranchMergeResult> {
   const response = await fetch(
     resolveApi(`/ai/sessions/${encodeURIComponent(sessionId)}/branches/merge`),
+      credentials: 'include',
     {
       method: 'POST',
       headers: {
@@ -425,6 +435,7 @@ export async function submitAnswerFeedback(
   auth?: AuthContext,
 ): Promise<void> {
   const response = await fetch(resolveApi('/ai/feedback'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -440,6 +451,7 @@ export async function submitAnswerFeedback(
 
 export async function getTenantCostSummary(auth?: AuthContext): Promise<TenantCostSummary> {
   const response = await fetch(resolveApi('/cost/summary'), {
+    credentials: 'include',
     method: 'GET',
     headers: buildAuthHeaders(auth),
   });
@@ -455,6 +467,7 @@ export async function updateTenantBudget(
   auth?: AuthContext,
 ): Promise<TenantCostSummary> {
   const response = await fetch(resolveApi('/cost/budget'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -474,6 +487,7 @@ export async function createEvalDataset(
   auth?: AuthContext,
 ): Promise<EvalDataset> {
   const response = await fetch(resolveApi('/ai/evaluation/datasets'), {
+    credentials: 'include',
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -490,6 +504,7 @@ export async function createEvalDataset(
 
 export async function listEvalDatasets(auth?: AuthContext): Promise<EvalDataset[]> {
   const response = await fetch(resolveApi('/ai/evaluation/datasets'), {
+    credentials: 'include',
     method: 'GET',
     headers: buildAuthHeaders(auth),
   });
@@ -507,6 +522,7 @@ export async function triggerEvalRun(
 ): Promise<EvalRun> {
   const response = await fetch(
     resolveApi(`/ai/evaluation/datasets/${encodeURIComponent(datasetId)}/runs`),
+      credentials: 'include',
     {
       method: 'POST',
       headers: {
@@ -529,6 +545,7 @@ export async function getEvalComparison(
 ): Promise<EvalComparison> {
   const response = await fetch(
     resolveApi(`/ai/evaluation/datasets/${encodeURIComponent(datasetId)}/comparison`),
+      credentials: 'include',
     {
       method: 'GET',
       headers: buildAuthHeaders(auth),
@@ -544,6 +561,7 @@ export async function getEvalComparison(
 export async function markEvalRunBaseline(runId: string, auth?: AuthContext): Promise<EvalRun> {
   const response = await fetch(
     resolveApi(`/ai/evaluation/runs/${encodeURIComponent(runId)}/baseline`),
+      credentials: 'include',
     {
       method: 'POST',
       headers: buildAuthHeaders(auth),
@@ -559,6 +577,7 @@ export async function markEvalRunBaseline(runId: string, auth?: AuthContext): Pr
 export async function exportEvalRunReport(runId: string, auth?: AuthContext): Promise<string> {
   const response = await fetch(
     resolveApi(`/ai/evaluation/runs/${encodeURIComponent(runId)}/report`),
+      credentials: 'include',
     {
       method: 'GET',
       headers: buildAuthHeaders(auth),
