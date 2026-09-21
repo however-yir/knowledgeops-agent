@@ -95,6 +95,10 @@ public class LocalPdfFileRepository implements FileRepository {
 
     @PreDestroy
     private void persistent() {
+        // Shutdown hooks must not throw: an exception here aborts the rest of
+        // the container's destroy chain and turns a clean shutdown into a
+        // failed one. Log and swallow instead; a partially written properties
+        // file is recoverable on the next boot, a wedged shutdown is not.
         try (OutputStreamWriter writer = new OutputStreamWriter(new java.io.FileOutputStream("chat-pdf.properties"), StandardCharsets.UTF_8)) {
             chatFiles.store(writer, LocalDateTime.now().toString());
             if (vectorStore instanceof SimpleVectorStore simpleVectorStore) {
@@ -106,7 +110,8 @@ public class LocalPdfFileRepository implements FileRepository {
                 simpleVectorStore.save(target);
             }
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.error("Failed to persist chat-pdf.properties on shutdown; " +
+                    "the mapping file will be rebuilt on the next boot", e);
         }
     }
 }
