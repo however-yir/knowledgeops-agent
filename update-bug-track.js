@@ -25,7 +25,7 @@ const PR_MAP = {
   7:  [null, 'not-fix', 'ChatController/CustomerServiceController skip cost billing — business policy decision'],
   8:  [139, 'merged',  'fix(backend): cap feedback dataset growth and filter expired memories'],
   9:  [140, 'merged',  'fix(frontend): satisfy Prettier CI check'],
-  10: [null, 'not-fix', 'Frontend stores API key / JWT refresh token in localStorage — needs Set-Cookie refactor'],
+  10: [168, 'partial-fixed', 'fix(security): deliver refresh token via HttpOnly cookie + fix(security): send kops_refresh cookie on every fetch'],
   11: [141, 'merged',  'fix(backend): thread-safe RestTemplate init in web search backends'],
   12: [143, 'merged',  'fix(backend): handle missing multipart Content-Type in /ai/chat'],
   13: [144, 'merged',  'fix(backend): cap feedback dataset growth and filter expired memories'],
@@ -53,13 +53,14 @@ const STATE_MARKER = {
   merged:  '✅ merged',
   open:    '🟠 open',
   'not-fix': '🟣 tracked (not fixed)',
+  'partial-fixed': '🟢 partially fixed',
 };
 
 function main() {
   const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
 
   const severityCount = { high: 0, medium: 0, low: 0, info: 0 };
-  const stateCount = { merged: 0, open: 0, 'not-fix': 0 };
+  const stateCount = { merged: 0, open: 0, 'not-fix': 0, 'partial-fixed': 0 };
   const openPrs = [];
 
   for (const bug of data.bugs) {
