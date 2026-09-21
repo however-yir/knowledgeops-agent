@@ -139,18 +139,18 @@
     },
     {
       "id": 10,
-      "title": "[待评估] 前端把 API key / JWT refresh token 明文存到 localStorage",
+      "title": "前端把 API key / JWT refresh token 明文存到 localStorage（refresh token 已改 HttpOnly cookie）",
       "discovered_at": "2026-08-27T11:05:00+08:00",
       "severity": "high",
       "location": "frontend/src/App.vue (STORAGE_KEY + bootstrap ref)",
       "description": "App.vue 第 755-1349 行：登录后把 token、refreshToken、apiKey、tenantId 全部以 JSON 形式写入 localStorage('knowledgeops-agent-react-console-v2')，刷新页面从 localStorage 恢复。XSS 一旦发生（即使低危），攻击者 localStorage.getItem 一行就能拿到所有用户的 API key 与 refresh token——账户完全失陷，且 refresh token 可签发新 JWT 持续 14 天。建议改用 httpOnly Secure SameSite=Strict cookie 存 refresh token，前端只放短期 access token。",
-      "handling": "暂不修——是架构性方案变更（前后端都要改：后端 AuthController 改用 Set-Cookie + CSRF token；前端 axios 改 credentials=include + 移除 localStorage 持久化）。建议单独建一个 issue 与所有者讨论，注明风险等级与影响范围。",
+      "handling": "已修复（A+B 两步，owner 决定拆开做）：PR #168 后端 AuthController.token() 写 kops_refresh HttpOnly + Secure + SameSite=Strict + Path=/auth cookie；PR #170 前端 client.ts 19 处 fetch 加 credentials: include，浏览器自动带 cookie。access token 过期后无感知换新。仍留：PR C（App.vue 删 localStorage token 持久化）暂缓——apiKey 暂存 localStorage，由用户在 provider 控制台 revoke 兜底；完整 PKCE / BFF 产品级方案另开。issue #167 记录了完整方案。",
       "severity_label": "🔴 high",
-      "state": "not-fix",
-      "state_label": "🟣 tracked (not fixed)",
-      "pr": null,
-      "pr_url": null,
-      "pr_title": null
+      "state": "partial-fixed",
+      "state_label": "🟢 partially fixed",
+      "pr": 168,
+      "pr_url": "https://github.com/however-yir/knowledgeops-agent/pull/168",
+      "pr_title": "fix(security): deliver refresh token via HttpOnly cookie + fix(security): send kops_refresh cookie on every fetch"
     },
     {
       "id": 11,
@@ -409,7 +409,7 @@
     }
   },
   "summary": {
-    "generated_at": "2026-09-06T09:18:26.135Z",
+    "generated_at": "2026-09-21T04:06:19.914Z",
     "total_bugs": 24,
     "by_severity": {
       "high": 13,
@@ -420,7 +420,8 @@
     "by_state": {
       "merged": 21,
       "open": 0,
-      "not-fix": 3
+      "not-fix": 2,
+      "partial-fixed": 1
     },
     "open_prs": [
       {
@@ -462,6 +463,11 @@
         "pr": 140,
         "title": "fix(frontend): satisfy Prettier CI check",
         "url": "https://github.com/however-yir/knowledgeops-agent/pull/140"
+      },
+      {
+        "pr": 168,
+        "title": "fix(security): deliver refresh token via HttpOnly cookie + fix(security): send kops_refresh cookie on every fetch",
+        "url": "https://github.com/however-yir/knowledgeops-agent/pull/168"
       },
       {
         "pr": 141,
@@ -538,7 +544,8 @@
     "state_legend": {
       "merged": "✅ merged",
       "open": "🟠 open",
-      "not-fix": "🟣 tracked (not fixed)"
+      "not-fix": "🟣 tracked (not fixed)",
+      "partial-fixed": "🟢 partially fixed"
     }
   }
 }
